@@ -25,6 +25,7 @@ import numpy as np
 
 from . import calibrate
 from .detect import TemplateDetector, YoloDetector, fetch_ddragon_icons, load_icons
+from .render import minimap_only_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
 from .track import Tracker, WorldDet, find_gaps
@@ -61,7 +62,7 @@ def capture_live(client: ReplayClient, box: dict | None, scratch: Path, speed: f
                  start: float, end: float | None, log, monitor: int | None = None) -> tuple[Path, dict]:
     import mss  # Windows capture; imported only in live mode
 
-    client.set_render(interfaceAll=False, interfaceMinimap=True, fogOfWar=False)
+    client.set_render(**minimap_only_render(), fogOfWar=False)
     pb = client.playback()
     end = end or float(pb.get("length", 0)) or 3600.0
     client.set_playback(time=start, paused=False, speed=speed)

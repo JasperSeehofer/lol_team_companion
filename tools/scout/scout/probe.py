@@ -16,6 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from .render import LEGACY_MINIMAP_ONLY, LEGACY_NOTE, minimap_only_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
 from .track_topdown import camera_render
@@ -65,7 +66,10 @@ def screen_grabber(max_width: int = 1280, monitor: int | None = None, log=None):
 def plan() -> list[str]:
     steps = [f"GET {p}" for p in SPEC_PATHS] + ["GET /replay/game", "GET /replay/render",
                                                  "GET /replay/playback"]
-    steps.append("POST /replay/render {interfaceAll:false, interfaceMinimap:true} + screenshot")
+    steps.append("POST /replay/render {interfaceAll:false, interfaceMinimap:true} + screenshot"
+                 " (known to hide the minimap)")
+    steps.append("POST /replay/render {interfaceAll:true, interfaceMinimap:true, other interface*:false}"
+                 " + screenshot")
     steps += [f"POST /replay/playback {{speed:{s}}} then time over a window" for s in SPEEDS]
     steps += ["POST /replay/recording png realtime (enforceFrameRate:true, replaySpeed:1)",
               "POST /replay/recording png accelerated (enforceFrameRate:false, replaySpeed:4)"]
@@ -157,8 +161,15 @@ class Probe:
         return self.c.game()
 
     def interface(self) -> dict:
-        res = self._set_read(interfaceAll=False, interfaceMinimap=True)
+        """Both combinations: R1's (interfaceAll=false, known to hide the
+        minimap) under "legacy", then the working one at the top level."""
+        legacy = self._set_read(**LEGACY_MINIMAP_ONLY)
+        legacy["screenshot"] = self._shot("probe_minimap_legacy.png", full=True)
+        legacy["note"] = LEGACY_NOTE
+        res = self._set_read(**minimap_only_render())
         res["screenshot"] = self._shot("probe_minimap_only.png", full=True)
+        res["combo"] = "interfaceAll=true, interfaceMinimap=true, every other interface* false"
+        res["legacy"] = legacy
         return res
 
     def speed(self) -> dict:

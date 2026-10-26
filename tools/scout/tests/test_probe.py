@@ -20,9 +20,15 @@ def test_probe_records_mock_quirks(mock_api, tmp_path):
     assert res["errors"] == {}
     assert res["spec"]["answered"] == "/swagger/v3/openapi.json"
     assert read_json(tmp_path / "openapi.json")["openapi"] == "3.0.0"
-    assert res["interface"]["interfaceAll"]["honoured"] is True
-    assert res["interface"]["interfaceMinimap"]["honoured"] is False   # quirk: minimap hidden
-    assert res["interface"]["screenshot"]["file"] == "probe_minimap_only.png"
+    iface = res["interface"]
+    assert iface["interfaceAll"]["honoured"] is True and iface["interfaceMinimap"]["honoured"] is True
+    assert iface["interfaceReplay"]["sent"] is False and iface["interfaceReplay"]["honoured"] is True
+    assert iface["screenshot"]["file"] == "probe_minimap_only.png"
+    legacy = iface["legacy"]                       # quirk: interfaceAll=false hides the minimap
+    assert legacy["interfaceAll"]["honoured"] is True
+    assert legacy["interfaceMinimap"]["honoured"] is False and legacy["interfaceMinimap"]["read"] is False
+    assert "known to hide the minimap" in legacy["note"]
+    assert legacy["screenshot"]["file"] == "probe_minimap_legacy.png"
     speeds = {r["sent"]: r for r in res["speed"]["steps"]}
     assert speeds[16]["read"] == 8 and res["speed"]["max_honoured"] == 8
     assert 6 < speeds[16]["game_s_per_wall_s"] < 10

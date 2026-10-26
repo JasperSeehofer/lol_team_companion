@@ -29,7 +29,11 @@ class Quirks:
 class State:
     quirks: Quirks = field(default_factory=Quirks)
     render: dict = field(default_factory=lambda: {
-        "interfaceAll": True, "interfaceMinimap": True, "fogOfWar": True, "floatingText": True,
+        "interfaceAll": True, "interfaceMinimap": True, "interfaceAnnounce": True,
+        "interfaceChat": True, "interfaceFrames": True, "interfaceKillCallouts": True,
+        "interfaceNeutralTimers": True, "interfaceQuests": True, "interfaceReplay": True,
+        "interfaceScore": True, "interfaceScoreboard": True, "interfaceTarget": True,
+        "interfaceTimeline": True, "fogOfWar": True, "floatingText": True,
         "healthBarChampions": True, "healthBarStructures": True, "healthBarWards": True,
         "healthBarPets": True, "healthBarMinions": True, "minions": True, "particles": True,
         "cameraMode": "top", "cameraAttached": False, "fieldOfView": 40.0, "farClip": 30000.0,
@@ -65,7 +69,9 @@ class State:
         self.base_time, self.base_wall = t, time.time()
 
     def post_render(self, body: dict) -> None:
-        for k, v in body.items():
+        # interfaceAll first, whatever the order sent: the quirk below depends on it.
+        items = sorted(body.items(), key=lambda kv: kv[0] != "interfaceAll")
+        for k, v in items:
             if k == "cameraPosition":
                 pos = dict(self.render["cameraPosition"], **v)
                 pos["y"] = min(float(pos["y"]), self.quirks.max_camera_y)
