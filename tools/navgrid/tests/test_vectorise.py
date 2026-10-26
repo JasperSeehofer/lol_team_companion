@@ -37,7 +37,8 @@ def raw_cells(g, mask):
 
 def test_layers_and_properties(out_dir):
     names = sorted(p.name for p in out_dir.glob("*.geojson"))
-    layers = ["brush", "camps", "gates", "lanes", "pits", "river", "transparent", "walkable", "wall"]
+    layers = ["brush", "camps", "gates", "lanes", "pits", "river", "structures", "transparent", "walkable",
+              "wall"]
     assert names == sorted(f"{lay}.{lev}.geojson" for lay in layers for lev in ("macro", "vision"))
     fc, _ = load(out_dir, "brush.vision")
     p = fc["properties"]
@@ -123,3 +124,17 @@ def test_base_gates_are_walkable_not_walls(synth_bytes):
     assert r["walkable"][gate].all() and not r["wall"][gate].any()
     # the settled rule equals "not 0x02" when every 0x04 cell also has 0x02
     assert np.array_equal(r["walkable"], (g.flags & ngrid.WALL) == 0)
+
+
+def test_transparent_layer_excludes_structures_and_gates(synth_bytes):
+    """16.21 sets 0x40 on structure and gate cells too (M166 R2): neither is a
+    transparent wall; structures get their own layer."""
+    g = ngrid.parse(synth_bytes)
+    r = vectorise.rasters(g)
+    struct = (g.flags & ngrid.STRUCTURE_WALL) != 0
+    gate = (g.flags & (ngrid.BLUE_ONLY | ngrid.RED_ONLY)) != 0
+    assert (g.flags[struct] & ngrid.TRANSPARENT_WALL).all() and (g.flags[gate] & ngrid.TRANSPARENT_WALL).all()
+    assert r["transparent"].any()
+    assert not r["transparent"][struct].any() and not r["transparent"][gate].any()
+    assert np.array_equal(r["transparent"], g.regions["srx"] == 2)
+    assert np.array_equal(r["structures"], struct)
