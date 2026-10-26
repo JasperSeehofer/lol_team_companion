@@ -30,6 +30,7 @@ from scipy.optimize import linear_sum_assignment
 from . import calibrate
 from .camera import default_camera_y
 from .detect import BarDetector
+from .render import preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .track import find_gaps
 from .util import frame_name, list_frames, read_json, run_logger, sample_evenly, write_json
@@ -237,8 +238,10 @@ def main(argv=None) -> int:
         raise SystemExit("need --champions or a track_minimap.json")
     frames_dir, extra = args.frames, {}
     if frames_dir is None:
-        frames_dir, extra = record_live(ReplayClient(args.base), args, log)
-        extra = {"recording": extra}
+        client = ReplayClient(args.base)
+        with preserved_render(client, log) as restore:   # the client is left as found
+            frames_dir, extra = record_live(client, args, log)
+        extra = {"recording": extra, "render_restore": restore}
     run_offline(frames_dir, args.out, champions, args.anchors or args.out / "anchors.json",
                 minimap, args.max_frames, extra, log)
     return 0

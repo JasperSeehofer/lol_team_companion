@@ -9,6 +9,8 @@ every other ``interface*`` field off.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 INTERFACE_FIELDS = [
     "interfaceAll", "interfaceAnnounce", "interfaceChat", "interfaceFrames",
     "interfaceKillCallouts", "interfaceMinimap", "interfaceNeutralTimers", "interfaceQuests",
@@ -29,3 +31,45 @@ def minimap_only_render() -> dict:
     out = {"interfaceAll": True, "interfaceMinimap": True}
     out.update({f: False for f in INTERFACE_FIELDS if f not in out})
     return out
+
+
+@contextmanager
+def preserved_render(client, log=None):
+    """GET /replay/render on entry, POST it back on exit, also when the body
+    raises or is interrupted (Ctrl+C), so the client is left as found. Only
+    fields that were readable (present and not null) are restored;
+    interfaceAll goes first, on its own. Yields a record of what happened
+    (saved fields, restored, mismatches read back, error)."""
+    rec: dict = {"saved": None, "restored": False, "mismatch": [], "error": None}
+
+    def note(msg, *a):
+        if log:
+            log.info(msg, *a)
+
+    saved: dict = {}
+    try:
+        got = client.render()
+        if isinstance(got, dict):
+            saved = {k: v for k, v in got.items() if v is not None and not k.startswith("_")}
+        rec["saved"] = sorted(saved)
+        note("render state saved (%d fields) for restore on exit", len(saved))
+    except Exception as e:  # noqa: BLE001 (nothing to restore then; the body still runs)
+        rec["error"] = f"read: {e!r}"
+        note("render state not readable, nothing will be restored: %r", e)
+    try:
+        yield rec
+    finally:
+        if saved:
+            try:
+                if "interfaceAll" in saved:
+                    client.set_render(interfaceAll=saved["interfaceAll"])
+                client.set_render(**{k: v for k, v in saved.items() if k != "interfaceAll"})
+                rec["restored"] = True
+                back = client.render()
+                rec["mismatch"] = sorted(k for k, v in saved.items()
+                                         if isinstance(back, dict) and back.get(k) != v)
+                note("render state restored (%d fields); differing on read-back: %s", len(saved),
+                     ", ".join(rec["mismatch"]) or "none")
+            except Exception as e:  # noqa: BLE001 (never mask the body's own exception)
+                rec["error"] = f"restore: {e!r}"
+                note("render state restore failed: %r", e)

@@ -25,7 +25,7 @@ import numpy as np
 
 from . import calibrate
 from .detect import TemplateDetector, YoloDetector, fetch_ddragon_icons, load_icons
-from .render import minimap_only_render
+from .render import minimap_only_render, preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
 from .track import Tracker, WorldDet, find_gaps
@@ -200,8 +200,10 @@ def main(argv=None) -> int:
     frames_dir, capture = args.frames, None
     if client:
         box = parse_box(args.minimap_box) if args.minimap_box else None
-        frames_dir, capture = capture_live(client, box, args.scratch, args.speed, args.start,
-                                           args.end, log, args.monitor)
+        with preserved_render(client, log) as restore:   # the client is left as found
+            frames_dir, capture = capture_live(client, box, args.scratch, args.speed, args.start,
+                                               args.end, log, args.monitor)
+        capture["render_restore"] = restore
     first = cv2.imread(str(list_frames(frames_dir)[0][1]))
     icon_px = args.icon_px or max(10, round(first.shape[1] * ICON_FRACTION))
     detector = build_detector(args, champions, icon_px, log)

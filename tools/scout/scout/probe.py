@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from . import camera as cam
-from .render import LEGACY_MINIMAP_ONLY, LEGACY_NOTE, minimap_only_render
+from .render import LEGACY_MINIMAP_ONLY, LEGACY_NOTE, minimap_only_render, preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
 from .track_topdown import camera_render
@@ -120,27 +120,30 @@ class Probe:
         if not skip_recording:
             subs.append(self.recording)
         subs += [self.camera, self.camera_fit, self.health_bars, self.fog]
-        original = {}
+        playback = None
         try:
-            original = {"render": self.c.render(), "playback": self.c.playback()}
+            playback = self.c.playback()
         except Exception as e:  # noqa: BLE001 (recorded, not fatal)
             self.result["errors"]["initial_read"] = repr(e)
-        for sub in subs:
+        with preserved_render(self.c, self.log) as restore:
             try:
-                self._info("probe %s", sub.__name__)
-                self.result[sub.__name__] = sub()
-            except Exception as e:  # noqa: BLE001
-                self.result["errors"][sub.__name__] = repr(e)
-                self._info("probe %s failed: %r", sub.__name__, e)
-        try:
-            if original.get("render"):
-                self.c.set_render(**original["render"])
-            if original.get("playback"):
-                pb = original["playback"]
-                self.c.set_playback(time=pb.get("time", 0), paused=True,
-                                    speed=pb.get("speed", 1.0))
-        except Exception as e:  # noqa: BLE001
-            self.result["errors"]["restore"] = repr(e)
+                for sub in subs:
+                    try:
+                        self._info("probe %s", sub.__name__)
+                        self.result[sub.__name__] = sub()
+                    except Exception as e:  # noqa: BLE001
+                        self.result["errors"][sub.__name__] = repr(e)
+                        self._info("probe %s failed: %r", sub.__name__, e)
+            finally:
+                try:
+                    if playback:
+                        self.c.set_playback(time=playback.get("time", 0), paused=True,
+                                            speed=playback.get("speed", 1.0))
+                except Exception as e:  # noqa: BLE001
+                    self.result["errors"]["restore_playback"] = repr(e)
+        self.result["render_restore"] = restore
+        if restore["error"]:
+            self.result["errors"]["restore"] = restore["error"]
         return self.result
 
     def _set_read(self, **fields) -> dict:
