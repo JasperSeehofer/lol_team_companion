@@ -24,7 +24,7 @@ import cv2
 import numpy as np
 
 from . import calibrate, winhdr
-from .detect import TemplateDetector, YoloDetector, fetch_ddragon_icons, load_icons
+from .detect import TemplateDetector, YoloDetector, fetch_icons, load_icon_files
 from .render import minimap_only_render, preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
@@ -138,6 +138,7 @@ def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
         "detector": detector.describe(), "missing_classes": detector.missing_classes,
         "calibration": mapping.as_dict(), "frame_size": [first.shape[1], first.shape[0]],
         "wards": [], "static_spots": spots.describe(mapping.to_world),
+        "icon_sources": getattr(detector, "icon_sources", None),
     }
     write_json(out_dir / "track_minimap.json", track)
     if log:
@@ -156,13 +157,18 @@ def build_detector(args, champions: list[str], icon_px: int, log):
         if det.missing_classes:
             log.warning("weights lack classes for: %s", ", ".join(det.missing_classes))
         return det
-    icon_dir = args.icons
-    if icon_dir is None:
-        icon_dir = MODELS_DIR / "icons"
-        version = fetch_ddragon_icons(champions, icon_dir)
-        log.info("Data Dragon icons %s in %s", version, icon_dir)
-    return TemplateDetector(load_icons(icon_dir, champions), icon_px=icon_px,
-                            threshold=args.threshold)
+    if args.icons is None:   # base circle icons first, Data Dragon squares as fallback (J)
+        sources = fetch_icons(champions, MODELS_DIR / "icons", log=log)
+    else:
+        sources = {c: {"source": "--icons", "path": str(Path(args.icons) / f"{c}.png")}
+                   for c in champions}
+        for c, src in sources.items():
+            log.info("icon template %s: --icons %s", c, src["path"])
+    det = TemplateDetector(load_icon_files({c: src["path"] for c, src in sources.items()}),
+                           icon_px=icon_px, threshold=args.threshold)
+    det.icon_sources = {c: {k: v for k, v in src.items() if k != "path"} | {"file": Path(src["path"]).name}
+                        for c, src in sources.items()}
+    return det
 
 
 def main(argv=None) -> int:

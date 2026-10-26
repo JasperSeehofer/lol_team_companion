@@ -69,6 +69,7 @@ def test_track_minimap_offline_on_synthetic_frames(fixtures, tmp_path):
     assert track["matchId"] == mf.MATCH_ID and track["champions"] == mf.CHAMPIONS
     assert len(track["samples"]) == 10 and len(list((tmp_path / "frames_minimap").iterdir())) == 10
     assert (tmp_path / "run.log").exists()
+    assert track["icon_sources"]["Ahri"] == {"source": "--icons", "file": "Ahri.png"}
     for s in track["samples"]:
         got = [tuple(p) for p in s["pos"].values() if p]
         assert len(got) == len(set(got))

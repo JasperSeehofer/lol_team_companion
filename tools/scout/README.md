@@ -15,6 +15,13 @@ AGPL-3.0-or-later (`LICENSE`); `vendor/pyLoL/` is GPL-3.0 (see its `ATTRIBUTION.
 | `scout.session` | The PC driver: one-line verbs (`start`, `enable-api`, `probe`, `minimap`, `topdown`, `timeline`, `score`, `handcheck`, `check`, `send`); current run in `runs/.current` | the run dir; `send` copies it to brain by `scp` |
 | `scout.halfc` | M156 half C on a run dir: manifest check, facts table, scores, hand check, plots, go/no-go and route | `facts.md`, `halfc-summary.json`, `plots/`, `scout-findings.md` |
 
+Minimap icon templates: the replay minimap draws each champion's base circle icon, so
+`scout.track_minimap` first fetches CommunityDragon's `<champion>_circle.png` / `_circle_0.png`
+and falls back to the Data Dragon square portrait (`--icons DIR` overrides both; the source per
+champion is logged and recorded as `icon_sources` in `track_minimap.json`). CommunityDragon is not
+on Riot's approved asset list: these are local detection templates fetched on the player's PC
+into the git-ignored `models/icons/`, never committed, shipped or served; Data Dragon is the fallback.
+
 Running it on a replay: `CHECKLIST.md` (Windows). Run dirs (`runs/`) are git-ignored and never
 go to GitHub; `python -m scout.session send` copies one to brain. Tests (Linux, no network, no client):
 

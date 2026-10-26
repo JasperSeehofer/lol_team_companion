@@ -48,37 +48,101 @@ def circle_mask(size: int, frac: float = 0.85) -> np.ndarray:
 
 
 def load_icons(icon_dir: Path | str, champions: list[str]) -> dict[str, np.ndarray]:
-    """Read {champion}.png for each champion; missing files raise."""
+    """Read {champion}.png for each champion; missing files raise. An RGBA
+    icon keeps its alpha (4 channels: TemplateDetector uses it as the mask)."""
+    return load_icon_files({c: Path(icon_dir) / f"{c}.png" for c in champions})
+
+
+def load_icon_files(paths: dict[str, Path | str]) -> dict[str, np.ndarray]:
     icons = {}
-    for champ in champions:
-        path = Path(icon_dir) / f"{champ}.png"
-        img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    for champ, path in paths.items():
+        img = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
         if img is None:
             raise FileNotFoundError(f"icon missing: {path}")
+        if img.ndim == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        elif img.shape[2] == 4 and img[:, :, 3].min() == 255:
+            img = img[:, :, :3]   # opaque: no mask to take
         icons[champ] = img
     return icons
 
 
-def fetch_ddragon_icons(champions: list[str], out_dir: Path | str,
-                        version: str | None = None) -> str:
-    """Download square champion portraits from Data Dragon (run time, on the
-    player's PC only; tests use committed synthetic icons). Returns the version."""
+# Finding J: the replay minimap draws each champion's BASE circle icon, not the
+# square (skin) portrait (Viego: square 0.37, under the 0.55 threshold; base
+# circle 0.63). Policy: CommunityDragon is not on Riot's approved asset list.
+# These files are only local detection templates, fetched on the player's PC
+# at run time into tools/scout/models/ (git-ignored); they are never committed,
+# shipped or served by Team Companion. Data Dragon (approved) is the fallback.
+CDRAGON_CIRCLE = ("https://raw.communitydragon.org/latest/game/assets/characters/{c}/hud/"
+                  "{c}_circle{suffix}.png")
+CDRAGON_SUFFIXES = ("", "_0")
+DDRAGON_VERSIONS = "https://ddragon.leagueoflegends.com/api/versions.json"
+DDRAGON_SQUARE = "https://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{champ}.png"
+
+
+def http_get(url: str) -> tuple[int, bytes]:
     import requests
 
-    if version is None:
-        version = requests.get("https://ddragon.leagueoflegends.com/api/versions.json",
-                               timeout=20).json()[0]
+    r = requests.get(url, timeout=20)
+    return r.status_code, r.content
+
+
+def fetch_icons(champions: list[str], out_dir: Path | str, get=None, version: str | None = None,
+                log=None) -> dict[str, dict]:
+    """Detection templates, one per champion: the CommunityDragon base circle
+    icon (`<c>_circle.png`, then `<c>_circle_0.png`), else the Data Dragon
+    square portrait. Cached under out_dir/cdragon/ and out_dir/ddragon/<version>/.
+    `get(url) -> (status, bytes)` is the HTTP layer (tests pass a fake).
+    Returns {champion: {"source", "path", "url"}}."""
+    get = get or http_get
     out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
+    sources: dict[str, dict] = {}
     for champ in champions:
-        path = out / f"{champ}.png"
-        if path.exists():
+        circle = out / "cdragon" / f"{champ}.png"
+        if circle.exists():
+            sources[champ] = {"source": "communitydragon_circle", "path": str(circle), "url": None,
+                              "cached": True}
             continue
-        url = f"https://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{champ}.png"
-        r = requests.get(url, timeout=20)
-        r.raise_for_status()
-        path.write_bytes(r.content)
-    return version
+        low = champ.lower()
+        for suffix in CDRAGON_SUFFIXES:
+            url = CDRAGON_CIRCLE.format(c=low, suffix=suffix)
+            try:
+                status, body = get(url)
+            except Exception as e:  # noqa: BLE001
+                if log:
+                    log.warning("CommunityDragon unreachable for %s (%s)", champ, e)
+                break
+            if status == 200 and body:
+                circle.parent.mkdir(parents=True, exist_ok=True)
+                circle.write_bytes(body)
+                sources[champ] = {"source": "communitydragon_circle", "path": str(circle),
+                                  "url": url, "cached": False}
+                break
+        if champ in sources:
+            continue
+        if version is None:
+            status, body = get(DDRAGON_VERSIONS)
+            if status != 200:
+                raise RuntimeError(f"Data Dragon versions: HTTP {status}")
+            import json
+
+            version = json.loads(body)[0]
+        square = out / "ddragon" / version / f"{champ}.png"
+        url = DDRAGON_SQUARE.format(version=version, champ=champ)
+        cached = square.exists()
+        if not cached:
+            status, body = get(url)
+            if status != 200:
+                raise RuntimeError(f"Data Dragon icon {champ}: HTTP {status}")
+            square.parent.mkdir(parents=True, exist_ok=True)
+            square.write_bytes(body)
+        sources[champ] = {"source": f"ddragon_square {version}", "path": str(square), "url": url,
+                          "cached": cached}
+    if log:
+        for champ, src in sources.items():
+            log.info("icon template %s: %s (%s)", champ, src["source"],
+                     "cached" if src["cached"] else src["url"])
+    return sources
 
 
 class TemplateDetector:
@@ -95,7 +159,11 @@ class TemplateDetector:
             for s in scales:
                 size = max(8, int(round(icon_px * s)))
                 t = cv2.resize(img, (size, size), interpolation=cv2.INTER_AREA)
-                self.templates[name].append((t, circle_mask(size)))
+                mask = circle_mask(size)
+                if t.ndim == 3 and t.shape[2] == 4:   # RGBA icon: its alpha narrows the mask
+                    mask = np.where(t[:, :, 3] >= 128, mask, 0).astype(np.uint8)
+                    t = np.ascontiguousarray(t[:, :, :3])
+                self.templates[name].append((t, mask))
         self.missing_classes: list[str] = []
 
     def describe(self) -> dict:
