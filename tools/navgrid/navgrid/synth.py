@@ -12,7 +12,8 @@ structure blobs and a swapped or shifted axis fails validation:
 - a river band along x + z = 14700 (river bit 16, river main regions);
 - two lanes in the main-region layer (top: west and north edges, bot: south
   and east edges); the nearest-lane layer is the nearest structure's lane;
-- one camp (POI CampRedBuff) and one pit (POI DragonPit);
+- one camp (POI CampRedBuff) and two pits: POI DragonPit (4) and the Baron
+  pit coded 12, as on the 16.21 real file (the converter's 3 is unused there);
 - structure blobs (bits 0x02 | 0x04 | 0x40, 3 x 3 cells, the 16.21 encoding) at
   every turret and inhibitor of the Bayes table, each with a walkable moat;
 - base gates (0x0400 / 0x0800 with 0x40, half of them also 0x1000; never 0x02)
@@ -33,6 +34,7 @@ WALL_BLOCKS = ((3000, 4500, 6000, 8000), (9500, 11500, 5000, 5600), (10900, 1150
 DIAGONAL = ((7500, 3500), (8500, 4500))
 CAMP = (2600, 8400, 200)                      # x, z, radius
 PIT = (9800, 4300, 400)
+BARON_PIT = (5000, 10400, 400)
 BLOB_HALF = 1                                  # 3 x 3 cells
 MOAT = 4                                       # cells cleared around each blob
 HINT_NODES = 900
@@ -125,6 +127,7 @@ def make(hint_nodes: int = HINT_NODES) -> ngrid.NavGrid:
     poi[near_turret] = 1
     poi[(X - CAMP[0]) ** 2 + (Z - CAMP[1]) ** 2 < CAMP[2] ** 2] = 5
     poi[(X - PIT[0]) ** 2 + (Z - PIT[1]) ** 2 < PIT[2] ** 2] = 4
+    poi[(X - BARON_PIT[0]) ** 2 + (Z - BARON_PIT[1]) ** 2 < BARON_PIT[2] ** 2] = 12
 
     dist_blue = np.hypot(X - 554, Z - 581)
     dist_red = np.hypot(X - 14302, Z - 14387)

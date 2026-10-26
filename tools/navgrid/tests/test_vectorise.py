@@ -12,7 +12,7 @@ shapely = pytest.importorskip("shapely")
 from shapely import box, hausdorff_distance, union_all  # noqa: E402
 from shapely.geometry import MultiPolygon, shape  # noqa: E402
 
-from navgrid import cli, ngrid, vectorise  # noqa: E402
+from navgrid import cli, ngrid, synth, vectorise  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -138,3 +138,13 @@ def test_transparent_layer_excludes_structures_and_gates(synth_bytes):
     assert not r["transparent"][struct].any() and not r["transparent"][gate].any()
     assert np.array_equal(r["transparent"], g.regions["srx"] == 2)
     assert np.array_equal(r["structures"], struct)
+
+
+def test_pits_include_poi_12_baron(out_dir, synth_bytes):
+    """16.21 codes the Baron pit as POI 12, not the converter's 3 (M166 R2)."""
+    g = ngrid.parse(synth_bytes)
+    assert (g.regions["poi"] == 12).any() and not (g.regions["poi"] == 3).any()
+    ix, iz = g.cell_of(*synth.BARON_PIT[:2])
+    assert vectorise.rasters(g)["pits"][iz, ix]
+    _, polys = load(out_dir, "pits.vision")
+    assert len(polys) == 2

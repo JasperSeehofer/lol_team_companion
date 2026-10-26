@@ -138,9 +138,14 @@ NEAREST_LANE = {0: "BlueSideTopLane", 1: "BlueSideMidLane", 2: "BlueSideBotLane"
                 3: "RedSideTopLane", 4: "RedSideMidLane", 5: "RedSideBotLane",
                 6: "BlueSideTopNeutralZone", 7: "BlueSideMidNeutralZone", 8: "BlueSideBotNeutralZone",
                 9: "RedSideTopNeutralZone", 10: "RedSideMidNeutralZone", 11: "RedSideBotNeutralZone"}
+# POI 11 and 12 are not in the converter. On the 16.21 real file (M166 R2) the
+# converter's BaronPit (3) has no cells and 12 is one 326-cell patch whose
+# centre lies 28 units from the game's BARON_NASHOR kill; 11 is four ~35-cell
+# patches away from every objective, meaning unknown.
 POI = {0: "None", 1: "NearTurret", 2: "CloudDrakeWindTunnel", 3: "BaronPit", 4: "DragonPit",
        5: "CampRedBuff", 6: "CampBlueBuff", 7: "CampGromp", 8: "CampKrugs", 9: "CampRaptors",
-       10: "CampMurkWolves"}
+       10: "CampMurkWolves", 11: "Unknown11", 12: "BaronPit (16.21)"}
+PIT_POI = (3, 4, 12)
 RING = {0: "BlueSpawnToNexus", 1: "BlueNexusToInhib", 2: "BlueInhibToInner", 3: "BlueInnerToOuter",
         4: "BlueOuterToNeutral", 5: "RedSpawnToNexus", 6: "RedNexusToInhib", 7: "RedInhibToInner",
         8: "RedInnerToOuter", 9: "RedOuterToNeutral"}

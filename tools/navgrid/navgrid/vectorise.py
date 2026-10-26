@@ -53,7 +53,7 @@ def rasters(g: ngrid.NavGrid) -> dict[str, np.ndarray]:
         out["river"] = (r["river"] & 16) != 0
         out["lanes"] = np.isin(r["main_region"], (2, 3, 4))
         out["camps"] = np.isin(r["poi"], (5, 6, 7, 8, 9, 10))
-        out["pits"] = np.isin(r["poi"], (3, 4))
+        out["pits"] = np.isin(r["poi"], ngrid.PIT_POI)
     return out
 
 
