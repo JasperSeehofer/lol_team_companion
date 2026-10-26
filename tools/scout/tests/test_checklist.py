@@ -33,3 +33,46 @@ def test_wednesday_commands_verbatim_and_safe():
     assert "RG" + "API" not in text
     assert "git push" not in text and "git add" not in text
     assert "Google Drive" in text and "production key" in text
+
+
+# ---------------------------------------------------------------- CHECKLIST-VALIDATE.md (M156 half C)
+
+VALIDATE = Path(__file__).resolve().parents[1] / "CHECKLIST-VALIDATE.md"
+SPY = r"function spy { .\tools\scout\.venv\Scripts\python -m scout.session @args }"
+
+
+def test_validate_checklist_short_every_step_has_output_and_failure():
+    text = VALIDATE.read_text(encoding="utf-8")
+    assert len(text.splitlines()) <= 40
+    steps = re.split(r"^\s*\d+\. ", text, flags=re.M)[1:]
+    nums = [int(n) for n in re.findall(r"^\s*(\d+)\. ", text, re.M)]
+    assert nums == list(range(1, len(nums) + 1)) and len(nums) >= 8
+    for n, body in zip(nums, steps):
+        if "sign out" in body.lower() or "open the replay" in body.lower():
+            continue   # pure hand steps
+        assert "Output:" in body, f"step {n} names no output"
+    assert text.count("If it fails") >= 6
+
+
+def test_validate_checklist_commands_exist_and_safe():
+    from scout import session
+
+    text = VALIDATE.read_text(encoding="utf-8")
+    assert SPY in text
+    verbs = set(re.findall(r"`spy ([a-z-]+)", text))
+    assert verbs and verbs <= set(session.VERBS), verbs - set(session.VERBS)
+    for v in ("start", "timeline", "minimap", "topdown", "score", "handcheck", "check", "send"):
+        assert v in verbs, v
+    # flags named in the checklist exist on the module the verb wraps
+    import contextlib
+    import io
+
+    from scout import track_minimap, track_topdown
+    for mod, flag in ((track_minimap, "--minimap-box"), (track_topdown, "--keystroke-unlock")):
+        assert flag in text
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.suppress(SystemExit):
+            mod.main(["--help"])
+        assert flag in buf.getvalue(), flag
+    assert "RG" + "API" not in text and "production key" in text
+    assert "git push" not in text and "HDR" in text
