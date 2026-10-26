@@ -736,27 +736,25 @@ pub fn Nav() -> impl IntoView {
                     <Show when=move || signed_in.get() && has_team.get().is_some()>
                         <nav class="hidden md:flex items-center gap-5" aria-label="Primary">
                             {move || {
-                            let model = nav_model(has_team.get().unwrap_or(true));
-                            let hubs = StoredValue::new(model.hubs);
-                            let find_team = model.find_team;
-                            move || {
-                                let hubs_val = hubs.get_value();
+                                let model = nav_model(has_team.get().unwrap_or(true));
+                                let find_team = model.find_team;
+                                let hubs = model.hubs.into_iter().map(|(key, label, href)| {
+                                    let paths: Vec<&'static str> = PAGES.iter().filter(|p| p.hub == key).map(|p| p.path).collect();
+                                    view! {
+                                        <A
+                                            href=href
+                                            attr:class=move || hub_class(active_hub.get() == key)
+                                            attr:aria-current=move || (active_hub.get() == key).then_some("true")
+                                        >
+                                            {label}
+                                            {move || crate::components::guidance::any_new(&paths).then(|| view! {
+                                                <span class="ml-1.5 text-caption font-semibold text-info" data-new-hub=key><span class="sr-only">", "</span>"New"</span>
+                                            })}
+                                        </A>
+                                    }
+                                }).collect_view();
                                 view! {
-                                    {hubs_val.into_iter().map(|(key, label, href)| {
-                                        let paths: Vec<&'static str> = PAGES.iter().filter(|p| p.hub == key).map(|p| p.path).collect();
-                                        view! {
-                                            <A
-                                                href=href
-                                                attr:class=move || hub_class(active_hub.get() == key)
-                                                attr:aria-current=move || (active_hub.get() == key).then_some("true")
-                                            >
-                                                {label}
-                                                {move || crate::components::guidance::any_new(&paths).then(|| view! {
-                                                    <span class="ml-1.5 text-caption font-semibold text-info" data-new-hub=key><span class="sr-only">", "</span>"New"</span>
-                                                })}
-                                            </A>
-                                        }
-                                    }).collect_view()}
+                                    {hubs}
                                     {find_team.then(|| view! {
                                         <A
                                             href=FIND_TEAM_HREF
@@ -767,8 +765,6 @@ pub fn Nav() -> impl IntoView {
                                         </A>
                                     })}
                                 }
-                            }}
-                            }
                             }}
                         </nav>
                     </Show>

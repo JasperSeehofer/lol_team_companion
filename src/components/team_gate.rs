@@ -54,7 +54,7 @@ pub fn TeamGate(
                 </SkeletonGroup>
             </PageShell>
         }>
-            <div hidden=no_team>{children}</div>
+            <div hidden=no_team>{children()}</div>
             {move || no_team().then(|| view! {
                 <PageShell density=Density::Compact attr:data-feedback-label=feedback_label attr:data-testid="no-team-page">
                     <PageHeader title=page eyebrow=page />
