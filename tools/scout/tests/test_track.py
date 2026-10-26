@@ -95,3 +95,33 @@ def test_auto_minimap_box_is_bottom_right_square():
     box = track_minimap.auto_minimap_box(2560, 1440)
     assert box["width"] == box["height"] == 341
     assert box["left"] + box["width"] < 2560 and box["top"] + box["height"] < 1440
+
+
+# Finding K: the template detector reports up to two peaks per label, and a dark
+# portrait matches a static background spot (off-map strip, jungle wall) at a
+# near-constant ~0.74 in every frame. That spot must not capture the track.
+STATIC = (13390.9, 680.6)
+
+
+def test_static_false_spot_does_not_capture_the_track():
+    tr = Tracker(["A", "B"])
+    # t=0: A's real icon (0.90) and the static spot (0.74)
+    tr.step(0.0, [WorldDet("A", 1000, 1000, 0.90), WorldDet("A", *STATIC, 0.74),
+                  WorldDet("B", 7000, 7000, 0.90)])
+    # t=1: A is dead or hidden: only the static spot is reported for A
+    tr.step(1.0, [WorldDet("A", *STATIC, 0.74), WorldDet("B", 7050, 7000, 0.90)])
+    # t=2..20: A is back and clearly visible, the static spot is still there
+    for k in range(2, 21):
+        pos = tr.step(float(k), [WorldDet("A", 1000 + 100 * k, 1000, 0.90),
+                                 WorldDet("A", *STATIC, 0.74),
+                                 WorldDet("B", 7000 + 50 * k, 7000, 0.90)])
+    assert pos["A"] == [3000.0, 1000.0], pos["A"]
+    assert pos["B"] == [8000.0, 7000.0]
+
+
+def test_static_false_spot_offered_first_does_not_lock_the_track():
+    """The first frame offers the static spot first (Hungarian tie at cost 0)."""
+    tr = Tracker(["A"])
+    tr.step(0.0, [WorldDet("A", *STATIC, 0.74), WorldDet("A", 1000, 1000, 0.90)])
+    pos = tr.step(1.0, [WorldDet("A", 1100, 1000, 0.90), WorldDet("A", *STATIC, 0.74)])
+    assert pos["A"] == [1100.0, 1000.0], pos["A"]

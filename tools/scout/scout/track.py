@@ -3,7 +3,10 @@
 Each champion owns exactly one track for the whole game. Per sample the
 detections (already in world units) are assigned to tracks with the Hungarian
 algorithm on cost = distance to the track's prediction + a penalty when the
-detector's label differs from the track's champion. A detection carries at
+detector's label differs from the track's champion. Only the best-scoring
+detection of each label takes part (finding K): each champion has one icon,
+and a second same-label peak (a dark portrait matching a static background
+spot) would otherwise become an absorbing state of the track. A detection carries at
 most one track and a track takes at most one detection. Same-label detections
 are accepted at any distance (recall, teleport, respawn); a different label
 only within `mismatch_gate`, so an overlap cannot swap identities.
@@ -85,6 +88,7 @@ class Tracker:
         self.last_t = t
         preds = {c: (f.predict(dt) if f is not None else None) for c, f in self.filters.items()}
         pos: dict[str, list[float] | None] = {c: None for c in self.champions}
+        dets = best_per_label(dets)
         if dets:
             cost = np.array([[self._cost(c, preds[c], d) for d in dets] for c in self.champions])
             rows, cols = linear_sum_assignment(cost)
@@ -101,6 +105,20 @@ class Tracker:
                 pos[champ] = [round(det.x, 1), round(det.y, 1)]
         self.samples.append({"t": t, "pos": pos})
         return pos
+
+
+def best_per_label(dets: list[WorldDet]) -> list[WorldDet]:
+    """Keep only the highest-scoring detection of each label (finding K).
+
+    Same-label cost is plain distance, accepted at any distance; offered two
+    peaks of one label, the Hungarian step takes the one nearest the
+    prediction, so once a track touches a static false spot (a first-frame
+    tie, or a frame where the real icon is hidden) it never leaves."""
+    best: dict[str, WorldDet] = {}
+    for d in dets:
+        if d.label not in best or d.score > best[d.label].score:
+            best[d.label] = d
+    return list(best.values())
 
 
 def find_gaps(samples: list[dict], champions: list[str]) -> list[dict]:
