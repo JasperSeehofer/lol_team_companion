@@ -26,6 +26,7 @@ import numpy as np
 from . import calibrate
 from .detect import TemplateDetector, YoloDetector, fetch_ddragon_icons, load_icons
 from .replay_api import DEFAULT_BASE, ReplayClient
+from .screen import all_monitors, describe, pick_monitor
 from .track import Tracker, WorldDet, find_gaps
 from .util import frame_name, list_frames, parse_box, read_json, run_logger, sample_evenly, write_json
 
@@ -57,7 +58,7 @@ def auto_minimap_box(screen_w: int, screen_h: int) -> dict:
 
 
 def capture_live(client: ReplayClient, box: dict | None, scratch: Path, speed: float,
-                 start: float, end: float | None, log) -> tuple[Path, dict]:
+                 start: float, end: float | None, log, monitor: int | None = None) -> tuple[Path, dict]:
     import mss  # Windows capture; imported only in live mode
 
     client.set_render(interfaceAll=False, interfaceMinimap=True, fogOfWar=False)
@@ -69,8 +70,11 @@ def capture_live(client: ReplayClient, box: dict | None, scratch: Path, speed: f
     n = 0
     wall0 = time.time()
     with mss.mss() as sct:
-        if box is None:
-            mon = sct.monitors[1]
+        index, mon, how = pick_monitor(sct.monitors, monitor)
+        chosen = describe(index, mon, how)
+        log.info("monitor %d (%s): %dx%d at %d,%d; mss lists %s", index, how, mon["width"],
+                 mon["height"], mon["left"], mon["top"], all_monitors(sct.monitors))
+        if box is None:   # relative to the chosen monitor's origin
             box = auto_minimap_box(mon["width"], mon["height"])
             box["left"] += mon["left"]
             box["top"] += mon["top"]
@@ -92,7 +96,8 @@ def capture_live(client: ReplayClient, box: dict | None, scratch: Path, speed: f
     wall = time.time() - wall0
     log.info("captured %d frames in %.0f s wall (%.2f game-s per wall-s)", n, wall,
              (end - start) / wall if wall else 0)
-    return scratch, {"box": box, "frames": n, "wall_s": round(wall, 1), "speed": speed}
+    return scratch, {"box": box, "monitor": chosen, "frames": n, "wall_s": round(wall, 1),
+                     "speed": speed}
 
 
 def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
@@ -160,6 +165,8 @@ def main(argv=None) -> int:
     ap.add_argument("--icon-px", type=int, help="icon diameter on the minimap in px")
     ap.add_argument("--anchors", type=Path, help="anchors.json of minimap pixel <-> world pairs")
     ap.add_argument("--minimap-box", help="screen region left,top,width,height")
+    ap.add_argument("--monitor", type=int,
+                    help="mss monitor index to capture (default: the primary monitor)")
     ap.add_argument("--speed", type=float, default=8.0)
     ap.add_argument("--start", type=float, default=0.0)
     ap.add_argument("--end", type=float, help="game seconds (default: replay length)")
@@ -193,7 +200,7 @@ def main(argv=None) -> int:
     if client:
         box = parse_box(args.minimap_box) if args.minimap_box else None
         frames_dir, capture = capture_live(client, box, args.scratch, args.speed, args.start,
-                                           args.end, log)
+                                           args.end, log, args.monitor)
     first = cv2.imread(str(list_frames(frames_dir)[0][1]))
     icon_px = args.icon_px or max(10, round(first.shape[1] * ICON_FRACTION))
     detector = build_detector(args, champions, icon_px, log)

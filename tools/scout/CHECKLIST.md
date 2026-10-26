@@ -22,6 +22,7 @@ note it in the run's `run.log`, skip the step and go on. Run data never goes to 
 5. **PC-only. Open the replay** of that game (current patch) in borderless full screen on the main monitor.
 6. **PC-only. Probe (about 3 min, hands off).** `.\tools\scout\.venv\Scripts\python -m scout.session probe`
    If it fails: open `https://127.0.0.1:2999/replay/game` in a browser; no answer = replay not open or step 4 did not take.
+   If `probe_*.png` show the wrong monitor: `run.log` lists them; add `--monitor N` here and in step 7.
 7. **PC-only. Minimap track (game length / 8, hands off).** `.\tools\scout\.venv\Scripts\python -m scout.session minimap`
    If it fails: if the first PNG in `frames_minimap` is not exactly the minimap, read its left, top, width,
    height in `probe_minimap_only.png` with Paint and add `--minimap-box L,T,W,H`.

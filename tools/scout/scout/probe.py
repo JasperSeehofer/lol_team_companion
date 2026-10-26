@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from .replay_api import DEFAULT_BASE, ReplayClient
+from .screen import all_monitors, describe, pick_monitor
 from .track_topdown import camera_render
 from .util import run_logger, write_json
 
@@ -29,9 +30,10 @@ HEALTH_BARS = ["healthBarChampions", "healthBarStructures", "healthBarWards",
 SEEK_TO = 120.0  # game seconds to start the speed probe from
 
 
-def screen_grabber(max_width: int = 1280):
-    """Returns grab(path) saving a full-screen PNG (downscaled to max_width), or
-    None when mss is unavailable (tests, non-Windows)."""
+def screen_grabber(max_width: int = 1280, monitor: int | None = None, log=None):
+    """Returns grab(path) saving a PNG of the primary monitor (or --monitor N;
+    see scout.screen), downscaled to max_width, or None when mss is unavailable
+    (tests, non-Windows). grab.monitor describes the monitor captured."""
     try:
         import cv2
         import mss
@@ -39,15 +41,24 @@ def screen_grabber(max_width: int = 1280):
     except ImportError:
         return None
 
+    with mss.mss() as sct:
+        index, mon, how = pick_monitor(sct.monitors, monitor)
+        listed = all_monitors(sct.monitors)
+    box = {k: mon[k] for k in ("left", "top", "width", "height")}
+    if log:
+        log.info("capturing monitor %d (%s): %dx%d at %d,%d; mss lists %s", index, how,
+                 box["width"], box["height"], box["left"], box["top"], listed)
+
     def grab(path: Path, full: bool = False) -> None:
         with mss.mss() as sct:
-            img = np.asarray(sct.grab(sct.monitors[1]))[:, :, :3]
+            img = np.asarray(sct.grab(box))[:, :, :3]
         if not full and img.shape[1] > max_width:
             scale = max_width / img.shape[1]
             img = cv2.resize(img, (max_width, round(img.shape[0] * scale)),
                              interpolation=cv2.INTER_AREA)
         cv2.imwrite(str(path), img, [cv2.IMWRITE_PNG_COMPRESSION, 9])
 
+    grab.monitor = describe(index, mon, how)
     return grab
 
 
@@ -75,6 +86,8 @@ class Probe:
         self.scratch = scratch or Path(os.environ.get("TEMP", tempfile.gettempdir())) / "scout-rec"
         self.log = log
         self.result: dict = {"errors": {}}
+        if getattr(grab, "monitor", None):
+            self.result["monitor"] = grab.monitor
 
     def _info(self, msg, *a):
         if self.log:
@@ -238,12 +251,14 @@ def main(argv=None) -> int:
     ap.add_argument("--skip-recording", action="store_true")
     ap.add_argument("--speed-window", type=float, default=3.0, help="wall seconds per speed step")
     ap.add_argument("--rec-seconds", type=float, default=10.0, help="game seconds per test recording")
+    ap.add_argument("--monitor", type=int,
+                    help="mss monitor index to capture (default: the primary monitor)")
     args = ap.parse_args(argv)
     if args.dry:
         print("\n".join(plan()))
         return 0
     log = run_logger(args.out, "probe")
-    probe = Probe(ReplayClient(args.base), args.out, grab=screen_grabber(),
+    probe = Probe(ReplayClient(args.base), args.out, grab=screen_grabber(monitor=args.monitor, log=log),
                   speed_window=args.speed_window, rec_seconds=args.rec_seconds, log=log)
     result = probe.run(skip_recording=args.skip_recording)
     result["base"] = args.base
