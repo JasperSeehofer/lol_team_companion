@@ -58,6 +58,24 @@ def list_frames(frames_dir: Path | str) -> list[tuple[float, Path]]:
     return sorted(out)
 
 
+def reset_sample_dir(keep: Path | str, source_dir: Path | str) -> int:
+    """Finding L: make `keep` hold only this run's sample frames. Removes the
+    frames an earlier run of the tool wrote there (files named exactly
+    tNNNNN.png, the tool's own naming) and nothing else; a foreign file stays.
+    When `keep` is the input folder itself it is left alone. Returns the
+    number of files removed."""
+    keep = Path(keep)
+    keep.mkdir(parents=True, exist_ok=True)
+    if keep.resolve() == Path(source_dir).resolve():
+        return 0
+    n = 0
+    for p in keep.iterdir():
+        if p.is_file() and re.fullmatch(r"t\d+\.png", p.name):
+            p.unlink()
+            n += 1
+    return n
+
+
 def sample_evenly(items: list, k: int) -> list:
     """At most k items spread evenly over the list (first and last kept)."""
     if len(items) <= k:

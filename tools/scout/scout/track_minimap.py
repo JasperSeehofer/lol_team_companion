@@ -6,7 +6,8 @@ Offline (saved frames tNNNNN.png, used by the tests and by half C):
   python -m scout.track_minimap --out RUN_DIR --frames DIR --champions A,B,...
 
 Writes RUN_DIR/track_minimap.json (world units) and up to --max-frames sampled
-minimap PNGs into RUN_DIR/frames_minimap/. All captured frames stay in the
+minimap PNGs into RUN_DIR/frames_minimap/ (a re-run first removes the tNNNNN.png
+samples an earlier run left there, nothing else). All captured frames stay in the
 scratch directory (default %TEMP%/scout-frames) outside the repository.
 """
 
@@ -29,7 +30,8 @@ from .render import minimap_only_render, preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
 from .track import StaticSpots, Tracker, WorldDet, find_gaps
-from .util import frame_name, list_frames, parse_box, read_json, run_logger, sample_evenly, write_json
+from .util import (frame_name, list_frames, parse_box, read_json, reset_sample_dir, run_logger,
+                   sample_evenly, write_json)
 
 ICON_FRACTION = 0.08   # icon diameter / minimap width (pyLoL: ~40 px on a 512 px minimap)
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
@@ -128,7 +130,7 @@ def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
         tracker.step(t, [WorldDet(d.label, *mapping.to_world(d.x, d.y), d.score)
                          for d in spots.filter(dets, static)])
     keep = out_dir / "frames_minimap"
-    keep.mkdir(parents=True, exist_ok=True)
+    removed = reset_sample_dir(keep, frames_dir)   # this run's samples only (L)
     for _, path in sample_evenly(frames, max_frames):
         if path.parent.resolve() != keep.resolve():
             shutil.copy2(path, keep / path.name)
@@ -143,6 +145,8 @@ def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
     write_json(out_dir / "track_minimap.json", track)
     if log:
         seen = sum(1 for s in tracker.samples for p in s["pos"].values() if p)
+        if removed:
+            log.info("frames_minimap: %d sample frames of an earlier run removed", removed)
         log.info("track_minimap.json: %d samples, %d positions, %d gaps", len(tracker.samples),
                  seen, len(track["gaps"]))
         for sp in track["static_spots"]["spots"]:

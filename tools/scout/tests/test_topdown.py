@@ -204,3 +204,14 @@ def test_record_live_finds_frames_in_client_subfolder(tmp_path, monkeypatch):
     per_s, extra = td.record_live(StubClient(), args, logging.getLogger("t"))
     assert extra["frames_written"] == 4
     assert sorted(p.name for p in per_s.glob("t*.png")) == ["t00600.png", "t00601.png"]
+
+
+def test_topdown_rerun_leaves_one_runs_samples(series, tmp_path):
+    keep = tmp_path / "frames_topdown"
+    keep.mkdir()
+    (keep / "t09999.png").write_bytes(b"stale")
+    (keep / "keep.me").write_text("foreign")
+    run(series, tmp_path)
+    names = sorted(p.name for p in keep.iterdir())
+    assert "t09999.png" not in names and "keep.me" in names
+    assert len([n for n in names if n.endswith(".png")]) == 6

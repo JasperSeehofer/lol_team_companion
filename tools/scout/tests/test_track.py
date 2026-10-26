@@ -3,6 +3,7 @@ import pytest
 
 import make_fixtures as mf
 from scout import track_minimap
+from scout.detect import TemplateDetector
 from scout.track import KalmanCV, Tracker, WorldDet, find_gaps
 from scout.util import read_json
 
@@ -205,3 +206,35 @@ def test_static_spots_leave_a_moving_icon_alone():
     for t in range(50):
         sp.observe([WorldDet("A", 3.0 * t, 0.0)])
     assert sp.static() == {}
+
+
+# Finding L: an offline re-run writes only its own samples into frames_minimap.
+def test_offline_rerun_leaves_one_runs_samples(fixtures, tmp_path):
+    from scout.detect import load_icons
+
+    det = TemplateDetector(load_icons(fixtures / "icons", mf.CHAMPIONS), icon_px=mf.ICON_PX)
+    keep = tmp_path / "frames_minimap"
+    keep.mkdir()
+    (keep / "t09999.png").write_bytes(b"stale sample of another capture")
+    (keep / "notes.txt").write_text("not the tool's")
+    track_minimap.run_offline(fixtures / "frames", mf.CHAMPIONS, det, tmp_path, max_frames=10)
+    first = sorted(p.name for p in keep.iterdir())
+    track_minimap.run_offline(fixtures / "frames", mf.CHAMPIONS, det, tmp_path, max_frames=4)
+    names = sorted(p.name for p in keep.iterdir())
+    frames = sorted(p.name for p in (fixtures / "frames").iterdir() if p.suffix == ".png")
+    assert "t09999.png" not in first and "notes.txt" in first
+    assert len([n for n in names if n.endswith(".png")]) == 4
+    assert set(names) - {"notes.txt"} <= set(frames)
+
+
+def test_offline_run_on_its_own_sample_folder_keeps_the_input(fixtures, tmp_path):
+    import shutil
+
+    from scout.detect import load_icons
+
+    keep = tmp_path / "frames_minimap"
+    shutil.copytree(fixtures / "frames", keep)
+    before = sorted(p.name for p in keep.iterdir())
+    det = TemplateDetector(load_icons(fixtures / "icons", mf.CHAMPIONS), icon_px=mf.ICON_PX)
+    track_minimap.run_offline(keep, mf.CHAMPIONS, det, tmp_path, max_frames=3)
+    assert sorted(p.name for p in keep.iterdir()) == before

@@ -46,7 +46,8 @@ from .detect import BarDetector
 from .render import preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .track import find_gaps
-from .util import frame_name, list_frames, read_json, run_logger, sample_evenly, write_json
+from .util import (frame_name, list_frames, read_json, reset_sample_dir, run_logger, sample_evenly,
+                   write_json)
 
 RENDER_TOPDOWN = {
     "interfaceAll": False, "fogOfWar": False, "floatingText": False,
@@ -581,7 +582,9 @@ def run_offline(frames_dir: Path, out_dir: Path, champions: list[str], anchors: 
     track = build_track(det_px, champions, (first.shape[1], first.shape[0]), minimap, timeline,
                         pmap, anchors_H, camera, identity, log)
     keep = out_dir / "frames_topdown"
-    keep.mkdir(parents=True, exist_ok=True)
+    removed = reset_sample_dir(keep, frames_dir)   # this run's samples only (L)
+    if removed and log:
+        log.info("frames_topdown: %d sample frames of an earlier run removed", removed)
     for _, path in sample_evenly(frames, max_frames):   # re-encoded: the client's PNGs are large
         if path.parent.resolve() != keep.resolve():
             cv2.imwrite(str(keep / path.name), cv2.imread(str(path)), [cv2.IMWRITE_PNG_COMPRESSION, 9])
