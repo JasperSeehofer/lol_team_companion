@@ -253,6 +253,139 @@ def topdown_frame() -> np.ndarray:
     return img
 
 
+# ---------------------------------------------------------------- top-down series (M156 R2)
+# A 1 Hz top-down recording at 1920x1080 (UI scale 0.75 of the 2560x1440
+# reference, camera at the reference height): champion health bars split at
+# the 1000-HP separators with varying HP, blue mana bars under every bar,
+# 3- and 4-pip ward bars of both teams. The first frame (t=600) is stale: it
+# shows the game 15 s earlier, as the client's first recorded frame does.
+# Generated on demand (tests write it to tmp_path); nothing here is game data.
+
+TD_SIZE = (1920, 1080)
+TD_SCALE = TD_SIZE[1] / 1440
+TD_OFFSET = (51.5 * TD_SCALE + 0.8, 144.4 * TD_SCALE - 1.3)   # true bar left -> unit, px
+# world -> unit pixel: ~0.06 px per unit, slightly tilted (a homography)
+TD_H = np.array([[0.0600, 0.0015, 960.0 - 0.0600 * 7375 - 0.0015 * 7430],
+                 [0.0010, -0.0600, 540.0 + 0.0600 * 7430 - 0.0010 * 7375],
+                 [0.0, 0.0000010, 1.0]])
+TD_TIMES = list(range(600, 641))
+TD_STALE_LAG = 15.0
+TD_TIMELINE_T = [600.249, 615.27, 630.3, 640.11]
+TD_BAR_W, TD_BAR_H = round(104 * TD_SCALE), round(12 * TD_SCALE)
+HSV = {"hp_blue": (102, 195, 236), "mana": (100, 174, 222), "pip_blue": (100, 255, 195),
+       "hp_red": (2, 210, 220), "pip_red": (2, 255, 200)}
+# (team, world x, y, pips, placed at): the first one is placed before the recording
+TD_WARDS = [("red", 9000, 4200, 3, 590.0), ("blue", 5000, 10600, 3, 609.85),
+            ("red", 10400, 6200, 4, 621.9), ("blue", 3500, 6100, 4, 630.85),
+            ("red", 8200, 11000, 3, 635.2)]
+TD_BASE = {"Aatrox": (2200, 11800), "LeeSin": (4300, 7600), "Ahri": (6600, 6900),
+           "Jinx": (10800, 2300), "Thresh": (11900, 1700), "Garen": (3200, 12900),
+           "Vi": (9600, 8600), "Lux": (8400, 6300), "Caitlyn": (12600, 3400),
+           "Leona": (13200, 5000)}
+
+
+def bgr(name: str) -> tuple:
+    px = cv2.cvtColor(np.uint8([[HSV[name]]]), cv2.COLOR_HSV2BGR)[0, 0]
+    return tuple(int(v) for v in px)
+
+
+def td_world(champ: str, t: float) -> tuple[float, float]:
+    i = CHAMPIONS.index(champ)
+    bx, by = TD_BASE[champ]
+    a = (t - 600) / 40.0
+    return (bx + 900 * a * np.cos(i), by + 900 * a * np.sin(i * 1.7))
+
+
+def td_unit_px(x: float, y: float) -> tuple[float, float]:
+    v = TD_H @ np.array([x, y, 1.0])
+    return float(v[0] / v[2]), float(v[1] / v[2])
+
+
+def td_bar_left(champ: str, t: float) -> tuple[float, float]:
+    ux, uy = td_unit_px(*td_world(champ, t))
+    return ux - TD_OFFSET[0], uy - TD_OFFSET[1]
+
+
+def td_hp(champ: str, t: float) -> tuple[float, float]:
+    """(HP fraction, max HP)."""
+    i = CHAMPIONS.index(champ)
+    return 0.45 + 0.5 * abs(np.sin(0.3 * t + i)), 2600.0 + 220 * i
+
+
+def td_frame(t: float) -> np.ndarray:
+    w, h = TD_SIZE
+    img = np.full((h, w, 3), (50, 62, 48), np.uint8)
+    cv2.line(img, (300, 1000), (1650, 80), (95, 85, 60), 40)            # dull river
+    cv2.circle(img, (150, 950), 40, bgr("hp_blue"), -1)                  # round blob, not a bar
+    shown = t - TD_STALE_LAG if t == TD_TIMES[0] else t
+    for team, x, y, n, placed in TD_WARDS:
+        if shown < placed:
+            continue
+        ux, uy = td_unit_px(x, y)
+        widths, spacing = ([24, 21, 21], 24.5) if n == 3 else ([18, 15, 15, 15], 18.0)
+        x0 = ux - 36 * TD_SCALE
+        for k, pw in enumerate(widths):
+            px0 = int(round(x0 + k * spacing * TD_SCALE))
+            pw_ = int(round(pw * TD_SCALE))
+            cv2.rectangle(img, (px0 - 1, int(uy) - 2), (px0 + pw_, int(uy) + 2), (0, 0, 0), -1)
+            cv2.rectangle(img, (px0, int(uy) - 1), (px0 + pw_ - 1, int(uy) + 1), bgr(f"pip_{team}"), -1)
+    for i, c in enumerate(CHAMPIONS):
+        team = "blue" if i < 5 else "red"
+        left, top = td_bar_left(c, shown)
+        x0, y0 = int(round(left)), int(round(top - TD_BAR_H / 2))
+        frac, max_hp = td_hp(c, shown)
+        cv2.rectangle(img, (x0 - 1, y0 - 1), (x0 + TD_BAR_W, y0 + TD_BAR_H), (0, 0, 0), -1)
+        cv2.rectangle(img, (x0, y0), (x0 + TD_BAR_W - 1, y0 + TD_BAR_H - 1), (40, 40, 40), -1)
+        fill = int(round(TD_BAR_W * frac))
+        cv2.rectangle(img, (x0, y0), (x0 + fill - 1, y0 + TD_BAR_H - 1), bgr(f"hp_{team}"), -1)
+        hp = 1000.0
+        while hp < max_hp * frac:                                          # the 1000-HP separators
+            sx = x0 + int(round(TD_BAR_W * hp / max_hp))
+            cv2.line(img, (sx, y0), (sx, y0 + TD_BAR_H - 1), (20, 20, 20), 2)
+            hp += 1000.0
+        mana = int(round(TD_BAR_W * (0.6 + 0.4 * abs(np.cos(0.2 * t + i)))))
+        my = int(round(top + 11.8 * TD_SCALE))
+        cv2.rectangle(img, (x0, my - 1), (x0 + mana - 1, my + 1), bgr("mana"), -1)
+    return img
+
+
+def td_timeline() -> dict:
+    """Timeline for the series: participantFrames near the frames, WARD_PLACED."""
+    frames = []
+    for k, tf in enumerate(TD_TIMELINE_T):
+        evs = [{"type": "WARD_PLACED", "timestamp": int(placed * 1000), "creatorId":
+                (2 if team == "blue" else 7) + j % 3, "wardType":
+                "CONTROL_WARD" if n == 4 else "YELLOW_TRINKET"}
+               for j, (team, _, _, n, placed) in enumerate(TD_WARDS)
+               if (TD_TIMELINE_T[k - 1] if k else 0) < placed <= tf]
+        frames.append({"timestamp": int(round(tf * 1000)), "events": evs, "participantFrames": {
+            str(i + 1): {"participantId": i + 1, "position": {
+                "x": round(td_world(c, tf)[0]), "y": round(td_world(c, tf)[1])}}
+            for i, c in enumerate(CHAMPIONS)}})
+    return {"metadata": {"matchId": MATCH_ID}, "info": {"frameInterval": 15000, "frames": frames}}
+
+
+def td_minimap_track(noise: float = 250.0) -> dict:
+    rng = np.random.default_rng(17)
+    samples = [{"t": float(t), "pos": {c: [round(td_world(c, t)[0] + rng.normal(0, noise), 1),
+                                           round(td_world(c, t)[1] + rng.normal(0, noise), 1)]
+                                       for c in CHAMPIONS}} for t in TD_TIMES]
+    return {"matchId": MATCH_ID, "source": "minimap", "champions": CHAMPIONS, "samples": samples}
+
+
+def td_anchors() -> dict:
+    """Turret anchors: the structures' unit pixels under the true homography."""
+    return {"pairs": [{"name": n, "pixel": [round(v, 2) for v in td_unit_px(*w)]}
+                      for n, w in TURRETS.items() if not n.endswith("nexus")]}
+
+
+def write_topdown_series(dest: Path) -> Path:
+    dest.mkdir(parents=True, exist_ok=True)
+    for t in TD_TIMES:
+        cv2.imwrite(str(dest / f"t{t:05d}.png"), td_frame(t), [cv2.IMWRITE_PNG_COMPRESSION, 1])
+    return dest
+
+
 # ---------------------------------------------------------------- run_synth (M166 A1)
 # A whole synthetic run directory in the run-dir contract of M156 (file names
 # unchanged), already minimised as A5's fetch_timeline writes it. scout.halfc
@@ -365,9 +498,10 @@ def synth_topdown_track() -> dict:
         det_px.append({"t": float(t), "dets": dets})
     wards = [{"t": t, "x": float(x), "y": float(y), "team": team, "last_seen": t + 2}
              for t, team, x, y in TOPDOWN_WARDS_T]
-    return {"matchId": MATCH_ID, "source": "topdown", "fps": 1.0, "champions": CHAMPIONS,
-            "samples": samples, "gaps": find_gaps(samples, CHAMPIONS),
+    return {"matchId": MATCH_ID, "source": "topdown", "processing": "r2", "fps": 1.0,
+            "champions": CHAMPIONS, "samples": samples, "gaps": find_gaps(samples, CHAMPIONS),
             "detector": {"kind": "synthetic-bars"}, "missing_classes": [],
+            "fit": {"source": "synthetic", "note": "positions written directly, nothing fitted"},
             "calibration": {"kind": "homography", "synthetic": True},
             "frame_size": list(TOPDOWN_SIZE), "wards": wards, "ward_units": "world",
             "detections_px": det_px,
@@ -444,19 +578,15 @@ def make_run_synth(dest: Path = RUN_SYNTH) -> Path:
 def main() -> None:
     icons_dir = HERE / "icons"
     frames_dir = HERE / "frames"
-    td_dir = HERE / "topdown"
-    for d in (icons_dir, frames_dir, td_dir):
+    for d in (icons_dir, frames_dir):
         d.mkdir(exist_ok=True)
     icons = [make_icon(i) for i in range(10)]
     for c, icon in zip(CHAMPIONS, icons):
         cv2.imwrite(str(icons_dir / f"{c}.png"), icon)
     for t in range(60, 70):
         cv2.imwrite(str(frames_dir / f"t{t:05d}.png"), render_frame(t, icons))
-    cv2.imwrite(str(td_dir / f"t{TOPDOWN_T:05d}.png"), topdown_frame())
-    anchors = {"pairs": [{"name": n, "pixel": [round(v, 2) for v in world_to_topdown(*w)]}
-                         for n, w in TURRETS.items() if n.endswith(("outer", "nexus"))]}
     for name, data in (("timeline_synth.json", timeline()), ("match_synth.json", match()),
-                       ("track_synth.json", track_synth()), ("anchors_topdown.json", anchors)):
+                       ("track_synth.json", track_synth())):
         indent = None if name == "track_synth.json" else 1
         (HERE / name).write_text(json.dumps(data, indent=indent) + "\n", encoding="utf-8")
     make_run_synth()

@@ -41,7 +41,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from . import findings, rules, score
+from . import calibrate, findings, rules, score, track_topdown
 from .track import find_gaps
 from .util import list_frames, mmss, read_json, sample_evenly
 
@@ -308,7 +308,8 @@ def _pmap_args(run_dir: Path, track: dict) -> list[str]:
     return ["--participants", ",".join(f"{i + 1}={c}" for i, c in enumerate(track["champions"]))]
 
 
-def run_score(run_dir: Path, out: Path, track_name: str, tag: str, wards_track: str | None) -> dict | None:
+def run_score(run_dir: Path, out: Path, track_name, tag: str, wards_track) -> dict | None:
+    """track_name / wards_track: names in RUN_DIR, or absolute paths (a reprocessed track)."""
     track_p, tl_p = run_dir / track_name, run_dir / "timeline.json"
     if not (track_p.is_file() and tl_p.is_file()):
         return None
@@ -353,7 +354,49 @@ def alive_adjusted(track: dict, timeline: dict, pmap: dict[int, str]) -> dict:
             "gaps_count": len(other), "death_gaps": len(death_gaps)}
 
 
+def refresh_topdown(run_dir: Path, out: Path, td: dict | None, timeline, mm) -> tuple[dict | None, Path | None]:
+    """A track written before R2 (raw blobs, no fit) is rebuilt from its stored
+    detections_px with the R2 rules (stale second, merged bars, fit against
+    the timeline): OUT/track_topdown_r2.json. Returns (track, path or None)."""
+    if not td or td.get("processing") == track_topdown.PROCESSING or not td.get("detections_px") \
+            or not td.get("frame_size"):
+        return td, None
+    anchors = run_dir / "anchors.json"
+    H = calibrate.fit_homography(*calibrate.load_anchors(anchors)).H if anchors.is_file() else None
+    new = track_topdown.reprocess(td, timeline, _pid_map(run_dir, td), mm, H)
+    path = out / "track_topdown_r2.json"
+    path.write_text(json.dumps(new, indent=1) + "\n", encoding="utf-8")
+    return new, path
+
+
+def topdown_input(td: dict, s_td: dict | None) -> dict:
+    """Route B's numbers: with a fit against the timeline the median is the
+    leave-one-frame-out one (the in-sample median scores the fit frames)."""
+    fit = td.get("fit") or {}
+    calibrated = td.get("calibration") is not None
+    med = (s_td or {}).get("median_error") if calibrated else None
+    out = {"median_error": med, "bar_hit_rate": bar_hit_rate(td), "calibrated": calibrated}
+    if calibrated and fit.get("source") == "timeline":
+        out.update(median_error=fit.get("lofo_median"), median_from="fit leave-one-frame-out",
+                   in_sample_median=fit.get("median_error"), identity=fit.get("identity"),
+                   fit_mode=fit.get("mode"), offset_px=fit.get("offset_px"),
+                   fit_frames=len(fit.get("frames") or []), score_median=med)
+    return out
+
+
+def topdown_detail(b: dict | None) -> str:
+    if not b or b.get("median_from") is None:
+        return ""
+    return (f" (median {b['median_from']}; in-sample {b['in_sample_median']}, scored "
+            f"{b['score_median']}; {b['fit_mode']} fit on {b['fit_frames']} timeline frames, "
+            f"identities {b['identity']}, bar offset {b['offset_px']} px)")
+
+
 def bar_hit_rate(topdown: dict) -> float | None:
+    if topdown.get("bar_counts"):   # R2: merged bars per frame, stale second left out
+        n = len(topdown.get("champions") or []) or 10
+        c = topdown["bar_counts"]
+        return round(sum(min(n, f["blue"] + f["red"]) for f in c) / (n * len(c)), 4)
     frames = topdown.get("detections_px") or []
     if not frames:
         return None
@@ -611,6 +654,7 @@ def halfc(run_dir: Path, out: Path, findings_path: Path | None, thresholds: Path
     if out.exists():
         for sub in ("plots", "score"):
             shutil.rmtree(out / sub, ignore_errors=True)
+        (out / "track_topdown_r2.json").unlink(missing_ok=True)
     out.mkdir(parents=True, exist_ok=True)
     th = rules.load_thresholds(thresholds)
     manifest = manifest_check(run_dir)
@@ -624,9 +668,11 @@ def halfc(run_dir: Path, out: Path, findings_path: Path | None, thresholds: Path
     fact_rows = facts(run_dir, probe, spec, td, eye)
     (out / "facts.md").write_text(facts_md(fact_rows, run_dir.name), encoding="utf-8")
 
-    wards_src = "track_topdown.json" if td else None
+    td, td_new = refresh_topdown(run_dir, out, td, timeline, mm)
+    td_name = td_new or "track_topdown.json"
+    wards_src = td_name if td else None
     s_mm = run_score(run_dir, out, "track_minimap.json", "minimap", wards_src) if mm else None
-    s_td = run_score(run_dir, out, "track_topdown.json", "topdown", None) if td else None
+    s_td = run_score(run_dir, out, td_name, "topdown", None) if td else None
 
     a_in = None
     if s_mm:
@@ -637,8 +683,7 @@ def halfc(run_dir: Path, out: Path, findings_path: Path | None, thresholds: Path
                                       "longest_gap_s")}
     b_in = None
     if td:
-        b_in = {"median_error": (s_td or {}).get("median_error") if td.get("calibration") else None,
-                "bar_hit_rate": bar_hit_rate(td), "calibrated": td.get("calibration") is not None}
+        b_in = topdown_input(td, s_td)
     hc = merge_handcheck(run_dir, out)
     per_kind = hc.get("per_kind", {}) if hc.get("marked") else {}
 
@@ -688,7 +733,8 @@ def halfc(run_dir: Path, out: Path, findings_path: Path | None, thresholds: Path
         "facts": fact_rows,
         "positions_minimap": {"raw": a_raw if s_mm else None, "alive_adjusted": a_in,
                               "verdict": a_v},
-        "positions_topdown": {"input": b_in, "verdict": b_v},
+        "positions_topdown": {"input": b_in, "verdict": b_v,
+                              "reprocessed": td_new.name if td_new else None},
         "wards": {"numbers": wards, "verdicts": w_verdicts},
         "recalls": {"numbers": rec_nums, "verdict": r_verdict},
         "handcheck": hc,
@@ -721,7 +767,7 @@ def halfc(run_dir: Path, out: Path, findings_path: Path | None, thresholds: Path
                       f"{a_in['longest_gap_s']} s (raw {a_raw['longest_gap_s']} s)") if a_in else "n/a",
         "a_threshold": _thr_text(th, "positions_minimap"),
         "a_verdict": a_v["verdict"], "a_reason": a_v["reason"],
-        "b_numbers": _nums(b_v) if b_in else "n/a",
+        "b_numbers": (_nums(b_v) + topdown_detail(b_in)) if b_in else "n/a",
         "b_threshold": _thr_text(th, "positions_topdown"),
         "b_verdict": b_v["verdict"], "b_reason": b_v["reason"],
         "wards_blue_numbers": wnums("blue") if td else "n/a",

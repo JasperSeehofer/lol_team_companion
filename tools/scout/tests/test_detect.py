@@ -17,16 +17,17 @@ def test_template_detector_finds_all_ten(fixtures):
         assert abs(best.x - tx) <= 2 and abs(best.y - ty) <= 2, (champ, best, tx, ty)
 
 
-def test_bar_detector_on_topdown_frame(fixtures):
-    img = cv2.imread(str(fixtures / "topdown" / "t00600.png"))
+def test_bar_detector_on_topdown_frame():
+    img = mf.td_frame(620)
     dets = BarDetector().detect(img)
     champs = [d for d in dets if d.label == "champion"]
-    wards = [d for d in dets if d.label == "ward"]
-    assert sorted(d.team for d in champs) == ["blue"] * 5 + ["red"] * 5
-    assert sorted(d.team for d in wards) == ["blue", "blue", "red"]
-    for c, (x, y) in mf.TOPDOWN_CHAMPS.items():
-        px, py = mf.world_to_topdown(x, y)
-        assert min(abs(d.x - px) + abs(d.y - py) for d in champs) <= 3, c
+    assert sorted(d.team for d in champs) == ["blue"] * 5 + ["red"] * 5   # split bars merged
+    for c in mf.CHAMPIONS:
+        left, y = mf.td_bar_left(c, 620)
+        assert min(abs(d.left - left) + abs(d.y - y) for d in champs) <= 1.5, c
+    pips = [d for d in dets if d.label == "ward" and d.sat >= 230]
+    assert len(pips) == 3 + 3              # two 3-pip wards placed by 620
+    assert {d.team for d in pips} == {"blue", "red"}
 
 
 def test_bar_detector_ignores_round_blob():

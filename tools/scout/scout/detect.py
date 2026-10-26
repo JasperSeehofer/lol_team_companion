@@ -29,6 +29,8 @@ class Detection:
     team: str | None = None   # "blue" / "red" when known
     w: float = 0.0
     h: float = 0.0
+    left: float | None = None   # bar detections: bounding-box left edge, px
+    sat: float | None = None    # bar detections: mean HSV saturation of the blob
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -177,7 +179,9 @@ class BarParams:
     ward_min_w: int = 8
     champ_min_w: int = 12
     max_w: int = 200
-    offset_y: float = 0.0          # bar centre -> unit position, screen px (verify)
+    offset_y: float = 0.0          # bar centre -> unit position, screen px (track_topdown fits it)
+    merge_dy: float = 3.0          # blobs of one champion bar: rows this close (px at 1440) ...
+    merge_gap: float = 8.0         # ... gaps this small (the 1000-HP separators)
     extra: dict = field(default_factory=dict)
 
 
@@ -191,18 +195,51 @@ class BarDetector:
     def describe(self) -> dict:
         return {"kind": self.kind, **{k: v for k, v in asdict(self.p).items() if k != "extra"}}
 
-    def _blobs(self, mask: np.ndarray, team: str) -> list[Detection]:
+    def _blobs(self, mask: np.ndarray, team: str, sat: np.ndarray | None = None) -> list[Detection]:
+        """Ward blobs as found; champion bars merged first. A champion bar
+        splits at its 1000-HP separators into blobs that can be too short for
+        the aspect test on their own (tanky champions), so blobs of champion
+        height on one row (rows within merge_dy, gaps within merge_gap, both
+        times the UI scale frame height / 1440) are joined, then tested."""
         p = self.p
-        n, _, stats, cents = cv2.connectedComponentsWithStats(mask, connectivity=8)
-        out = []
+        scale = mask.shape[0] / 1440.0
+        n, labels, stats, cents = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        out, parts = [], []
         for i in range(1, n):
-            x, y, w, h, _ = stats[i]
-            if w < p.ward_min_w or w > p.max_w or w < p.min_aspect * h:
+            x, y, w, h, area = stats[i]
+            if w > p.max_w:
                 continue
-            label = "champion" if (h >= p.champ_min_h and w >= p.champ_min_w) else "ward"
+            s = None
+            if sat is not None:
+                box = labels[y:y + h, x:x + w] == i
+                s = float(sat[y:y + h, x:x + w][box].mean())
             cx, cy = cents[i]
-            out.append(Detection(label, float(cx), float(cy) + p.offset_y, 1.0, team,
-                                 float(w), float(h)))
+            if h >= p.champ_min_h and w >= p.ward_min_w / 2:
+                parts.append({"l": float(x), "r": float(x + w), "top": int(y), "bot": int(y + h),
+                              "cy": float(cy), "area": float(area), "s": s})
+                continue
+            if w < p.ward_min_w or w < p.min_aspect * h:
+                continue
+            out.append(Detection("ward", float(cx), float(cy) + p.offset_y, 1.0, team, float(w),
+                                 float(h), float(x), None if s is None else round(s, 1)))
+        groups: list[list[dict]] = []
+        for part in sorted(parts, key=lambda q: q["l"]):
+            g = next((g for g in groups if abs(g[0]["cy"] - part["cy"]) <= p.merge_dy * scale
+                      and part["l"] - max(q["r"] for q in g) <= p.merge_gap * scale), None)
+            if g:
+                g.append(part)
+            else:
+                groups.append([part])
+        for g in groups:
+            left, right = g[0]["l"], max(q["r"] for q in g)
+            w, h = right - left, max(q["bot"] for q in g) - min(q["top"] for q in g)
+            if w < p.champ_min_w or w < p.min_aspect * h or w > p.max_w:
+                continue
+            area = sum(q["area"] for q in g)
+            cy = sum(q["cy"] * q["area"] for q in g) / area
+            s = None if g[0]["s"] is None else round(sum(q["s"] * q["area"] for q in g) / area, 1)
+            out.append(Detection("champion", left + (w - 1) / 2, cy + p.offset_y, 1.0, team,
+                                 float(w), float(h), left, s))
         return out
 
     def detect(self, img: np.ndarray) -> list[Detection]:
@@ -211,4 +248,5 @@ class BarDetector:
         blue = cv2.inRange(hsv, np.array(p.blue_lo), np.array(p.blue_hi))
         red = cv2.inRange(hsv, np.array(p.red_lo), np.array(p.red_hi)) | \
             cv2.inRange(hsv, np.array(p.red2_lo), np.array(p.red2_hi))
-        return self._blobs(blue, "blue") + self._blobs(red, "red")
+        sat = hsv[:, :, 1]
+        return self._blobs(blue, "blue", sat) + self._blobs(red, "red", sat)

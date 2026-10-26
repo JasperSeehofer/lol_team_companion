@@ -8,7 +8,7 @@ import pytest
 
 import make_fixtures as mf
 from scout import fetch_timeline, probe, session
-from scout.util import read_json
+from scout.util import read_json, write_json
 
 KEY = "RG" + "API-00000000-test-not-a-real-key"
 MID = "EUW1_7100000099"
@@ -109,10 +109,12 @@ def test_minimap_offline_frames(env, fixtures):
     assert (run / "frames_minimap").is_dir()
 
 
-def test_topdown_offline_frames(env, fixtures):
+def test_topdown_offline_frames(env, tmp_path):
     run = started(env)
-    assert env.call("topdown", "--frames", str(fixtures / "topdown"), "--anchors",
-                    str(fixtures / "anchors_topdown.json"), "--champions", ",".join(mf.CHAMPIONS)) == 0
+    frames = mf.write_topdown_series(tmp_path / "series")
+    write_json(tmp_path / "anchors.json", mf.td_anchors())
+    assert env.call("topdown", "--frames", str(frames), "--anchors",
+                    str(tmp_path / "anchors.json"), "--champions", ",".join(mf.CHAMPIONS)) == 0
     assert read_json(run / "track_topdown.json")["source"] == "topdown"
 
 

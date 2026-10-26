@@ -221,3 +221,23 @@ def test_manifest_flags_puuid_list_and_size(run, monkeypatch):
     res = halfc.manifest_check(run)
     assert any("PUUID list" in h for h in res["identifier_hits"])
     assert not res["size_ok"]
+
+
+def test_refresh_topdown_rebuilds_a_pre_r2_track(tmp_path):
+    """A track_topdown.json written before R2 (raw blobs, no fit) is rebuilt from
+    its detections_px, and route B is read from the fit's leave-one-frame-out median."""
+    from scout import track_topdown
+
+    frames = mf.write_topdown_series(tmp_path / "frames")
+    first = track_topdown.run_offline(frames, tmp_path / "rec", mf.CHAMPIONS, None, None, 1)
+    legacy = {k: v for k, v in first.items() if k not in ("processing", "fit", "bar_counts")}
+    run_dir, out = tmp_path / "run", tmp_path / "out"
+    run_dir.mkdir()
+    out.mkdir()
+    td, path = halfc.refresh_topdown(run_dir, out, legacy, mf.td_timeline(), mf.td_minimap_track())
+    assert path == out / "track_topdown_r2.json" and path.is_file()
+    assert td["processing"] == "r2" and td["fit"]["identity"] == "minimap"
+    b = halfc.topdown_input(td, {"median_error": 1.0})
+    assert b["median_from"] == "fit leave-one-frame-out" and b["median_error"] == td["fit"]["lofo_median"] < 40
+    assert b["bar_hit_rate"] == 1.0 and b["calibrated"]
+    assert halfc.refresh_topdown(run_dir, out, td, None, None) == (td, None)   # already R2

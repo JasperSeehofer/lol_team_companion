@@ -4,23 +4,36 @@ their health bars.
 Live (player's PC; run in a fresh desktop session if a recording already ran):
   python -m scout.track_topdown --out RUN_DIR [--keystroke-unlock] [--start 600]
 Offline (saved frames tNNNNN.png):
-  python -m scout.track_topdown --out RUN_DIR --frames DIR --anchors anchors.json
-      --minimap-track RUN_DIR/track_minimap.json
+  python -m scout.track_topdown --out RUN_DIR --frames DIR [--anchors anchors.json]
+      [--minimap-track RUN_DIR/track_minimap.json] [--timeline RUN_DIR/timeline.json]
+Rebuild a track from its stored detections (no frames):
+  python -m scout.track_topdown --out DIR --from-detections RUN_DIR/track_topdown.json
 
 Live mode records 5 min through /replay/recording (png codec) into a scratch
 directory outside the repo (default %TEMP%/scout-rec), keeps one frame per game
 second for tracking and copies up to --max-frames of them into
-RUN_DIR/frames_topdown/. Without anchors.json it writes a template to fill in
-and keeps the detections in pixels (half C fits the homography from the frames).
+RUN_DIR/frames_topdown/.
+
+Positions (R2): the first second of the recording is dropped (stale), each
+champion's bar blobs are merged and anchored on the bar's left edge, and
+unit = left edge + offset. With timeline.json the offset and the homography
+are fitted against the timeline's participantFrames (frames within 0.5 s),
+identities by Hungarian against the minimap track (or, without one, against
+the timeline itself: an oracle fit, reported as such); the fit report gives
+the in-sample and leave-one-frame-out median errors. With anchors.json (turret
+pixels) the homography comes from the anchors and only the offset is fitted.
+With neither, a template is written and the detections stay in pixels.
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import shutil
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -28,7 +41,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 from . import calibrate
-from .camera import default_camera_y
+from .camera import REF_FOV, REF_Y, default_camera_y
 from .detect import BarDetector
 from .render import preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
@@ -123,84 +136,379 @@ def nearest_sample(track: dict | None, t: float, tol: float = 1.0) -> dict | Non
     return best if best and abs(best["t"] - t) <= tol else None
 
 
-def assign_identities(t: float, bars: list[tuple[str, float, float]], minimap: dict | None,
-                      champions: list[str]) -> dict:
-    """Hungarian per team between world-space bars and the minimap track at t."""
+def assign_identities(t: float, bars: list[tuple[str, float, float]], ref: dict | None,
+                      champions: list[str], gate: float = IDENTITY_GATE) -> dict:
+    """Hungarian per team between world-space bars and reference positions
+    ({champion: [x, y]}, e.g. the minimap track's sample at t)."""
     pos = {c: None for c in champions}
-    ref = nearest_sample(minimap, t)
-    if ref is None:
+    if not ref:
         return pos
     for team, members in (("blue", champions[:5]), ("red", champions[5:])):
-        cands = [m for m in members if ref["pos"].get(m)]
+        cands = [m for m in members if ref.get(m)]
         team_bars = [(x, y) for tm, x, y in bars if tm == team]
         if not cands or not team_bars:
             continue
-        cost = np.array([[np.hypot(ref["pos"][c][0] - x, ref["pos"][c][1] - y)
+        cost = np.array([[np.hypot(ref[c][0] - x, ref[c][1] - y)
                           for x, y in team_bars] for c in cands])
         for r, k in zip(*linear_sum_assignment(cost)):
-            if cost[r, k] <= IDENTITY_GATE:
+            if cost[r, k] <= gate:
                 x, y = team_bars[k]
                 pos[cands[r]] = [round(x, 1), round(y, 1)]
     return pos
 
 
-def run_offline(frames_dir: Path, out_dir: Path, champions: list[str], anchors: Path | None,
-                minimap: dict | None, max_frames: int = 6, extra: dict | None = None,
-                log=None) -> dict:
-    frames = list_frames(frames_dir)
-    if not frames:
-        raise SystemExit(f"no tNNNNN.png frames in {frames_dir}")
-    detector = BarDetector()
-    mapping = None
-    if anchors and anchors.exists():
-        mapping = calibrate.fit_homography(*calibrate.load_anchors(anchors))
-    else:
-        write_json(out_dir / "anchors_template.json", calibrate.anchors_template())
-        if log:
-            log.warning("no anchors.json: detections kept in pixels; fill anchors_template.json")
-    samples, det_px, wards = [], [], []
-    first = cv2.imread(str(frames[0][1]))
-    for t, path in frames:
-        dets = detector.detect(cv2.imread(str(path)))
-        det_px.append({"t": t, "dets": [d.as_dict() for d in dets]})
-        if mapping is None:   # no positions, but wards still count for time matching
-            samples.append({"t": t, "pos": {c: None for c in champions}})
+# ---------------------------------------------------------------- bars -> unit positions (R2)
+#
+# Measured on Jasper's run (2026-10-22: 2560x1440, camera y 50000, fov 19):
+# - the recording's first frame (at startTime) is stale, it still shows the
+#   game before the seek: the first STALE_S seconds of every recording are dropped;
+# - a champion health bar splits into several blobs at its 1000-HP separators
+#   and its centroid moves with the HP left: blobs on one row are merged and the
+#   bar is anchored on its LEFT edge, which does not move;
+# - the unit stands REF_BAR_OFFSET px right of and below that left edge.
+#   Screen-space sizes scale with the frame height (UI scale); the vertical
+#   offset is a height above the unit, so it also scales with the camera
+#   (height and fov). Fitted per run when the timeline is at hand.
+
+PROCESSING = "r2"
+STALE_S = 1.0
+REF_FRAME_H = 1440.0
+REF_BAR_OFFSET = (51.5, 144.4)    # merged bar left edge -> unit, px (reference screen and camera)
+BAR_MERGE_DY = 3.0                # blobs of one bar: rows this close (px at the reference) ...
+BAR_MERGE_GAP = 8.0               # ... and horizontal gaps this small
+MAP_SIDE_PX = 1200.0              # map bounds' side on screen at the reference (initial guess)
+# top-down frame <-> timeline participantFrames. Not the score's 1 s: champions
+# move ~350 units/s, so on Jasper's run the frame at 601 against the frame
+# stamped 600.249 alone cost ~250 units (fit LOFO 152 -> 128 without it).
+FIT_FRAME_TOL_S = 0.5
+FIT_GATES = (2500.0, 1500.0, 800.0, 600.0, 600.0)
+RANSAC_WORLD = 300.0
+MIN_FIT_PAIRS = 6
+
+
+def ui_scale(frame_size) -> float:
+    return float(frame_size[1]) / REF_FRAME_H
+
+
+def camera_scale(frame_size, camera: dict | None) -> float:
+    """Screen size of world distances relative to the reference camera."""
+    fov = float((camera or {}).get("fov") or REF_FOV)
+    y = (camera or {}).get("height") or default_camera_y(int(frame_size[0]), int(frame_size[1]), fov)
+    return (REF_Y * math.tan(math.radians(REF_FOV) / 2)) / (float(y) * math.tan(math.radians(fov) / 2))
+
+
+def default_bar_offset(frame_size, camera: dict | None = None) -> tuple[float, float]:
+    s = ui_scale(frame_size)
+    return (REF_BAR_OFFSET[0] * s, REF_BAR_OFFSET[1] * s * camera_scale(frame_size, camera))
+
+
+def bar_left(d: dict) -> float:
+    """Left edge of a bar blob: the bounding box when recorded, else from the
+    centroid (pixels left..left+w-1)."""
+    if d.get("left") is not None:
+        return float(d["left"])
+    return float(d["x"]) - (float(d.get("w") or 0.0) - 1.0) / 2.0
+
+
+def merge_bars(dets: list[dict], scale: float = 1.0) -> list[dict]:
+    """Champion bar blobs joined across the HP separators: same team, rows
+    within BAR_MERGE_DY, gaps within BAR_MERGE_GAP (both times the UI scale)."""
+    segs = sorted((d for d in dets if d.get("label") == "champion"), key=bar_left)
+    groups: list[dict] = []
+    for d in segs:
+        left = bar_left(d)
+        right = left + float(d.get("w") or 0.0)
+        g = next((g for g in groups if g["team"] == d.get("team")
+                  and abs(g["y"] - float(d["y"])) <= BAR_MERGE_DY * scale
+                  and left - g["right"] <= BAR_MERGE_GAP * scale), None)
+        if g:
+            g["right"] = max(g["right"], right)
+            g["blobs"] += 1
         else:
-            bars = [(d.team, *mapping.to_world(d.x, d.y)) for d in dets if d.label == "champion"]
-            samples.append({"t": t, "pos": assign_identities(t, bars, minimap, champions)})
-        for d in dets:
-            if d.label != "ward":
+            groups.append({"team": d.get("team"), "left": left, "right": right,
+                           "y": float(d["y"]), "blobs": 1})
+    return groups
+
+
+def _translate(dx: float, dy: float) -> np.ndarray:
+    return np.array([[1.0, 0.0, dx], [0.0, 1.0, dy], [0.0, 0.0, 1.0]])
+
+
+@dataclass
+class BarMap:
+    """Merged bar (left edge, row) -> unit pixel (+ offset) -> world (H)."""
+
+    H: np.ndarray            # unit pixel -> world
+    offset: tuple[float, float]
+
+    def to_world(self, left: float, y: float) -> tuple[float, float]:
+        v = self.H @ np.array([left + self.offset[0], y + self.offset[1], 1.0])
+        return float(v[0] / v[2]), float(v[1] / v[2])
+
+    def unit_pixel(self, wx: float, wy: float) -> tuple[float, float]:
+        v = np.linalg.inv(self.H) @ np.array([wx, wy, 1.0])
+        return float(v[0] / v[2]), float(v[1] / v[2])
+
+    def as_dict(self) -> dict:
+        return {"kind": "homography", "H": self.H.tolist(), "applies_to": "unit pixel = bar left + offset",
+                "offset_px": [round(self.offset[0], 2), round(self.offset[1], 2)]}
+
+
+def initial_map(frame_size, camera: dict | None, offset) -> BarMap:
+    """Crude start: the map bounds as a square centred on the frame."""
+    side = MAP_SIDE_PX * ui_scale(frame_size) * camera_scale(frame_size, camera)
+    cx, cy = frame_size[0] / 2.0, frame_size[1] / 2.0
+    src = np.float32([[cx - side / 2, cy - side / 2], [cx + side / 2, cy - side / 2],
+                      [cx + side / 2, cy + side / 2], [cx - side / 2, cy + side / 2]])
+    (x0, x1), (y0, y1) = calibrate.MAP_X, calibrate.MAP_Y
+    dst = np.float32([[x0, y1], [x1, y1], [x1, y0], [x0, y0]])
+    return BarMap(cv2.getPerspectiveTransform(src, dst).astype(float), tuple(offset))
+
+
+def truth_frames(timeline: dict | None, pmap: dict[int, str]) -> list[tuple[float, dict]]:
+    """(t, {champion: [x, y]}) per timeline participantFrames frame; a dead
+    champion (frame position = the spot of a CHAMPION_KILL in the last 60 s)
+    is left out: it has no bar."""
+    frames = (timeline or {}).get("info", {}).get("frames", [])
+    kills = [e for f in frames for e in f.get("events", []) if e.get("type") == "CHAMPION_KILL"]
+    out = []
+    for f in frames:
+        pos = {}
+        for pid, pf in (f.get("participantFrames") or {}).items():
+            c = pmap.get(int(pid))
+            if not c or "position" not in pf:
                 continue
-            x, y = mapping.to_world(d.x, d.y) if mapping else (d.x, d.y)
+            x, y = float(pf["position"]["x"]), float(pf["position"]["y"])
+            dead = any(e.get("victimId") == int(pid) and 0 <= f["timestamp"] - e["timestamp"] <= 60000
+                       and abs((e.get("position") or {}).get("x", 1e9) - x) < 5
+                       and abs((e.get("position") or {}).get("y", 1e9) - y) < 5 for e in kills)
+            if not dead:
+                pos[c] = [x, y]
+        out.append((f["timestamp"] / 1000.0, pos))
+    return out
+
+
+def _pairs(mapping: BarMap, frames: list[dict], champions: list[str], gate: float) -> list[dict]:
+    """Bars matched to champions (Hungarian against each frame's identity
+    reference), each with the timeline's position as the target."""
+    out = []
+    for fr in frames:
+        bars = [(b["team"], *mapping.to_world(b["left"], b["y"])) for b in fr["bars"]]
+        ident = assign_identities(fr["t"], bars, fr["ident"], champions, gate)
+        by_world = {(round(x, 1), round(y, 1)): b for b, (_, x, y) in zip(fr["bars"], bars)}
+        for c, p in ident.items():
+            if p is None or c not in fr["truth"]:
+                continue
+            b = by_world[tuple(p)]
+            out.append({"t": fr["t"], "champion": c, "left": b["left"], "y": b["y"],
+                        "world": fr["truth"][c]})
+    return out
+
+
+def _errors(mapping: BarMap, pairs: list[dict]) -> np.ndarray:
+    return np.array([np.hypot(*(np.subtract(mapping.to_world(p["left"], p["y"]), p["world"])))
+                     for p in pairs])
+
+
+def _fit_once(frames, champions, start: BarMap, anchored: bool):
+    mapping, pairs, inliers = start, [], None
+    for gate in FIT_GATES:
+        cand = _pairs(mapping, frames, champions, gate)
+        if len(cand) < (3 if anchored else MIN_FIT_PAIRS):
+            break
+        pairs = cand
+        if anchored:   # homography fixed by the turret anchors: fit the offset only
+            res = np.array([np.subtract(mapping.unit_pixel(*p["world"]), (p["left"], p["y"]))
+                            for p in pairs])
+            mapping = BarMap(mapping.H, (float(np.median(res[:, 0])), float(np.median(res[:, 1]))))
+        else:          # bar -> world directly; the default offset is folded into H
+            src = np.float64([(p["left"], p["y"]) for p in pairs])
+            dst = np.float64([p["world"] for p in pairs])
+            Hb, mask = cv2.findHomography(src, dst, cv2.RANSAC, RANSAC_WORLD)
+            if Hb is None:
+                break
+            inliers = mask.ravel().astype(bool)
+            mapping = BarMap(Hb @ _translate(-start.offset[0], -start.offset[1]), start.offset)
+    return mapping, pairs, inliers
+
+
+def fit_topdown(frames: list[dict], champions: list[str], start: BarMap, anchored: bool,
+                identity: str) -> tuple[BarMap | None, dict]:
+    """frames: [{"t", "bars" (merged), "truth" {champ: [x, y]}, "ident" {champ: [x, y]}}]
+    at the timeline's minute frames. Returns the mapping and a report with the
+    in-sample and leave-one-frame-out (LOFO) median errors in world units."""
+    mapping, pairs, inliers = _fit_once(frames, champions, start, anchored)
+    if not pairs:
+        return None, {"source": "timeline", "identity": identity, "frames": [f["t"] for f in frames],
+                      "n_pairs": 0, "reason": "no bar matched a champion within the gates"}
+    err = _errors(mapping, pairs)
+    lofo, per_frame = [], {}
+    for fr in frames:
+        rest = [f for f in frames if f is not fr]
+        if not rest:
+            break
+        m_i, p_i, _ = _fit_once(rest, champions, start, anchored)
+        if not p_i:
+            continue
+        held = _pairs(m_i, [fr], champions, FIT_GATES[-1])
+        e = _errors(m_i, held) if held else np.array([])
+        lofo += e.tolist()
+        per_frame[f"{fr['t']:g}"] = {"in_sample": round(float(np.median(err[[p["t"] == fr["t"] for p in pairs]])), 1)
+                                     if any(p["t"] == fr["t"] for p in pairs) else None,
+                                     "lofo": round(float(np.median(e)), 1) if len(e) else None,
+                                     "n": int(len(e))}
+    report = {
+        "source": "timeline", "identity": identity,
+        "identity_note": ("oracle fit: identities from the timeline positions themselves, not "
+                          "available on a scouting run" if identity == "oracle"
+                          else "identities from the minimap track at the same time"),
+        "mode": "anchors" if anchored else "direct",
+        "offset_px": [round(mapping.offset[0], 2), round(mapping.offset[1], 2)],
+        "offset_from": "fitted (homography from the turret anchors)" if anchored
+        else "default, folded into the fitted homography",
+        "frames": [f["t"] for f in frames], "n_pairs": len(pairs),
+        "n_inliers": int(inliers.sum()) if inliers is not None else len(pairs),
+        "median_error": round(float(np.median(err)), 1),
+        "p90_error": round(float(np.percentile(err, 90)), 1),
+        "lofo_median": round(float(np.median(lofo)), 1) if lofo else None,
+        "lofo_n": len(lofo), "per_frame": per_frame,
+    }
+    return mapping, report
+
+
+def wards_legacy(det_px: list[dict], mapping: BarMap | None) -> list[dict]:
+    wards = []
+    for f in det_px:
+        t = f["t"]
+        for d in f["dets"]:
+            if d.get("label") != "ward":
+                continue
+            x, y = (mapping.to_world(bar_left(d), d["y"]) if mapping else (d["x"], d["y"]))
             radius = WARD_MERGE if mapping else WARD_MERGE_PX
-            known = next((w for w in wards if w["team"] == d.team
+            known = next((w for w in wards if w["team"] == d.get("team")
                           and t - w["last_seen"] <= WARD_MERGE_S
                           and np.hypot(w["x"] - x, w["y"] - y) <= radius), None)
             if known:
                 known["last_seen"] = t
             else:
-                wards.append({"t": t, "x": round(x, 1), "y": round(y, 1), "team": d.team,
+                wards.append({"t": t, "x": round(x, 1), "y": round(y, 1), "team": d.get("team"),
                               "last_seen": t})
+    return wards
+
+
+def build_track(det_px: list[dict], champions: list[str], frame_size, minimap: dict | None = None,
+                timeline: dict | None = None, pmap: dict[int, str] | None = None,
+                anchors_H: np.ndarray | None = None, camera: dict | None = None,
+                identity: str = "auto", log=None) -> dict:
+    """Everything after detection, from per-frame bar detections (pixel dicts):
+    stale first second dropped, bars merged, mapping fitted, positions and wards."""
+    pmap = pmap or {i + 1: c for i, c in enumerate(champions)}
+    det_px = sorted(det_px, key=lambda f: f["t"])
+    t0 = det_px[0]["t"] if det_px else 0.0
+    kept = [f for f in det_px if f["t"] >= t0 + STALE_S]
+    stale = [f["t"] for f in det_px if f["t"] < t0 + STALE_S]
+    scale = ui_scale(frame_size)
+    merged = {f["t"]: merge_bars(f["dets"], scale) for f in kept}
+    if identity == "auto":
+        identity = "minimap" if minimap else "oracle"
+    offset0 = default_bar_offset(frame_size, camera)
+    truths = truth_frames(timeline, pmap)
+    fit_frames = []
+    for tf, pos in truths:
+        near = min(kept, key=lambda f: abs(f["t"] - tf), default=None)
+        if near is None or abs(near["t"] - tf) > FIT_FRAME_TOL_S:
+            continue
+        ref = pos if identity == "oracle" else (nearest_sample(minimap, near["t"]) or {}).get("pos")
+        fit_frames.append({"t": near["t"], "timeline_t": tf, "bars": merged[near["t"]],
+                           "truth": pos, "ident": ref})
+    mapping, fit = None, None
+    if anchors_H is not None:
+        mapping = BarMap(np.asarray(anchors_H, float), offset0)
+        fit = {"source": "anchors", "mode": "anchors", "offset_px": list(offset0),
+               "offset_from": "default scaled to the frame and camera (no timeline to fit it)"}
+    if fit_frames:
+        start = mapping or initial_map(frame_size, camera, offset0)
+        m, rep = fit_topdown(fit_frames, champions, start, anchors_H is not None, identity)
+        if m is not None:
+            mapping, fit = m, rep
+        elif fit is None:
+            fit = rep
+    samples, counts = [], []
+    fit_t = {f["t"]: f for f in fit_frames}
+    for f in kept:
+        t, bars = f["t"], merged[f["t"]]
+        counts.append({"t": t, "blue": sum(b["team"] == "blue" for b in bars),
+                       "red": sum(b["team"] == "red" for b in bars)})
+        if mapping is None:
+            samples.append({"t": t, "pos": {c: None for c in champions}})
+            continue
+        world = [(b["team"], *mapping.to_world(b["left"], b["y"])) for b in bars]
+        ref = fit_t[t]["truth"] if identity == "oracle" and t in fit_t else \
+            (nearest_sample(minimap, t) or {}).get("pos")
+        samples.append({"t": t, "pos": assign_identities(t, world, ref, champions)})
+    wards = wards_legacy(kept, mapping)
+    track = {
+        "source": "topdown", "processing": PROCESSING, "fps": 1.0, "champions": champions,
+        "samples": samples, "gaps": find_gaps(samples, champions), "missing_classes": [],
+        "calibration": mapping.as_dict() if mapping else None, "fit": fit,
+        "frame_size": list(frame_size), "stale_dropped": stale, "bar_counts": counts,
+        "wards": wards, "ward_units": "world" if mapping else "px", "detections_px": det_px,
+    }
+    if log:
+        log.info("top-down: %d frames (%d stale dropped), fit %s", len(kept), len(stale),
+                 {k: (fit or {}).get(k) for k in ("mode", "identity", "median_error", "lofo_median",
+                                                  "offset_px")})
+    return track
+
+
+def run_offline(frames_dir: Path, out_dir: Path, champions: list[str], anchors: Path | None,
+                minimap: dict | None, max_frames: int = 6, extra: dict | None = None,
+                log=None, timeline: dict | None = None, pmap: dict[int, str] | None = None,
+                identity: str = "auto") -> dict:
+    frames = list_frames(frames_dir)
+    if not frames:
+        raise SystemExit(f"no tNNNNN.png frames in {frames_dir}")
+    detector = BarDetector()
+    anchors_H = None
+    if anchors and anchors.exists():
+        anchors_H = calibrate.fit_homography(*calibrate.load_anchors(anchors)).H
+    elif timeline is None:
+        write_json(out_dir / "anchors_template.json", calibrate.anchors_template())
+        if log:
+            log.warning("no anchors.json and no timeline: detections kept in pixels; "
+                        "fill anchors_template.json or pass --timeline")
+    det_px = []
+    first = cv2.imread(str(frames[0][1]))
+    for t, path in frames:
+        dets = detector.detect(cv2.imread(str(path)))
+        det_px.append({"t": t, "dets": [d.as_dict() for d in dets]})
+    camera = ((extra or {}).get("recording") or {}).get("camera")
+    track = build_track(det_px, champions, (first.shape[1], first.shape[0]), minimap, timeline,
+                        pmap, anchors_H, camera, identity, log)
     keep = out_dir / "frames_topdown"
     keep.mkdir(parents=True, exist_ok=True)
     for _, path in sample_evenly(frames, max_frames):   # re-encoded: the client's PNGs are large
         if path.parent.resolve() != keep.resolve():
             cv2.imwrite(str(keep / path.name), cv2.imread(str(path)), [cv2.IMWRITE_PNG_COMPRESSION, 9])
-    track = {
-        "matchId": (minimap or {}).get("matchId"), "source": "topdown", "fps": 1.0,
-        "champions": champions, "samples": samples, "gaps": find_gaps(samples, champions),
-        "detector": detector.describe(), "missing_classes": [],
-        "calibration": mapping.as_dict() if mapping else None,
-        "frame_size": [first.shape[1], first.shape[0]], "wards": wards,
-        "ward_units": "world" if mapping else "px",
-        "detections_px": det_px, **(extra or {}),
-    }
+    track = {"matchId": (minimap or {}).get("matchId"), **track, "detector": detector.describe(),
+             **(extra or {})}
     write_json(out_dir / "track_topdown.json", track)
     if log:
-        n_bars = sum(1 for f in det_px for d in f["dets"] if d["label"] == "champion")
-        log.info("track_topdown.json: %d frames, %d champion bars, %d wards", len(frames),
-                 n_bars, len(wards))
+        n_bars = sum(c["blue"] + c["red"] for c in track["bar_counts"])
+        log.info("track_topdown.json: %d frames, %d merged champion bars, %d wards", len(frames),
+                 n_bars, len(track["wards"]))
     return track
+
+
+def reprocess(track: dict, timeline: dict | None, pmap: dict[int, str] | None = None,
+              minimap: dict | None = None, anchors_H=None, identity: str = "auto", log=None) -> dict:
+    """Rebuild a track written before R2 (or by another version) from its
+    stored detections_px: no frames needed."""
+    camera = (track.get("recording") or {}).get("camera")
+    new = build_track(track.get("detections_px") or [], track["champions"], track["frame_size"],
+                      minimap, timeline, pmap, anchors_H, camera, identity, log)
+    keep = {k: v for k, v in track.items() if k not in new}
+    return {**keep, **new, "reprocessed_from": track.get("processing") or "r1"}
 
 
 def main(argv=None) -> int:
@@ -225,6 +533,15 @@ def main(argv=None) -> int:
     ap.add_argument("--scratch", type=Path,
                     default=Path(os.environ.get("TEMP", tempfile.gettempdir())) / "scout-rec")
     ap.add_argument("--base", default=DEFAULT_BASE, help="Replay API base URL")
+    ap.add_argument("--timeline", type=Path,
+                    help="timeline.json to fit the bar offset and homography (default RUN_DIR/timeline.json)")
+    ap.add_argument("--match", type=Path, help="match.json for participantId -> champion "
+                                               "(default RUN_DIR/match.json, else blue 1-5, red 6-10)")
+    ap.add_argument("--identity", choices=["auto", "minimap", "oracle"], default="auto",
+                    help="who is who in the fit: the minimap track (default when present) or the "
+                         "timeline positions (oracle fit, reported as such)")
+    ap.add_argument("--from-detections", type=Path,
+                    help="rebuild an existing track_topdown.json from its detections_px (no frames)")
     args = ap.parse_args(argv)
     log = run_logger(args.out, "track_topdown")
 
@@ -234,16 +551,31 @@ def main(argv=None) -> int:
         champions = [c.strip() for c in args.champions.split(",")]
     elif minimap:
         champions = minimap["champions"]
-    else:
+    elif not args.from_detections:
         raise SystemExit("need --champions or a track_minimap.json")
+    tl_path = args.timeline or args.out / "timeline.json"
+    timeline = read_json(tl_path) if tl_path.exists() else None
+    m_path = args.match or args.out / "match.json"
+    pmap = None
+    if m_path.exists():
+        pmap = {p["participantId"]: p["championName"] for p in read_json(m_path)["info"]["participants"]}
+    anchors = args.anchors or args.out / "anchors.json"
+    if args.from_detections:
+        old = read_json(args.from_detections)
+        H = calibrate.fit_homography(*calibrate.load_anchors(anchors)).H if anchors.exists() else None
+        track = reprocess(old, timeline, pmap, minimap, H, args.identity, log)
+        write_json(args.out / "track_topdown.json", track)
+        return 0
     frames_dir, extra = args.frames, {}
+    if frames_dir is not None and args.camera_y is not None:
+        extra = {"recording": {"camera": {"mode": "given", "height": args.camera_y, "fov": args.fov}}}
     if frames_dir is None:
         client = ReplayClient(args.base)
         with preserved_render(client, log) as restore:   # the client is left as found
             frames_dir, extra = record_live(client, args, log)
         extra = {"recording": extra, "render_restore": restore}
-    run_offline(frames_dir, args.out, champions, args.anchors or args.out / "anchors.json",
-                minimap, args.max_frames, extra, log)
+    run_offline(frames_dir, args.out, champions, anchors, minimap, args.max_frames, extra, log,
+                timeline, pmap, args.identity)
     return 0
 
 
