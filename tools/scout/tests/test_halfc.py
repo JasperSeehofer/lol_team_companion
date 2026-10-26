@@ -241,3 +241,52 @@ def test_refresh_topdown_rebuilds_a_pre_r2_track(tmp_path):
     assert b["median_from"] == "fit leave-one-frame-out" and b["median_error"] == td["fit"]["lofo_median"] < 40
     assert b["bar_hit_rate"] == 1.0 and b["calibrated"]
     assert halfc.refresh_topdown(run_dir, out, td, None, None) == (td, None)   # already R2
+
+
+def test_handcheck_reads_jaspers_words(run, tmp_path):
+    rows = list(csv.DictReader(open(run / "handcheck.csv", encoding="utf-8")))
+    words = ["agreed", "disagree", "exact detection", "Yes", "hmm, not sure"]
+    with open(run / "handcheck.csv", "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows({**r, "jasper_says": words[i % len(words)]} for i, r in enumerate(rows))
+    out = tmp_path / "out"
+    out.mkdir()
+    hc = halfc.merge_handcheck(run, out)
+    assert hc["marked"] and hc["marked_rows"] == 4 and hc["agree"] == 3 and hc["unclear"] == 1
+    merged = list(csv.DictReader(open(out / "handcheck_merged.csv", encoding="utf-8")))
+    assert [r["agree"] for r in merged] == ["yes", "no", "yes", "yes", "unclear"]
+    assert "1 unclear" in halfc.handcheck_line(hc)
+    for said, mark in [("agree", "yes"), ("y", "yes"), ("correct", "yes"), ("Exactly", "yes"),
+                       ("true", "yes"), ("no", "no"), ("n", "no"), ("wrong", "no"), ("false", "no"),
+                       ("", ""), ("maybe", "unclear")]:
+        assert halfc.hand_mark(said) == mark, said
+
+
+def test_facts_r2_probe_shape(run, tmp_path):
+    out = tmp_path / "out"
+    halfc.main([str(run), "--out", str(out)])
+    facts = {r["n"]: r for r in read_json(out / "halfc-summary.json")["facts"]}
+    assert facts[1]["value"].startswith("R2 combination honoured")
+    assert "11 of 11 other interface* fields read false" in facts[1]["value"]
+    assert "known to hide the minimap" in facts[1]["value"] and "interface.legacy" in facts[1]["evidence"]
+    assert facts[4]["value"].startswith("visual fit: camera y 50000 at fov 19.0")
+    assert "probe_camera_fit_50000.png" in facts[4]["evidence"]
+    assert "API read-back honoured up to 60000" in facts[4]["value"]
+
+
+def test_facts_legacy_r1_probe_shape(run, tmp_path):
+    """A probe.json written by R1 (Jasper's 2026-10-22 run): only the legacy combination, no camera_fit."""
+    probe = read_json(run / "probe.json")
+    probe["interface"] = {"interfaceAll": {"sent": False, "read": False, "honoured": True},
+                          "interfaceMinimap": {"sent": True, "read": True, "honoured": True},
+                          "screenshot": probe["interface"]["screenshot"]}
+    del probe["camera_fit"]
+    (run / "probe.json").write_text(json.dumps(probe), encoding="utf-8")
+    out = tmp_path / "out"
+    assert halfc.main([str(run), "--out", str(out)]) == 0
+    facts = {r["n"]: r for r in read_json(out / "halfc-summary.json")["facts"]}
+    assert facts[1]["value"].startswith("R1 probe: only the legacy combination")
+    assert "hides the minimap" in facts[1]["value"] and "R1 shape" in facts[1]["evidence"]
+    assert "read-back only: no camera_fit" in facts[4]["value"]
+    assert findings.unfilled_lines((out / "scout-findings.md").read_text(encoding="utf-8")) == []

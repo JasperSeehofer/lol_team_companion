@@ -16,10 +16,10 @@ the frame.
 
 | # | Unknown | Measured | Evidence |
 |---|---|---|---|
-| 1 | Minimap-only mode honoured (`interfaceAll=false` + `interfaceMinimap=true`) | _(fills on Jasper's run)_ | _(fills on Jasper's run)_ |
+| 1 | Minimap-only mode honoured (R2: `interfaceAll=true` + `interfaceMinimap=true`, every other `interface*` false; R1's `interfaceAll=false` + `interfaceMinimap=true` recorded as legacy) | _(fills on Jasper's run)_ | _(fills on Jasper's run)_ |
 | 2 | Highest honoured replay speed | _(fills on Jasper's run)_ | _(fills on Jasper's run)_ |
 | 3 | Accelerated recording (real time or faster; lossless?) | _(fills on Jasper's run)_ | _(fills on Jasper's run)_ |
-| 4 | Camera height and whole-map view (API camera vs Ctrl+Shift+Y, `farClip`) | _(fills on Jasper's run)_ | _(fills on Jasper's run)_ |
+| 4 | Camera height and whole-map view (visual fit `camera_fit`, API camera vs Ctrl+Shift+Y, `farClip`) | _(fills on Jasper's run)_ | _(fills on Jasper's run)_ |
 | 5 | Vanguard or capture black frames | _(fills on Jasper's run)_ | _(fills on Jasper's run)_ |
 | 6 | Enemy wards on the minimap with fog off | _(fills on Jasper's run)_ | _(fills on Jasper's run)_ |
 

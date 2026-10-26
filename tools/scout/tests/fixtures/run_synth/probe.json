@@ -17,8 +17,8 @@
  },
  "interface": {
   "interfaceAll": {
-   "sent": false,
-   "read": false,
+   "sent": true,
+   "read": true,
    "honoured": true
   },
   "interfaceMinimap": {
@@ -26,10 +26,84 @@
    "read": true,
    "honoured": true
   },
+  "interfaceAnnounce": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceChat": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceFrames": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceKillCallouts": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceNeutralTimers": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceQuests": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceReplay": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceScore": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceScoreboard": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceTarget": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
+  "interfaceTimeline": {
+   "sent": false,
+   "read": false,
+   "honoured": true
+  },
   "screenshot": {
    "file": "probe_minimap_only.png",
    "mean_brightness": 41.3,
    "black": false
+  },
+  "combo": "interfaceAll=true, interfaceMinimap=true, every other interface* false",
+  "legacy": {
+   "interfaceAll": {
+    "sent": false,
+    "read": false,
+    "honoured": true
+   },
+   "interfaceMinimap": {
+    "sent": true,
+    "read": true,
+    "honoured": true
+   },
+   "screenshot": {
+    "file": "probe_minimap_legacy.png",
+    "mean_brightness": 4.2,
+    "black": false
+   },
+   "note": "interfaceAll=false + interfaceMinimap=true: known to hide the minimap (Jasper's run 2026-10-22)"
   }
  },
  "speed": {
@@ -189,7 +263,57 @@
    }
   ],
   "max_honoured_y": 60000,
-  "note": "whether the whole map is in view is read from the screenshots"
+  "note": "API read-back only; whether the whole map is in view: camera_fit"
+ },
+ "camera_fit": {
+  "screen": [
+   2560,
+   1440
+  ],
+  "screen_from": "monitor",
+  "fov": 19.0,
+  "default_y": 50000.0,
+  "rule": "y = 50000 * tan(9.5 deg) / tan(fov/2) * max(1, 1/a, a/(16/9)), a = width/height",
+  "steps": [
+   {
+    "y": 42500.0,
+    "read_y": 42500.0,
+    "fit": {
+     "fits": false
+    },
+    "screenshot": {
+     "file": "probe_camera_fit_42500.png",
+     "mean_brightness": 20.0,
+     "black": false
+    }
+   },
+   {
+    "y": 50000.0,
+    "read_y": 50000.0,
+    "fit": {
+     "fits": true
+    },
+    "screenshot": {
+     "file": "probe_camera_fit_50000.png",
+     "mean_brightness": 21.0,
+     "black": false
+    }
+   },
+   {
+    "y": 57500.0,
+    "read_y": 57500.0,
+    "fit": {
+     "fits": true
+    },
+    "screenshot": {
+     "file": "probe_camera_fit_57500.png",
+     "mean_brightness": 22.0,
+     "black": false
+    }
+   }
+  ],
+  "chosen_y": 50000.0,
+  "chosen_by": "visual: lowest height whose frame holds the whole map"
  },
  "health_bars": {
   "healthBarChampions": {

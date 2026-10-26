@@ -16,10 +16,10 @@ the frame.
 
 | # | Unknown | Measured | Evidence |
 |---|---|---|---|
-| 1 | Minimap-only mode honoured (`interfaceAll=false` + `interfaceMinimap=true`) | {{fact1_value}} | {{fact1_evidence}} |
+| 1 | Minimap-only mode honoured (R2: `interfaceAll=true` + `interfaceMinimap=true`, every other `interface*` false; R1's `interfaceAll=false` + `interfaceMinimap=true` recorded as legacy) | {{fact1_value}} | {{fact1_evidence}} |
 | 2 | Highest honoured replay speed | {{fact2_value}} | {{fact2_evidence}} |
 | 3 | Accelerated recording (real time or faster; lossless?) | {{fact3_value}} | {{fact3_evidence}} |
-| 4 | Camera height and whole-map view (API camera vs Ctrl+Shift+Y, `farClip`) | {{fact4_value}} | {{fact4_evidence}} |
+| 4 | Camera height and whole-map view (visual fit `camera_fit`, API camera vs Ctrl+Shift+Y, `farClip`) | {{fact4_value}} | {{fact4_evidence}} |
 | 5 | Vanguard or capture black frames | {{fact5_value}} | {{fact5_evidence}} |
 | 6 | Enemy wards on the minimap with fog off | {{fact6_value}} | {{fact6_evidence}} |
 

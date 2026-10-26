@@ -194,13 +194,7 @@ def facts(run_dir: Path, probe, spec, topdown, eye: dict) -> list[dict]:
     if why:
         rows.append({"n": 1, "value": why, "evidence": "probe.json"})
     else:
-        a, m = iface.get("interfaceAll", {}), iface.get("interfaceMinimap", {})
-        ok = bool(a.get("honoured")) and bool(m.get("honoured"))
-        rows.append({"n": 1, "value": f"{'honoured' if ok else 'not honoured'} (interfaceAll read "
-                                      f"{a.get('read')}, interfaceMinimap read {m.get('read')})",
-                     "evidence": f"probe.json interface; {_shot(iface.get('screenshot'))}; "
-                                 f"openapi.json mentions interfaceMinimap: "
-                                 f"{_spec_mentions(spec, 'interfaceMinimap')}"})
+        rows.append(fact_interface(iface, spec))
     sp, why = _sub(probe, "speed")
     if why:
         rows.append({"n": 2, "value": why, "evidence": "probe.json"})
@@ -224,19 +218,11 @@ def facts(run_dir: Path, probe, spec, topdown, eye: dict) -> list[dict]:
                                       f"back: {_yn(lossless)}",
                      "evidence": "probe.json recording.accelerated, recording.realtime (codec png)"})
     cam, why = _sub(probe, "camera")
-    if why:
+    fit = (probe or {}).get("camera_fit")
+    if why and not fit:
         rows.append({"n": 4, "value": why, "evidence": "probe.json"})
     else:
-        top = cam.get("max_honoured_y")
-        far = next((s.get("read_farClip") for s in cam.get("steps", []) if s.get("sent_y") == top), None)
-        mode = ((topdown or {}).get("recording") or {}).get("camera", {}).get("mode") \
-            if topdown else None
-        shot = f"probe_camera_{top}.png" if top else "no honoured height"
-        rows.append({"n": 4, "value": f"camera height honoured up to {top}; farClip read {far}; "
-                                      f"top-down ran with camera mode "
-                                      f"{mode or ('not recorded' if topdown else 'not reached')}",
-                     "evidence": f"probe.json camera.steps; {shot}; openapi.json mentions farClip: "
-                                 f"{_spec_mentions(spec, 'farClip')}"})
+        rows.append(fact_camera(cam or {}, fit, topdown, spec))
     if probe is None:
         rows.append({"n": 5, "value": "not reached: probe.json missing", "evidence": "probe.json"})
     else:
@@ -267,11 +253,68 @@ def facts(run_dir: Path, probe, spec, topdown, eye: dict) -> list[dict]:
     return rows
 
 
+def fact_interface(iface: dict, spec) -> dict:
+    """Fact 1. R2 probes send the working combination (interfaceAll=true,
+    interfaceMinimap=true, every other interface* false) and record R1's
+    under interface.legacy; an R1 probe sent only the legacy combination."""
+    fields = {k: v for k, v in iface.items() if k.startswith("interface") and isinstance(v, dict)}
+    a, m = fields.get("interfaceAll", {}), fields.get("interfaceMinimap", {})
+    ok = bool(fields) and all(v.get("honoured") for v in fields.values())
+    shot = _shot(iface.get("screenshot"))
+    mentions = f"openapi.json mentions interfaceMinimap: {_spec_mentions(spec, 'interfaceMinimap')}"
+    legacy = iface.get("legacy")
+    if isinstance(legacy, dict):
+        others = [k for k in fields if k not in ("interfaceAll", "interfaceMinimap")]
+        off = sum(1 for k in others if fields[k].get("read") is False)
+        la, lm = legacy.get("interfaceAll", {}), legacy.get("interfaceMinimap", {})
+        return {"n": 1, "value": f"R2 combination {'honoured' if ok else 'not honoured'} (interfaceAll read "
+                                 f"{a.get('read')}, interfaceMinimap read {m.get('read')}, {off} of "
+                                 f"{len(others)} other interface* fields read false); legacy "
+                                 f"interfaceAll=false + interfaceMinimap=true read {la.get('read')}/"
+                                 f"{lm.get('read')}, known to hide the minimap",
+                "evidence": f"probe.json interface, interface.legacy; {shot}; legacy "
+                            f"{_shot(legacy.get('screenshot'))}; {mentions}"}
+    return {"n": 1, "value": f"R1 probe: only the legacy combination interfaceAll=false + "
+                             f"interfaceMinimap=true was sent, read back {'honoured' if ok else 'not honoured'} "
+                             f"(interfaceAll read {a.get('read')}, interfaceMinimap read {m.get('read')}), "
+                             f"but it hides the minimap (Jasper's run, 2026-10-22); the R2 combination "
+                             f"was not probed",
+            "evidence": f"probe.json interface (no interface.legacy: R1 shape); {shot}; {mentions}"}
+
+
+def fact_camera(cam: dict, fit: dict | None, topdown, spec) -> dict:
+    """Fact 4: the visual fit (probe.json camera_fit) when present, the API
+    read-back (camera.steps) beside it."""
+    top = cam.get("max_honoured_y")
+    far = next((s.get("read_farClip") for s in cam.get("steps", []) if s.get("sent_y") == top), None)
+    rec_cam = ((topdown or {}).get("recording") or {}).get("camera", {}) if topdown else {}
+    mode = rec_cam.get("mode")
+    ran = (f"top-down ran with camera mode {mode or 'not recorded'}"
+           + (f" at y {rec_cam['height']:g}" if rec_cam.get("height") else "")) if topdown \
+        else "top-down not reached"
+    readback = f"API read-back honoured up to {top}; farClip read {far}"
+    mentions = f"openapi.json mentions farClip: {_spec_mentions(spec, 'farClip')}"
+    if fit:
+        tried = ", ".join(f"{s['y']:g} {'fits' if (s.get('fit') or {}).get('fits') else 'no fit'}"
+                          + ("" if s.get("fit") else " (no screenshot)") for s in fit.get("steps", []))
+        chosen = fit.get("chosen_y")
+        return {"n": 4, "value": f"visual fit: camera y {chosen:g} at fov {fit.get('fov')} for screen "
+                                 f"{fit.get('screen')} ({fit.get('chosen_by')}; default {fit.get('default_y')}; "
+                                 f"tried {tried or 'nothing'}); {readback}; {ran}",
+                "evidence": f"probe.json camera_fit.steps; probe_camera_fit_{chosen:.0f}.png; "
+                            f"probe.json camera.steps; {mentions}"}
+    shot = f"probe_camera_{top}.png" if top else "no honoured height"
+    return {"n": 4, "value": f"{readback} (read-back only: no camera_fit in probe.json, so whether "
+                             f"the whole map is in view is read from the screenshots); {ran}",
+            "evidence": f"probe.json camera.steps; {shot}; {mentions}"}
+
+
 FACT_TITLES = {
-    1: "Minimap-only mode honoured (`interfaceAll=false` + `interfaceMinimap=true`)",
+    1: ("Minimap-only mode honoured (R2: `interfaceAll=true` + `interfaceMinimap=true`, every other "
+        "`interface*` false; R1's `interfaceAll=false` + `interfaceMinimap=true` recorded as legacy)"),
     2: "Highest honoured replay speed",
     3: "Accelerated recording (real time or faster; lossless?)",
-    4: "Camera height and whole-map view (API camera vs Ctrl+Shift+Y, `farClip`)",
+    4: "Camera height and whole-map view (visual fit `camera_fit`, API camera vs Ctrl+Shift+Y, `farClip`)",
     5: "Vanguard or capture black frames",
     6: "Enemy wards on the minimap with fog off",
 }
@@ -439,8 +482,21 @@ def recall_numbers(recalls: list[dict], timeline: dict, pmap: dict[int, str]) ->
 
 # ---------------------------------------------------------------- 4. hand check
 
-YES = {"yes", "y", "ja", "j", "true", "1", "x"}
-NO = {"no", "n", "nein", "false", "0"}
+YES = {"yes", "y", "ja", "j", "true", "1", "x", "agree", "agreed", "correct", "right", "ok"}
+NO = {"no", "n", "nein", "false", "0", "disagree", "disagreed", "wrong", "incorrect"}
+
+
+def hand_mark(said: str) -> str:
+    """jasper_says -> "yes" / "no" / "unclear" / "" (empty). Jasper wrote
+    "agreed", "disagree" and "exact detection" on his run."""
+    s = (said or "").strip().lower().rstrip(".!")
+    if not s:
+        return ""
+    if s in YES or s.startswith("exact"):
+        return "yes"
+    if s in NO:
+        return "no"
+    return "unclear"
 
 
 def merge_handcheck(run_dir: Path, out: Path) -> dict:
@@ -449,16 +505,17 @@ def merge_handcheck(run_dir: Path, out: Path) -> dict:
         return {"marked": False, "reason": "not marked: handcheck.csv missing"}
     with open(p, newline="", encoding="utf-8-sig") as fh:
         rows = list(csv.DictReader(fh))
-    merged, per = [], {}
+    merged, per, unclear = [], {}, 0
     for r in rows:
-        said = (r.get("jasper_says") or "").strip().lower()
-        mark = "yes" if said in YES else "no" if said in NO else ""
+        mark = hand_mark(r.get("jasper_says"))
+        if mark == "unclear":
+            unclear += 1
         merged.append({"event_id": r.get("event_id", ""), "kind": r.get("kind", ""),
                        "game_time_mmss": r.get("game_time_mmss", ""), "champion": r.get("champion", ""),
                        "auto_says": r.get("auto_says", ""), "jasper_says": r.get("jasper_says", ""),
-                       "agree": "" if not mark else ("yes" if mark == "yes" else "no"),
+                       "agree": mark,
                        "note": r.get("note", "")})
-        if mark:
+        if mark in ("yes", "no"):
             k = per.setdefault(r.get("kind", ""), {"rows": 0, "agree": 0})
             k["rows"] += 1
             k["agree"] += mark == "yes"
@@ -471,17 +528,18 @@ def merge_handcheck(run_dir: Path, out: Path) -> dict:
     marked = sum(k["rows"] for k in per.values())
     if not marked:
         return {"marked": False, "reason": "not marked: no row has jasper_says yes or no",
-                "rows": len(rows)}
+                "rows": len(rows), "unclear": unclear}
     agree = sum(k["agree"] for k in per.values())
     return {"marked": True, "rows": len(rows), "marked_rows": marked, "agree": agree,
-            "per_kind": {k: per[k] for k in sorted(per)}}
+            "unclear": unclear, "per_kind": {k: per[k] for k in sorted(per)}}
 
 
 def handcheck_line(hc: dict) -> str:
     if not hc.get("marked"):
         return hc["reason"]
     kinds = ", ".join(f"{k} {v['agree']}/{v['rows']}" for k, v in hc["per_kind"].items())
-    return f"agreement {hc['agree']}/{hc['marked_rows']} marked rows of {hc['rows']} ({kinds}); " \
+    unclear = f"; {hc['unclear']} unclear" if hc.get("unclear") else ""
+    return f"agreement {hc['agree']}/{hc['marked_rows']} marked rows of {hc['rows']} ({kinds}{unclear}); " \
            f"`handcheck_merged.csv`"
 
 

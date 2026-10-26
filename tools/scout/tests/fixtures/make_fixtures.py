@@ -18,7 +18,9 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))
+from scout import camera  # noqa: E402
 from scout.calibrate import TURRETS, bounds_map  # noqa: E402
+from scout.render import LEGACY_NOTE, minimap_only_render  # noqa: E402
 
 CHAMPIONS = ["Aatrox", "LeeSin", "Ahri", "Jinx", "Thresh",
              "Garen", "Vi", "Lux", "Caitlyn", "Leona"]
@@ -410,9 +412,14 @@ def synth_probe() -> dict:
         "spec": {"answered": "/swagger/v3/openapi.json", "tried": {"/swagger/v3/openapi.json": 200},
                  "paths": ["/replay/game", "/replay/playback", "/replay/recording", "/replay/render"]},
         "game": {"processID": 4242},
-        "interface": {"interfaceAll": {"sent": False, "read": False, "honoured": True},
-                      "interfaceMinimap": {"sent": True, "read": True, "honoured": True},
-                      "screenshot": shot("probe_minimap_only.png", 41.3)},
+        "interface": {**{k: {"sent": v, "read": v, "honoured": True}
+                         for k, v in minimap_only_render().items()},
+                      "screenshot": shot("probe_minimap_only.png", 41.3),
+                      "combo": "interfaceAll=true, interfaceMinimap=true, every other interface* false",
+                      "legacy": {"interfaceAll": {"sent": False, "read": False, "honoured": True},
+                                 "interfaceMinimap": {"sent": True, "read": True, "honoured": True},
+                                 "screenshot": shot("probe_minimap_legacy.png", 4.2),
+                                 "note": LEGACY_NOTE}},
         "speed": {"steps": [{"sent": s, "read": float(min(s, 8)),
                              "game_s_per_wall_s": round(min(s, 8) * 0.98, 2)}
                             for s in [1, 2, 4, 8, 10, 16]],
@@ -433,7 +440,14 @@ def synth_probe() -> dict:
                               "screenshot": shot(f"probe_camera_{h}.png", 30.0 + i)}
                              for i, h in enumerate(heights)],
                    "max_honoured_y": cam_cap,
-                   "note": "whether the whole map is in view is read from the screenshots"},
+                   "note": "API read-back only; whether the whole map is in view: camera_fit"},
+        "camera_fit": {"screen": [2560, 1440], "screen_from": "monitor", "fov": 19.0,
+                       "default_y": 50000.0, "rule": camera.RULE,
+                       "steps": [{"y": y, "read_y": y, "fit": {"fits": y >= 50000.0},
+                                  "screenshot": shot(f"probe_camera_fit_{y:.0f}.png", 20.0 + k)}
+                                 for k, y in enumerate((42500.0, 50000.0, 57500.0))],
+                       "chosen_y": 50000.0,
+                       "chosen_by": "visual: lowest height whose frame holds the whole map"},
         "health_bars": {b: {"off": {"sent": False, "read": False, "honoured": True},
                             "on": {"sent": True, "read": True, "honoured": True}, "honoured": True}
                         for b in ["healthBarChampions", "healthBarStructures", "healthBarWards",
@@ -546,7 +560,8 @@ def make_run_synth(dest: Path = RUN_SYNTH) -> Path:
     (dest / "frames_topdown").mkdir()
     png = [cv2.IMWRITE_PNG_COMPRESSION, 9]
     probe = synth_probe()
-    for s in [probe["interface"]["screenshot"]] + [c["screenshot"] for c in probe["camera"]["steps"]]:
+    for s in [probe["interface"]["screenshot"], probe["interface"]["legacy"]["screenshot"]] + \
+            [c["screenshot"] for c in probe["camera"]["steps"] + probe["camera_fit"]["steps"]]:
         img = np.full((36, 64, 3), int(s["mean_brightness"]), np.uint8)
         cv2.imwrite(str(dest / s["file"]), img, png)
     icons = [make_icon(i) for i in range(10)]
