@@ -65,7 +65,13 @@ for `vectorise`; `[test]` adds `pytest`.
 
 `navgrid/ngrid.py` documents the layout. Flag meanings disagree between
 sources; `ngrid.FLAG_TABLE` carries the plan's, MapgeoAddon's and the
-NGRID converter's reading of every bit, and the real file decides in R2.
+NGRID converter's reading of every bit. R2 checked them on the 16.21 real
+file (numbers only) and records the result in each row's `settled` field:
+0x01 brush, 0x02 not passable (structures included), 0x04 structure
+footprint, 0x40 see-through (a transparent wall is 0x02 | 0x40 without 0x04;
+base gates carry 0x40 without 0x02 and are walkable), 0x0400 / 0x0800 the
+team-only gates. 0x80 and 0x1000 stay open. Walkable means none of
+`ngrid.BLOCKING` (0x02 | 0x04).
 Axis convention: grid x is Match-V5 `position.x`, grid z is `position.y`.
 
 ## Tests

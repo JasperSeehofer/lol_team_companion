@@ -111,3 +111,15 @@ def test_marching_squares_square_and_hole():
     assert len(rings) == 2
     for r in rings:
         assert (r[0] == r[-1]).all()
+
+
+def test_base_gates_are_walkable_not_walls(synth_bytes):
+    """16.21 encodes base gates as 0x0400/0x0800 | 0x40 without 0x02 (M166 R2):
+    0x40 alone must not make a cell a wall (R1's 0x46 rule did)."""
+    g = ngrid.parse(synth_bytes)
+    r = vectorise.rasters(g)
+    gate = (g.flags & (ngrid.BLUE_ONLY | ngrid.RED_ONLY)) != 0
+    assert gate.sum() > 0 and (g.flags[gate] & ngrid.TRANSPARENT_WALL).all()
+    assert r["walkable"][gate].all() and not r["wall"][gate].any()
+    # the settled rule equals "not 0x02" when every 0x04 cell also has 0x02
+    assert np.array_equal(r["walkable"], (g.flags & ngrid.WALL) == 0)

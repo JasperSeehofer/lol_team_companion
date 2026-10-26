@@ -8,14 +8,15 @@ structure blobs and a swapped or shifted axis fails validation:
 
 - a 2-cell border wall and two terrain blocks with no mirror image;
 - a brush patch (bit 0x01) of 16 x 10 cells;
-- a diagonal transparent wall (bit 0x40);
+- a diagonal transparent wall (bits 0x02 | 0x40, as on the 16.21 real file);
 - a river band along x + z = 14700 (river bit 16, river main regions);
 - two lanes in the main-region layer (top: west and north edges, bot: south
   and east edges); the nearest-lane layer is the nearest structure's lane;
 - one camp (POI CampRedBuff) and one pit (POI DragonPit);
-- structure blobs (bits 0x02 | 0x04, 3 x 3 cells) at every turret and
-  inhibitor of the Bayes table, each with a walkable moat;
-- base gates (0x0400 / 0x0800) near each fountain, fountains walkable.
+- structure blobs (bits 0x02 | 0x04 | 0x40, 3 x 3 cells, the 16.21 encoding) at
+  every turret and inhibitor of the Bayes table, each with a walkable moat;
+- base gates (0x0400 / 0x0800 with 0x40, half of them also 0x1000; never 0x02)
+  near each fountain: walkable, fountains walkable.
 """
 
 from __future__ import annotations
@@ -61,7 +62,7 @@ def make(hint_nodes: int = HINT_NODES) -> ngrid.NavGrid:
     (ax, az), (bx, bz) = DIAGONAL
     for t in np.linspace(0.0, 1.0, 200):
         cx, cz = _cell(ax + t * (bx - ax), az + t * (bz - az))
-        flags[cz, cx] = ngrid.TRANSPARENT_WALL
+        flags[cz, cx] = ngrid.WALL | ngrid.TRANSPARENT_WALL
     x0, x1, z0, z1 = BRUSH_RECT
     flags[(X >= x0) & (X < x1) & (Z >= z0) & (Z < z1)] = ngrid.BRUSH
 
@@ -69,18 +70,22 @@ def make(hint_nodes: int = HINT_NODES) -> ngrid.NavGrid:
     for x, z in structures.all_structures().values():
         cx, cz = _cell(x, z)
         sl = (slice(max(cz - MOAT, 0), cz + MOAT + 1), slice(max(cx - MOAT, 0), cx + MOAT + 1))
-        flags[sl] &= ~np.uint16(ngrid.BLOCKING)
+        flags[sl] &= ~np.uint16(ngrid.BLOCKING_R1)
     for x, z in structures.all_structures().values():
         cx, cz = _cell(x, z)
         flags[cz - BLOB_HALF:cz + BLOB_HALF + 1, cx - BLOB_HALF:cx + BLOB_HALF + 1] = (
-            ngrid.WALL | ngrid.STRUCTURE_WALL)
+            ngrid.WALL | ngrid.STRUCTURE_WALL | ngrid.TRANSPARENT_WALL)
 
     # gates and fountains
-    flags[(X >= 1900) & (X < 2000) & (Z >= 300) & (Z < 900)] |= ngrid.BLUE_ONLY
-    flags[(X >= 12750) & (X < 12850) & (Z >= 13800) & (Z < 14400)] |= ngrid.RED_ONLY
+    blue_gate = (X >= 1900) & (X < 2000) & (Z >= 300) & (Z < 900)
+    red_gate = (X >= 12750) & (X < 12850) & (Z >= 13800) & (Z < 14400)
+    flags[blue_gate] = ngrid.BLUE_ONLY | ngrid.TRANSPARENT_WALL
+    flags[red_gate] = ngrid.RED_ONLY | ngrid.TRANSPARENT_WALL
+    flags[(blue_gate | red_gate) & (Z < 600)] |= ngrid.NEUTRAL_VIS
+    flags[(blue_gate | red_gate) & (Z > 14100)] |= ngrid.NEUTRAL_VIS
     for x, z in structures.FOUNTAINS.values():
         cx, cz = _cell(x, z)
-        flags[cz - 3:cz + 4, cx - 3:cx + 4] &= ~np.uint16(ngrid.BLOCKING)
+        flags[cz - 3:cz + 4, cx - 3:cx + 4] &= ~np.uint16(ngrid.BLOCKING_R1)
 
     # region layers
     s = X + Z
@@ -131,6 +136,7 @@ def make(hint_nodes: int = HINT_NODES) -> ngrid.NavGrid:
     srx[flags & ngrid.WALL != 0] = 1
     srx[flags & ngrid.TRANSPARENT_WALL != 0] = 2
     srx[flags & ngrid.BRUSH != 0] = 3
+    srx[flags & ngrid.STRUCTURE_WALL != 0] = 0   # 16.21: structures are Walkable in SRX
     srx[flags & ngrid.BLUE_ONLY != 0] = 7
     srx[flags & ngrid.RED_ONLY != 0] = 8
 

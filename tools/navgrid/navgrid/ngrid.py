@@ -64,30 +64,51 @@ assert CELL_DTYPE.itemsize == 48
 
 REGION_LAYERS = ("river", "jungle_quadrant", "main_region", "nearest_lane", "poi", "ring", "srx")
 
-# --- flag table: both readings per bit, with sources ------------------------
+# --- flag table: every reading per bit, with sources ------------------------
 # plan = the Rift Board plan (team-companion-next-advance); mapgeo = MapgeoAddon
 # navgrid.py docstring; converter = NavGridCell.cs VisionPathingFlags.
+# "settled" records what the 16.21 real file showed in M166 R2 (numbers only:
+# 87,320 cells, the 28 Bayes structures, one Match-V5 timeline); None = open.
 FLAG_TABLE: tuple[dict, ...] = (
-    {"bit": 0x0001, "plan": "brush", "mapgeo": "HAS_GRASS (brush)", "converter": "Brush"},
-    {"bit": 0x0002, "plan": "wall", "mapgeo": "NOT_PASSABLE (wall / out of bounds)", "converter": "Wall"},
-    {"bit": 0x0004, "plan": "structure wall", "mapgeo": "BUSY", "converter": "StructureWall"},
-    {"bit": 0x0008, "plan": None, "mapgeo": "TARGETTED", "converter": "Unobserved8"},
-    {"bit": 0x0010, "plan": None, "mapgeo": "MARKED", "converter": "Unobserved16"},
-    {"bit": 0x0020, "plan": None, "mapgeo": "PATHED_ON", "converter": "Unobserved32"},
+    {"bit": 0x0001, "plan": "brush", "mapgeo": "HAS_GRASS (brush)", "converter": "Brush",
+     "settled": "brush (all readings agree): 40 clusters of 20-124 cells, 0/28 structures within 3 cells, "
+                "SRX layer Brush/BrushWall on 2,129/2,129 cells; settled on 16.21 real file, R2"},
+    {"bit": 0x0002, "plan": "wall", "mapgeo": "NOT_PASSABLE (wall / out of bounds)", "converter": "Wall",
+     "settled": "not passable, including structures (all readings agree): 96/96 in-game event positions "
+                "on cells without it, 337/340 per-minute player positions within 1 cell; settled on 16.21 "
+                "real file, R2"},
+    {"bit": 0x0004, "plan": "structure wall", "mapgeo": "BUSY", "converter": "StructureWall",
+     "settled": "structure footprint (plan/converter): always with 0x02|0x40; 32 clusters = 28/28 "
+                "turrets+inhibitors (centroid within 15 units) + 2 nexus + 2 fountain; SRX says Walkable "
+                "under it; settled on 16.21 real file, R2"},
+    {"bit": 0x0008, "plan": None, "mapgeo": "TARGETTED", "converter": "Unobserved8", "settled": None},
+    {"bit": 0x0010, "plan": None, "mapgeo": "MARKED", "converter": "Unobserved16", "settled": None},
+    {"bit": 0x0020, "plan": None, "mapgeo": "PATHED_ON", "converter": "Unobserved32", "settled": None},
     {"bit": 0x0040, "plan": "transparent wall", "mapgeo": "SEE_THROUGH",
-     "converter": "TransparentWall (see-through, not walkable)"},
+     "converter": "TransparentWall (see-through, not walkable)",
+     "settled": "see-through (MapgeoAddon): never blocks walking on its own; a transparent wall is "
+                "0x02|0x40 without 0x04 (= SRX TransparentWall on 1,683/1,683 cells), it also marks every "
+                "structure cell and every gate cell; settled on 16.21 real file, R2"},
     {"bit": 0x0080, "plan": None, "mapgeo": "vision-related (many walkable jungle cells)",
-     "converter": "Unknown128 (sporadic noise)"},
-    {"bit": 0x0100, "plan": "always visible", "mapgeo": None, "converter": "AlwaysVisible (not on SR)"},
-    {"bit": 0x0200, "plan": None, "mapgeo": None, "converter": "Unknown512 (first Nexus Blitz only)"},
-    {"bit": 0x0400, "plan": "gate (blue)", "mapgeo": None, "converter": "BlueTeamOnly (base gate)"},
-    {"bit": 0x0800, "plan": "gate (red)", "mapgeo": None, "converter": "RedTeamOnly (base gate)"},
-    {"bit": 0x1000, "plan": "gate vision", "mapgeo": None, "converter": "NeutralZoneVisibility"},
+     "converter": "Unknown128 (sporadic noise)",
+     "settled": None},  # R2: spatially coherent (not noise), 80 % of river cells; meaning open
+    {"bit": 0x0100, "plan": "always visible", "mapgeo": None, "converter": "AlwaysVisible (not on SR)",
+     "settled": None},  # R2: 0 cells on 16.21
+    {"bit": 0x0200, "plan": None, "mapgeo": None, "converter": "Unknown512 (first Nexus Blitz only)",
+     "settled": None},
+    {"bit": 0x0400, "plan": "gate (blue)", "mapgeo": None, "converter": "BlueTeamOnly (base gate)",
+     "settled": "blue-only gate (plan/converter): 2 clusters on the blue side, always with 0x40, never "
+                "0x02; settled on 16.21 real file, R2"},
+    {"bit": 0x0800, "plan": "gate (red)", "mapgeo": None, "converter": "RedTeamOnly (base gate)",
+     "settled": "red-only gate (plan/converter), the mirror of 0x0400; settled on 16.21 real file, R2"},
+    {"bit": 0x1000, "plan": "gate vision", "mapgeo": None, "converter": "NeutralZoneVisibility",
+     "settled": None},  # R2: only on gate cells (4 clusters); meaning not tested
 )
 FLAG_SOURCES = {
     "plan": "Rift Board plan (brush 1, wall 2, structure wall 4, transparent wall 64, always-visible 256, gates)",
     "mapgeo": "TheKillerey/MapgeoAddon navgrid.py @ 8d2f8bd9",
     "converter": "FrankTheBoxMonster/LoL-NGRID-converter NavGridCell.cs @ 92943ed2",
+    "settled": "M166 R2 on the 16.21 real file (numbers only; the file stays off every repo)",
 }
 BRUSH = 0x0001
 WALL = 0x0002
@@ -97,9 +118,13 @@ ALWAYS_VISIBLE = 0x0100
 BLUE_ONLY = 0x0400
 RED_ONLY = 0x0800
 NEUTRAL_VIS = 0x1000
-# Blocking for walkability and clusters: the bits both readings call walls,
-# plus the plan's/converter's structure and transparent walls (B4 "wall").
-BLOCKING = WALL | STRUCTURE_WALL | TRANSPARENT_WALL
+# Blocking for walkability and clusters. Settled on 16.21 real file, R2: wall
+# (0x02) and structure (0x04) block; 0x40 alone does not (the base-gate cells
+# carry 0x40 without 0x02). On 16.21 every 0x04 cell also has 0x02, so this
+# equals MapgeoAddon's "not 0x02". R1 used 0x46, which made the 136 gate
+# cells walls; both rules put 96/96 in-game event positions on walkable cells.
+BLOCKING = WALL | STRUCTURE_WALL
+BLOCKING_R1 = WALL | STRUCTURE_WALL | TRANSPARENT_WALL
 
 # --- region enums (converter names; values are nibbles or bits) --------------
 RIVER_BITS = {1: "JungleQuadrant", 2: "BaronPit", 4: "Unobserved4", 8: "Unobserved8",
@@ -334,6 +359,6 @@ def flag_histogram(flags: np.ndarray) -> dict[str, int]:
     hist = {f"0x{1 << b:04x}": int(((f >> b) & 1).sum()) for b in range(16)}
     hist = {k: v for k, v in hist.items() if v}
     hist["no_bits"] = int((f == 0).sum())
-    hist["blocking_0x0046"] = int(((f & BLOCKING) != 0).sum())
+    hist[f"blocking_0x{BLOCKING:04x}"] = int(((f & BLOCKING) != 0).sum())
     hist["cells"] = int(f.size)
     return hist

@@ -97,7 +97,12 @@ def test_flag_table_carries_both_readings():
     assert bits[0x04]["plan"] == "structure wall" and bits[0x04]["mapgeo"] == "BUSY"
     assert bits[0x04]["converter"] == "StructureWall"
     assert bits[0x40]["plan"] == "transparent wall" and bits[0x40]["mapgeo"] == "SEE_THROUGH"
-    assert set(ngrid.FLAG_SOURCES) == {"plan", "mapgeo", "converter"}
+    assert set(ngrid.FLAG_SOURCES) == {"plan", "mapgeo", "converter", "settled"}
+    # R2 settled some bits on the real file; the other readings stay listed
+    for bit in (0x01, 0x02, 0x04, 0x40):
+        assert "settled on 16.21 real file, R2" in bits[bit]["settled"]
+    assert bits[0x80]["settled"] is None
+    assert ngrid.BLOCKING == 0x06 and ngrid.BLOCKING_R1 == 0x46
 
 
 def test_histogram(synth_bytes):
