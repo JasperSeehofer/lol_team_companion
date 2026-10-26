@@ -26,7 +26,6 @@ pub const STORED: &[(&str, &[&str])] = &[
             "Whether you are an admin (and whether that was set with the promote command), when the account was created, and when you were last here and the time before (to the hour), so Match Day can tell when you come back after a break.",
             "Your settings: whether you get survey questions, whether guidance (the welcome, checklist, hints and nudges) is on, and whether teammates may share your player card by link.",
             "Guidance you have seen or turned off: which item (for example \u{201c}hint.draft_keys\u{201d}) and when, so it is not shown again.",
-            "When you were placed in the starting five automatically by your invite link (shown to your leader and coaches until they confirm it).",
         ],
     ),
     (
@@ -41,6 +40,7 @@ pub const STORED: &[(&str, &[&str])] = &[
         "Your team",
         &[
             "The team's name and region, its members with their place on the roster (starting five, substitute, coach) and position, and join requests with their status.",
+            "When your invite link placed you in the starting five automatically (shown to your leader and coaches until they keep or undo it).",
             "What the team writes: drafts with picks and bans, series of drafts (best-of sets), draft trees, ban priority lists, game plans with checklists and checklist templates, reviews, action items (text, owner, due day), Sand Table boards with their saved versions, team notes (with the text before the last edit, and deleted notes for one day, so they can be restored), notes on champion pairs, and the next match (time, opponent, notes, who marked the brief read).",
             "Opponent dossiers: player names, Riot IDs and Riot account ids, champions seen, mastery and role data read from Riot, and your notes.",
             "Share links: a random token, what it opens, who made it, when it expires, and whether it was revoked.",

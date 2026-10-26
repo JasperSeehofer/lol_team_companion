@@ -125,19 +125,22 @@ pub async fn register_action(
     };
 
     // A team-bound invite: the account joins that team, a member not placed
-    // yet. The account exists either way; if joining fails (the team was
+    // yet, or the starter at the invite's position when that slot is open
+    // (M160; the leader and coaches see it on the team page). The page
+    // hard-navigates to Home at once, so the joiner gets no message here.
+    // The account exists either way; if joining fails (the team was
     // deleted a moment ago), the welcome offers to create or join a team.
-    let join_message = if grant.team_id.is_some() {
+    if grant.team_id.is_some() {
         match db::join_team_from_invite(&db, &user_id, &grant).await {
-            Ok(role) => role.map(|r| format!("You joined {} as {} starter.", grant.team_name.as_deref().unwrap_or("the team"), Role::parse(&r).unwrap_or(Role::Top))),
+            Ok(Some(role)) => {
+                tracing::info!(user = %user_id, %role, "placed in an open starter slot by the invite");
+            }
+            Ok(None) => {}
             Err(e) => {
                 tracing::warn!(user = %user_id, error = %e, "could not join the invite's team");
-                None
             }
         }
-    } else {
-        None
-    };
+    }
 
     // Auto-login after registration (leptos rule 51), without a second
     // Argon2 verification.
@@ -158,7 +161,7 @@ pub async fn register_action(
     // New users land on Home (no team yet: create or join one). Redirect on
     // the server too, so a form submitted before hydration still lands there.
     leptos_axum::redirect("/");
-    Ok(join_message.unwrap_or_default())
+    Ok("/".to_string())
 }
 
 /// What the register page says about an invite link: the team a usable
@@ -188,20 +191,26 @@ pub async fn preview_invite(invite_code: String) -> Result<InvitePreview, Server
 }
 
 /// A signed-in account without a team uses a team invite: it joins that
-/// team (a member not placed yet). Refused without using the code when the
-/// account is already in a team. Returns where to go next and whether the member was auto-placed.
+/// team (a member not placed yet, or the open starter slot at the code's
+/// position). Refused without using the code when the
+/// account is already in a team. Returns where to go next.
 #[server]
-pub async fn join_with_team_invite(invite_code: String) -> Result<(String, Option<String>), ServerFnError> {
+pub async fn join_with_team_invite(invite_code: String) -> Result<String, ServerFnError> {
     use crate::server::rate_limit::Bucket;
     use crate::server::{authz, db};
 
     let ctx = authz::authed().await?;
     authz::rate_limit_user(Bucket::TeamInvite, &ctx.user)?;
-    let (team, auto_placed_role) = db::redeem_team_invite(&ctx.db, &ctx.user.id, &invite_code)
+    let joined = db::redeem_team_invite(&ctx.db, &ctx.user.id, &invite_code)
         .await
         .map_err(authz::server_err)?;
-    tracing::info!(user = %ctx.user.id, team = %team, ?auto_placed_role, "joined a team with an invite");
-    Ok(("/".to_string(), auto_placed_role))
+    tracing::info!(
+        user = %ctx.user.id,
+        team = %joined.team_id,
+        auto_placed = ?joined.auto_placed,
+        "joined a team with an invite"
+    );
+    Ok("/".to_string())
 }
 
 #[component]
@@ -245,17 +254,17 @@ pub fn RegisterPage() -> impl IntoView {
         }
     });
 
-    let toast = use_context::<ToastContext>().expect("ToastProvider");
     let join = Callback::new(move |_| {
         joining.set(true);
         join_error.set(None);
         let code = invite.get_untracked();
         leptos::task::spawn_local(async move {
             match join_with_team_invite(code).await {
-                Ok((dest, _)) => {
+                Ok(_dest) =>
+                {
                     #[cfg(feature = "hydrate")]
                     if let Some(window) = web_sys::window() {
-                        let _ = window.location().set_href(&dest);
+                        let _ = window.location().set_href(&_dest);
                     }
                 }
                 Err(e) => {

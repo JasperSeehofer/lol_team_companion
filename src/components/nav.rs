@@ -325,6 +325,16 @@ pub const ADMIN_LINKS: &[(&str, &str)] = &[
     ("Password resets", "/admin/resets"),
 ];
 
+/// The nav notice for members an invite link placed in the starting five
+/// (M160), shown to the leader and coaches.
+pub fn auto_placed_line(n: usize) -> String {
+    if n == 1 {
+        "1 player joined and was placed as a starter \u{2014} check the team page".to_string()
+    } else {
+        format!("{n} players joined and were placed as starters \u{2014} check the team page")
+    }
+}
+
 /// "Your reports" with the number of reports that changed since last seen.
 pub fn reports_label(updates: usize) -> String {
     if updates == 0 {
@@ -341,6 +351,10 @@ pub struct Notifications {
     /// The user's bug reports whose status changed since they last looked.
     #[serde(default)]
     pub report_updates: usize,
+    /// M160: members an invite link placed in an open starter slot that the
+    /// leader or a coach has not kept or undone yet (0 for everyone else).
+    #[serde(default)]
+    pub auto_placed: usize,
 }
 
 #[server]
@@ -366,11 +380,24 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
     else {
         return Ok(base);
     };
-    if !db::is_team_leader(&db, &user.id, &team_id)
+    if !db::is_team_leader_or_coach(&db, &user.id, &team_id)
         .await
         .map_err(authz::server_err)?
     {
         return Ok(base);
+    }
+    let auto_placed = db::list_auto_placed(&db, &team_id)
+        .await
+        .map(|v| v.len())
+        .unwrap_or(0);
+    if !db::is_team_leader(&db, &user.id, &team_id)
+        .await
+        .map_err(authz::server_err)?
+    {
+        return Ok(Notifications {
+            auto_placed,
+            ..base
+        });
     }
     let pending = db::list_pending_join_requests(&db, &team_id)
         .await
@@ -379,6 +406,7 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
         pending_requests: pending,
         is_leader: true,
         report_updates,
+        auto_placed,
     })
 }
 
@@ -772,41 +800,20 @@ pub fn Nav() -> impl IntoView {
 
                     <div class="flex-1" />
 
-                    // Auto-placed members waiting for confirmation from the leader or coach.
-                    <Suspense fallback=|| ()>
-                        {move || {
-                            let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
-                            let count = notifs.auto_placed_count;
-                            if count == 0 {
-                                return ().into_any();
-                            }
-                            view! {
-                                <a
-                                    href="/team/dashboard"
-                                    class="inline-flex h-8 items-center gap-2 rounded-ctl px-2 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary"
-                                    aria-label=format!("Auto-placed members: {count} waiting")
-                                >
-                                    <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                    </svg>
-                                    <span class="figures inline-grid h-5 min-w-5 place-items-center rounded-ctl border border-outline px-1 text-caption font-semibold text-primary">
-                                        {count}
-                                    </span>
-                                </a>
-                            }
-                        }}
-                    </Suspense>
-
                     <div class="flex items-center gap-3">
-                        // Join requests waiting for the team leader.
+                        // Join requests waiting for the team leader, and (M160)
+                        // members an invite link placed as starters, for the
+                        // leader and coaches to keep or undo.
                         <Suspense fallback=|| ()>
                             {move || {
                                 let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
-                                let count = notifs.pending_requests.len();
+                                let auto_placed = notifs.auto_placed;
+                                let count = notifs.pending_requests.len() + auto_placed;
                                 if count == 0 {
                                     return ().into_any();
                                 }
                                 let reqs = notifs.pending_requests;
+                                let has_reqs = !reqs.is_empty();
                                 view! {
                                     <div class="relative">
                                         <button
@@ -814,7 +821,7 @@ pub fn Nav() -> impl IntoView {
                                             on:click=move |_| notif_open.update(|v| *v = !*v)
                                             class="relative inline-flex h-8 items-center gap-2 rounded-ctl px-2 text-label text-secondary transition-colors hover:bg-ink-3 hover:text-primary cursor-pointer"
                                             aria-expanded=move || notif_open.get().to_string()
-                                            aria-label=format!("Join requests: {count} waiting")
+                                            aria-label=if auto_placed == 0 { format!("Join requests: {count} waiting") } else { format!("Team notices: {count} waiting") }
                                         >
                                             <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -828,7 +835,18 @@ pub fn Nav() -> impl IntoView {
                                             class="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-ctl border border-outline bg-ink-2 shadow-overlay z-(--z-popover)"
                                             style:display=move || if notif_open.get() { "block" } else { "none" }
                                         >
-                                            <p class="border-b border-rule px-4 py-3 eyebrow">"Join requests"</p>
+                                            {(auto_placed > 0).then(|| view! {
+                                                <A
+                                                    href="/team/dashboard"
+                                                    attr:class="block border-b border-rule px-4 py-3 text-body text-primary transition-colors hover:bg-ink-3"
+                                                    on:click=move |_| notif_open.set(false)
+                                                >
+                                                    {auto_placed_line(auto_placed)}
+                                                </A>
+                                            })}
+                                            {has_reqs.then(|| view! {
+                                                <p class="border-b border-rule px-4 py-3 eyebrow">"Join requests"</p>
+                                            })}
                                             <div class="max-h-64 overflow-y-auto">
                                                 {reqs.into_iter().map(|req| {
                                                     let req_id_accept = req.id.clone();
@@ -873,23 +891,6 @@ pub fn Nav() -> impl IntoView {
                                             >
                                                 "Open the team page"
                                             </A>
-                                            {move || {
-                                                let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
-                                                let count = notifs.auto_placed;
-                                                if count == 0 {
-                                                    ().into_any()
-                                                } else {
-                                                    view! {
-                                                        <A
-                                                            href="/team/dashboard"
-                                                            attr:class="block px-4 py-2.5 text-center text-label text-muted transition-colors hover:text-primary border-t border-rule"
-                                                            on:click=move |_| notif_open.set(false)
-                                                        >
-                                                            {format!("{count} joined and were placed — check the roster")}
-                                                        </A>
-                                                    }.into_any()
-                                                }
-                                            }}
                                         </div>
                                     </div>
                                 }.into_any()

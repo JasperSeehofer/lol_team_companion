@@ -63,12 +63,13 @@ DEFINE FIELD IF NOT EXISTS team ON team_member TYPE record<team>;
 DEFINE FIELD IF NOT EXISTS user ON team_member TYPE record<user>;
 DEFINE FIELD IF NOT EXISTS role ON team_member TYPE string;
 DEFINE FIELD IF NOT EXISTS roster_type ON team_member TYPE string DEFAULT 'sub';
+-- M160: set when the invite link placed the member in an open starter slot
+-- automatically; cleared when the leader or a coach keeps or undoes it.
 DEFINE FIELD IF NOT EXISTS auto_placed_at ON team_member TYPE option<datetime>;
 -- M5: migration 8 (roster_places) mapped the old values and tightened both
 -- fields: roster_type is the member's place (starter, substitute, coach,
 -- member = not placed yet), role the position they play (top, jungle, mid,
 -- bot, support, unassigned).
--- auto_placed_at: when the member was placed in the starting five automatically by their invite link.
 
 -- Join requests
 DEFINE TABLE IF NOT EXISTS join_request SCHEMAFULL;

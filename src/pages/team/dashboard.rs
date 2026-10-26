@@ -7,11 +7,11 @@ use crate::components::clipboard::{self, CopyState};
 use crate::components::local_time::{LocalTime, TimeStyle};
 use crate::components::ui::{ctrl_enter_submits, enter_submits, Keycap};
 use crate::components::ui::{
-    AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone,
-    Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, InputKind, LoadFailed, Menu,
-    MenuAlign, MenuItem, NoTeamState, PageHeader, PageShell, ResultGlyph, Role, RoleLabel,
-    SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast,
-    ToastContext, UserAvatar,
+    AvatarSize, Button, ButtonSize, ButtonVariant, Callout, ChampionAvatar, ConfirmDialog,
+    ConfirmTone, Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, InputKind,
+    LoadFailed, Menu, MenuAlign, MenuItem, NoTeamState, PageHeader, PageShell, ResultGlyph, Role,
+    RoleLabel, SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape,
+    TextField, Toast, ToastContext, UserAvatar,
 };
 use crate::models::game_plan::PoolGapWarning;
 use crate::models::invite::Invite;
@@ -407,35 +407,6 @@ pub async fn restore_note(note_id: String) -> Result<(), ServerFnError> {
         .map_err(authz::server_err)
 }
 
-/// List auto-placed members (leader or coach only).
-#[server]
-pub async fn get_auto_placed() -> Result<Vec<DbAutoPlacedMember>, ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    let ctx = authz::authed().await?;
-    if !db::is_team_leader_or_coach(&ctx.db, &ctx.user.id, &ctx.team.id).await? {
-        return Ok(vec![]);
-    }
-    db::list_auto_placed(&ctx.db, &ctx.team.id)
-        .await
-        .map_err(authz::server_err)
-}
-
-/// Clear the auto-placed flag for a member (leader or coach only).
-#[server]
-pub async fn answer_auto_placed(user_id: String, undo: bool) -> Result<(), ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    let ctx = authz::authed().await?;
-    let team_id = ctx.require_leader_or_coach().await?;
-    db::clear_auto_placed(&ctx.db, &team_id, &user_id, undo)
-        .await
-        .map_err(authz::server_err)?;
-    Ok(())
-}
-
 #[server]
 pub async fn get_pool_gap_panel() -> Result<Vec<PoolGapWarning>, ServerFnError> {
     use crate::server::authz;
@@ -449,6 +420,60 @@ pub async fn get_pool_gap_panel() -> Result<Vec<PoolGapWarning>, ServerFnError> 
         .await
         .map_err(authz::server_err)?;
     Ok(summary.pool_gap_warnings)
+}
+
+/// A member an invite link placed in an open starter slot (M160), waiting
+/// for the leader or a coach to keep or undo it.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AutoPlaced {
+    pub user_id: String,
+    pub username: String,
+    /// The position key: top, jungle, mid, bot, support.
+    pub role: String,
+}
+
+/// The team's automatic placements not answered yet. The leader and the
+/// team's coaches see them; everyone else (and an account without a team)
+/// gets an empty list, so the page can create the resource for every member.
+#[server]
+pub async fn get_auto_placed() -> Result<Vec<AutoPlaced>, ServerFnError> {
+    use crate::server::{authz, db};
+
+    let ctx = authz::authed().await?;
+    let Some(team_id) = ctx.team().await? else {
+        return Ok(Vec::new());
+    };
+    if !db::is_team_leader_or_coach(&ctx.db, &ctx.user.id, &team_id)
+        .await
+        .map_err(authz::server_err)?
+    {
+        return Ok(Vec::new());
+    }
+    let rows = db::list_auto_placed(&ctx.db, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    Ok(rows
+        .into_iter()
+        .map(|m| AutoPlaced {
+            user_id: m.user_id,
+            username: m.username,
+            role: m.role,
+        })
+        .collect())
+}
+
+/// The leader or a coach answers an automatic placement: `undo` moves the
+/// member to "Not placed yet", otherwise the placement stays. Only a member
+/// of the session's team who was placed automatically can be changed.
+#[server]
+pub async fn answer_auto_placed(member_user_id: String, undo: bool) -> Result<(), ServerFnError> {
+    use crate::server::{authz, db};
+
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_leader_or_coach().await?;
+    db::clear_auto_placed(&ctx.db, &team_id, &member_user_id, undo)
+        .await
+        .map_err(authz::server_err)
 }
 
 // ---------------------------------------------------------------------------
@@ -548,7 +573,7 @@ struct TeamResources {
     games: Resource<Result<Vec<RecentMatch>, ServerFnError>>,
     gaps: Resource<Result<Vec<PoolGapWarning>, ServerFnError>>,
     invites: Resource<Result<(String, Vec<Invite>), ServerFnError>>,
-    auto_placed: Resource<Result<Vec<DbAutoPlacedMember>, ServerFnError>>,
+    auto_placed: Resource<Result<Vec<AutoPlaced>, ServerFnError>>,
 }
 
 #[component]
@@ -573,7 +598,6 @@ pub fn TeamDashboard() -> impl IntoView {
     let reload = Callback::new(move |_| {
         team.refetch();
         res.requests.refetch();
-        res.auto_placed.refetch();
     });
 
     view! {
@@ -618,28 +642,11 @@ fn TeamView(
         || members
             .iter()
             .any(|m| m.user_id == me && m.roster_type == "coach");
-    
-    // Auto-placed members (only shown to leader or coach)
-    let auto_placed = res.auto_placed;
-    let answer_action = ServerAction::<AnswerAutoPlaced>::new();
-    
-    let _ = Effect::new(move |_| {
-        if let Some(Ok(())) = answer_action.value().get() {
-            toast.push.run(Toast::success("Roster updated"));
-            reload.set(());
-            res.requests.refetch();
-        }
-    });
     let leader_name = members
         .iter()
         .find(|m| m.user_id == team.created_by)
         .map(|m| m.username.clone())
         .unwrap_or_default();
-    
-    // Clone user_id for closures
-    let uid_undo = RwSignal::new(String::new());
-    let uid_keep = RwSignal::new(String::new());
-    
     let groups = group_roster(&members);
     let edit_open = RwSignal::new(false);
     let leave_open = RwSignal::new(false);
@@ -834,62 +841,11 @@ fn TeamView(
                 }}
             }
         />
+        {can_invite.then(|| view! { <AutoPlacedNotices reload=reload placed=res.auto_placed /> })}
         <div class="grid gap-x-12 gap-y-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
             <div class="flex min-w-0 flex-col gap-12">
                 <section aria-labelledby="roster-h" data-roster>
                     <SectionHeader title="Roster" id="roster-h" meta=if is_leader { "Use a player's actions to start, bench or make them coach." } else { "The leader places players." } />
-                    
-                    // Auto-placed members (only shown to leader or coach)
-                    <Suspense>
-                        {move || auto_placed.get().map(|res| {
-                            let auto_placed_members = match res {
-                                Ok(members) if !members.is_empty() => {
-                                    members.into_iter().map(|(user_id, username, role)| {
-                                        let role_display = match role.as_str() {
-                                            "top" => "Top",
-                                            "jungle" => "Jungle",
-                                            "mid" => "Mid",
-                                            "bot" => "Bot",
-                                            "support" => "Support",
-                                            _ => &role,
-                                        };
-                                        view! {
-                                            <Callout tone=CalloutTone::Info role="status">
-                                                <div class="flex items-center justify-between gap-4">
-                                                    <div>
-                                                        <strong>{username}</strong> " joined as " <strong>{role_display}</strong> " starter."
-                                                    </div>
-                                                    <div class="flex gap-2">
-                                                        <Button
-                                                            variant=ButtonVariant::Quiet
-                                                            size=ButtonSize::Sm
-                                                            on_click=Callback::new(move |_| {
-                                                                answer_action.dispatch(AnswerAutoPlaced { user_id: user_id.clone(), undo: true });
-                                                            })
-                                                        >
-                                                            "Undo"
-                                                        </Button>
-                                                        <Button
-                                                            variant=ButtonVariant::Primary
-                                                            size=ButtonSize::Sm
-                                                            on_click=Callback::new(move |_| {
-                                                                answer_action.dispatch(AnswerAutoPlaced { user_id: user_id.clone(), undo: false });
-                                                            })
-                                                        >
-                                                            "Keep"
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </Callout>
-                                        }
-                                    }).collect_view()
-                                }
-                                _ => view! {}.into_view(),
-                            };
-                            view! { {auto_placed_members} }
-                        })}
-                    </Suspense>
-                    
                     <h3 id="roster-starters" class="mb-2 font-display text-heading font-semibold text-primary">"Starting five"</h3>
                     <ul aria-labelledby="roster-starters" class="border-b border-rule" data-roster-group="starters">{starters_view}</ul>
                     {group_list("Substitutes", "substitutes", groups.substitutes.clone(), "No one on the bench. Substitutes play when needed and see everything the team does.")}
@@ -1226,6 +1182,71 @@ fn InviteLinkActions(
 /// front once hydrated (see `InvitePlayers`).
 fn invite_link(code: &str) -> String {
     format!("/auth/register?invite={code}")
+}
+
+/// M160: one notice per member an invite link placed in an open starter
+/// slot, for the leader and coaches: keep the placement or undo it (the
+/// member moves to "Not placed yet"). Nothing shows when there is none.
+#[component]
+fn AutoPlacedNotices(
+    reload: Callback<()>,
+    placed: Resource<Result<Vec<AutoPlaced>, ServerFnError>>,
+) -> impl IntoView {
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let answer = Callback::new(
+        move |(id, name, label, undo): (String, String, String, bool)| {
+            leptos::task::spawn_local(async move {
+                match answer_auto_placed(id, undo).await {
+                    Ok(()) => {
+                        toast.push.run(Toast::success(if undo {
+                            format!("{name} moved to Not placed yet")
+                        } else {
+                            format!("{name} stays {label} starter")
+                        }));
+                        placed.refetch();
+                        reload.run(());
+                    }
+                    Err(e) => {
+                        toast
+                            .push
+                            .run(Toast::error(crate::models::utils::error_text(&e)));
+                        placed.refetch();
+                    }
+                }
+            });
+        },
+    );
+    view! {
+        <Suspense fallback=|| ()>
+            {move || placed.get().map(|r| {
+                let list = r.unwrap_or_default();
+                if list.is_empty() {
+                    return ().into_any();
+                }
+                view! {
+                    <div class="mb-8 flex flex-col gap-3" data-auto-placed>
+                        {list.into_iter().map(|p| {
+                            let label = Role::parse(&p.role).map(|r| r.label()).unwrap_or("").to_string();
+                            let (uid_undo, uid_keep) = (p.user_id.clone(), p.user_id.clone());
+                            let (name_undo, name_keep) = (p.username.clone(), p.username.clone());
+                            let (label_undo, label_keep) = (label.clone(), label.clone());
+                            view! {
+                                <Callout>
+                                    <div class="flex flex-wrap items-center justify-between gap-3" data-auto-placed-row=p.user_id.clone()>
+                                        <p class="text-body text-primary">{format!("{} joined as {label} starter.", p.username)}</p>
+                                        <span class="flex gap-2">
+                                            <Button size=ButtonSize::Sm variant=ButtonVariant::Quiet on_click=Callback::new(move |_| answer.run((uid_undo.clone(), name_undo.clone(), label_undo.clone(), true)))>"Undo"</Button>
+                                            <Button size=ButtonSize::Sm on_click=Callback::new(move |_| answer.run((uid_keep.clone(), name_keep.clone(), label_keep.clone(), false)))>"Keep"</Button>
+                                        </span>
+                                    </div>
+                                </Callout>
+                            }
+                        }).collect_view()}
+                    </div>
+                }.into_any()
+            })}
+        </Suspense>
+    }
 }
 
 #[component]
@@ -1585,32 +1606,4 @@ mod tests {
         let own = member_actions(&m("a", "unassigned", "member"), true);
         assert!(!own.iter().any(|i| i.id == "kick" || i.id == "member"));
     }
-}
-
-/// List members who were auto-placed in starter slots by their invite link.
-#[server]
-pub async fn get_auto_placed() -> Result<Vec<(String, String, String)>, ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    let ctx = authz::authed().await?;
-    let team_id = ctx.require_leader_or_coach().await?;
-    let members = db::list_auto_placed(&ctx.db, &team_id)
-        .await
-        .map_err(authz::server_err)?;
-    Ok(members)
-}
-
-/// Clear the auto-placed flag for a member. If undo is true, also move them to "member" roster_type.
-#[server]
-pub async fn answer_auto_placed(user_id: String, undo: bool) -> Result<(), ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    let ctx = authz::authed().await?;
-    let team_id = ctx.require_leader_or_coach().await?;
-    db::clear_auto_placed(&ctx.db, &team_id, &user_id, undo)
-        .await
-        .map_err(authz::server_err)?;
-    Ok(())
 }

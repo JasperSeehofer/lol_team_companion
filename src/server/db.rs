@@ -927,8 +927,11 @@ pub async fn team_invite_name(db: &Surreal<Db>, code: &str) -> DbResult<Option<S
 }
 
 /// Put a newly registered account into the team its invite names (a member
-/// not placed yet, at the invite's position if any).
-/// Returns the role key if the member was auto-placed as a starter.
+/// not placed yet, at the invite's position if any). When the invite names
+/// one of the five positions and that starter slot is open, the account is
+/// placed there instead and `auto_placed_at` is set, so the leader and
+/// coaches can confirm or undo it (M160). Returns the position key when the
+/// account was placed in the starting five this way.
 pub async fn join_team_from_invite(
     db: &Surreal<Db>,
     user_id: &str,
@@ -937,15 +940,17 @@ pub async fn join_team_from_invite(
     let Some(team_id) = grant.team_id.as_deref() else {
         return Ok(None);
     };
-    let role = grant.position.clone().unwrap_or_else(|| "unassigned".to_string());
-    let is_role = Role::parse(&role).is_some();
-    
+    let role = grant
+        .position
+        .clone()
+        .unwrap_or_else(|| "unassigned".to_string());
+    // Only a stored position key (top, jungle, mid, bot, support) can open a
+    // starter slot; "unassigned" or any other spelling stays "not placed yet".
+    let is_role = crate::components::ui::Role::parse(&role).map(|r| r.key()) == Some(role.as_str());
     // Under the lock that team deletion also takes: the team must still
     // exist (a `record<team>` link does not check that), or the account
     // would be a member of a team that is gone (M10 review).
     let _guard = invariant_lock().await;
-    
-    // Check if the team exists
     let mut r = db
         .query("SELECT VALUE id FROM type::record('team', $team_key)")
         .bind(("team_key", record_key(team_id, "team")))
@@ -954,48 +959,67 @@ pub async fn join_team_from_invite(
     if ids.is_empty() {
         return Err(DbError::NotFound);
     }
-    
-    let mut r = db
+    let r = db
         .query(
-            "BEGIN TRANSACTION;
-             LET $open = (array::len((SELECT id FROM team_member WHERE team = $team AND role = $role AND roster_type = 'starter')) = 0) AND $is_role;
-             CREATE team_member SET
-                 team = $team,
-                 user = $user,
-                 role = $role,
-                 roster_type = IF $open THEN 'starter' ELSE 'member' END,
-                 auto_placed_at = IF $open THEN time::now() ELSE NONE END;
-             RETURN $open;
+            "BEGIN TRANSACTION; \
+             LET $open = $is_role AND (array::len((SELECT id FROM team_member \
+                 WHERE team = type::record('team', $team_key) AND role = $role \
+                 AND roster_type = 'starter')) = 0); \
+             CREATE team_member SET team = type::record('team', $team_key), \
+                 user = type::record('user', $user_key), role = $role, roster_type = 'member'; \
+             IF $open { UPDATE team_member SET roster_type = 'starter', auto_placed_at = time::now() \
+                 WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) }; \
+             RETURN $open; \
              COMMIT TRANSACTION;",
         )
-        .bind(("team", type::record("team", record_key(team_id, "team"))))
-        .bind(("user", type::record("user", record_key(user_id, "user"))))
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("user_key", record_key(user_id, "user")))
         .bind(("role", role.clone()))
         .bind(("is_role", is_role))
         .await?;
-    
-    let placed = check_tx(r)?.take(1)?;
-    Ok(placed.then_some(role))
+    let mut r = check_tx(r).map_err(|e| {
+        if e.to_string().contains("team_member_user_unique") {
+            DbError::Invalid("You already belong to a team.".into())
+        } else {
+            e
+        }
+    })?;
+    // Statements: BEGIN 0, LET 1, CREATE 2, IF 3, RETURN 4.
+    let placed: Option<bool> = r.take(4)?;
+    Ok(placed.unwrap_or(false).then_some(role))
+}
+
+/// A team-bound code redeemed by [`redeem_team_invite`]: the team joined,
+/// and the position key when the account was placed in that open starter
+/// slot automatically (M160).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeamInviteJoin {
+    pub team_id: String,
+    pub auto_placed: Option<String>,
 }
 
 /// A signed-in account without a team uses a team-bound code: one use is
 /// taken and the account joins that team, in one transaction. Refused,
 /// without taking a use, when the account already belongs to a team or the
 /// code is not a usable team code (plain codes only open registration).
-/// Returns the team id and the role key if the member was auto-placed as a starter.
-pub async fn redeem_team_invite(db: &Surreal<Db>, user_id: &str, code: &str) -> DbResult<(String, Option<String>)> {
+/// Like [`join_team_from_invite`], an open starter slot at the code's
+/// position is taken automatically (in the same transaction).
+pub async fn redeem_team_invite(
+    db: &Surreal<Db>,
+    user_id: &str,
+    code: &str,
+) -> DbResult<TeamInviteJoin> {
     #[derive(Debug, Deserialize, SurrealValue)]
     struct Joined {
         team: RecordId,
         role: String,
-        auto_placed: bool,
+        open: bool,
     }
     let code = normalize_invite_code(code);
     if code.is_empty() {
         return Err(DbError::Invalid(INVALID_TEAM_INVITE.into()));
     }
     let _guard = invariant_lock().await;
-    
     let r = db
         .query(
             "BEGIN TRANSACTION; \
@@ -1006,20 +1030,25 @@ pub async fn redeem_team_invite(db: &Surreal<Db>, user_id: &str, code: &str) -> 
                  AND (expires_at = NONE OR expires_at > time::now()) RETURN AFTER)[0]; \
              IF $inv = NONE { THROW 'BAD_CODE' }; \
              LET $role = $inv.position ?? 'unassigned'; \
-             LET $auto_place = IF $role != 'unassigned' AND \
-                 array::len((SELECT id FROM team_member WHERE team = $inv.team AND role = $role AND roster_type = 'starter')) = 0 \
-                 THEN true ELSE false END; \
-             LET $roster_type = IF $auto_place THEN 'starter' ELSE 'member' END; \
+             LET $open = ($role IN $positions) AND (array::len((SELECT id FROM team_member \
+                 WHERE team = $inv.team AND role = $role AND roster_type = 'starter')) = 0); \
              CREATE team_member SET team = $inv.team, user = type::record('user', $user_key), \
-                 role = $role, roster_type = $roster_type, \
-                 auto_placed_at = IF $auto_place THEN time::now() ELSE NONE END; \
-             RETURN { team: $inv.team, role: $role, auto_placed: $auto_place }; \
+                 role = $role, roster_type = 'member'; \
+             IF $open { UPDATE team_member SET roster_type = 'starter', auto_placed_at = time::now() \
+                 WHERE team = $inv.team AND user = type::record('user', $user_key) }; \
+             RETURN { team: $inv.team, role: $role, open: $open }; \
              COMMIT TRANSACTION;",
         )
         .bind(("user_key", record_key(user_id, "user")))
         .bind(("code", code))
+        .bind((
+            "positions",
+            crate::components::ui::Role::ALL
+                .iter()
+                .map(|r| r.key().to_string())
+                .collect::<Vec<String>>(),
+        ))
         .await?;
-    
     let mut r = match check_tx(r) {
         Ok(r) => r,
         Err(e) => {
@@ -1035,23 +1064,20 @@ pub async fn redeem_team_invite(db: &Surreal<Db>, user_id: &str, code: &str) -> 
             })
         }
     };
-    // Statements: BEGIN 0, IF 1, LET 2, IF 3, LET 4, LET 5, CREATE 6, RETURN 7.
-    let joined: Option<Joined> = r.take(7)?;
-    let joined = joined.ok_or_else(|| DbError::Other("team invite: no team returned".into()))?;
-    Ok((joined.team.to_sql(), joined.auto_placed.then_some(joined.role)))
+    // Statements: BEGIN 0, IF 1, LET 2, IF 3, LET 4, LET 5, CREATE 6, IF 7, RETURN 8.
+    let joined: Option<Joined> = r.take(8)?;
+    joined
+        .map(|j| TeamInviteJoin {
+            team_id: j.team.to_sql(),
+            auto_placed: j.open.then_some(j.role),
+        })
+        .ok_or_else(|| DbError::Other("team invite: no team returned".into()))
 }
 
 /// Shown for any code that cannot put a signed-in account into a team, so
 /// the answer does not reveal which codes exist.
 pub const INVALID_TEAM_INVITE: &str =
     "That code is not a team invite that can be used now. Ask your team leader for a new link.";
-
-/// Check if a role is one of the five starter positions.
-fn is_valid_role(role: &str) -> bool {
-    matches!(role, "top" | "jungle" | "mid" | "bot" | "support")
-}
-
-
 
 /// Give back a slot taken by `consume_invite` when registration fails after it.
 pub async fn release_invite(db: &Surreal<Db>, code: &str) -> DbResult<()> {
@@ -1063,64 +1089,77 @@ pub async fn release_invite(db: &Surreal<Db>, code: &str) -> DbResult<()> {
     Ok(())
 }
 
-/// List members who were auto-placed in starter slots by their invite link.
-pub async fn list_auto_placed(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<DbAutoPlacedMember>> {
-    #[derive(Debug, Deserialize, SurrealValue)]
-    struct DbAutoPlacedMember {
-        user: RecordId,
-        username: String,
-        role: String,
-        auto_placed_at: Datetime,
-    }
-    
-    let mut r = db
-        .query(
-            "SELECT user, user.username AS username, role, auto_placed_at 
-             FROM team_member 
-             WHERE team = type::record('team', $team_key) 
-             AND auto_placed_at != NONE 
-             ORDER BY auto_placed_at",
-        )
-        .bind(("team_key", record_key(team_id, "team")))
-        .await?;
-    
-    let members: Vec<DbAutoPlacedMember> = r.take(0).unwrap_or_default();
-    Ok(members)
+/// A member of the team placed in the starting five by their invite link
+/// whom the leader or a coach has not confirmed or undone yet (M160).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutoPlacedMember {
+    pub user_id: String,
+    pub username: String,
+    pub role: String,
 }
 
-/// Clear the auto-placed flag for a member. If undo is true, also move them to 'member' roster_type.
-pub async fn clear_auto_placed(db: &Surreal<Db>, team_id: &str, user_id: &str, undo: bool) -> DbResult<()> {
-    ensure_team_record(db, team_id).await?;
-    
+/// The team's members placed automatically by their invite link and not
+/// confirmed yet, oldest first. Team-scoped: another team's id lists only
+/// that team's rows.
+pub async fn list_auto_placed(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<AutoPlacedMember>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct DbAutoPlaced {
+        user: RecordId,
+        username: Option<String>,
+        role: String,
+        // Selected because the query orders by it (SurrealDB needs ORDER BY
+        // fields in the projection); not shown.
+        #[allow(dead_code)]
+        auto_placed_at: Datetime,
+    }
     let mut r = db
         .query(
-            "UPDATE team_member SET 
-                 roster_type = IF $undo THEN 'member' ELSE roster_type END, 
-                 auto_placed_at = NONE 
-             WHERE team = $team 
-             AND user = $user 
-             AND auto_placed_at != NONE 
-             RETURN AFTER",
-        )
-        .bind(("team", type::record("team", record_key(team_id, "team"))))
-        .bind(("user", type::record("user", record_key(user_id, "user"))))
-        .bind(("undo", undo))
-        .await?;
-    
-    let updated: Vec<RecordId> = r.take(0).unwrap_or_default();
-    if updated.is_empty() {
-        Err(DbError::NotFound)
-    } else {
-        Ok(()) 
-             WHERE team = type::record('team', $team_key) 
-             AND user = type::record('user', $user_key)",
+            "SELECT user, user.username AS username, role, auto_placed_at FROM team_member \
+             WHERE team = type::record('team', $team_key) AND auto_placed_at != NONE \
+             ORDER BY auto_placed_at ASC",
         )
         .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<DbAutoPlaced> = r.take(0)?;
+    Ok(rows
+        .into_iter()
+        .map(|row| AutoPlacedMember {
+            user_id: row.user.to_sql(),
+            username: row.username.unwrap_or_default(),
+            role: row.role,
+        })
+        .collect())
+}
+
+/// The leader or a coach answers an automatic placement: `undo` moves the
+/// member to "not placed yet", otherwise the placement is kept. Either way
+/// the mark is cleared. Only a member of `team_id` who was placed
+/// automatically and not answered yet can be changed; anyone else (the
+/// leader, a member placed by hand, another team's member) is `NotFound`.
+pub async fn clear_auto_placed(
+    db: &Surreal<Db>,
+    team_id: &str,
+    user_id: &str,
+    undo: bool,
+) -> DbResult<()> {
+    let sql = if undo {
+        "UPDATE team_member SET roster_type = 'member', auto_placed_at = NONE \
+         WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) \
+         AND auto_placed_at != NONE RETURN AFTER"
+    } else {
+        "UPDATE team_member SET auto_placed_at = NONE \
+         WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key) \
+         AND auto_placed_at != NONE RETURN AFTER"
+    };
+    let mut r = db
+        .query(sql)
+        .bind(("team_key", record_key(team_id, "team")))
         .bind(("user_key", record_key(user_id, "user")))
-        .await?
-        .check()?;
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::NotFound);
     }
-    
     Ok(())
 }
 

@@ -1925,7 +1925,7 @@ async fn team_codes_redeem_into_their_own_team_and_visits_stay_per_user() {
     let joined = db::redeem_team_invite(&db, &carol, "T1-ONLY")
         .await
         .unwrap();
-    assert_eq!(joined, t.team1);
+    assert_eq!(joined.team_id, t.team1);
     assert_eq!(
         db::get_user_team_id(&db, &carol).await.unwrap().as_deref(),
         Some(t.team1.as_str())

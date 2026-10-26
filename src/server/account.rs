@@ -399,7 +399,7 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
     (
         "team_membership",
         "SELECT team.name AS team, role AS position, roster_type AS place, \
-         (team.created_by = $u) AS leader FROM team_member WHERE user = $u",
+         auto_placed_at, (team.created_by = $u) AS leader FROM team_member WHERE user = $u",
     ),
     (
         "join_requests",
