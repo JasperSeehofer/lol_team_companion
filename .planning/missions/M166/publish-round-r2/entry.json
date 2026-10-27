@@ -1,0 +1,61 @@
+{
+  "id": "m166-r2-navgrid-real-file",
+  "title": "M166 · R2: the navgrid tool checked on your real 16.21 grid",
+  "date": "2026-10-27",
+  "mission": "M166",
+  "status": "open",
+  "summary": "The navgrid tool read the grid from your Wednesday PC run on brain. Every byte of the file is accounted for: v7.1, 295 × 296 cells of 50 units, all seven region layers, the height samples and the hint nodes. The flag bits are settled against the grid's own terrain layer and your game's 81 structure events: 0x01 brush, 0x02 not passable, 0x04 structure footprint (turrets, inhibitors, nexus, fountain), 0x40 see-through, and 0x400/0x800 the blue-only and red-only base gates. 0x80 and 0x1000 stay unnamed. Validation passes: 28 of 28 structures and 81 of 81 timeline events, each within 2 cells and in its lane. With the axes swapped the lane match drops to 8 of 24, which confirms the axis convention. The vectoriser writes valid polygons with every hole kept. Brush keeps 98–99 % of its area, and every boundary is within 9.4 units of the cells. The real file exposed four defects (gates read as walls, structures in the transparent layer, a missing Baron pit, lane checks skipped on nexus turrets). All four are fixed and covered by synthetic tests: 64 pass. Nothing derived from the grid is in git or on this card; it stays in one folder on brain, outside every repo. Report: REPORT-R2.md.",
+  "questions": [
+    {
+      "text": "Merge the navgrid tool into main (code and synthetic tests only). This touches only tools/navgrid/, .gitignore and the mission folder, and no app code. The ticket-2 rule stays in force: nothing derived from the real grid is committed, shipped or shared until Riot answers.",
+      "kind": "merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "After the R2 verifier's PASS, the overseer lands mission/M166-scout-half-c-and-navgrid-prep into main."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open, and the tool keeps working from it on brain."
+        }
+      ],
+      "recommend": "Yes, merge. The real file parses byte-exact, every check passes, and the four defects it exposed are fixed with tests."
+    },
+    {
+      "text": "(react) The Rift Board vision layer while ticket 2 is pending. The geometry is measured and ready (walls, brush, see-through rims, river, lanes, camps, pits), but Riot has not said whether polygons derived from it may ship.",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Hold until Riot answers",
+          "consequence": "No Rift Board work on measured geometry. The R2 numbers stay ready for the day Riot answers."
+        },
+        {
+          "label": "Build the import with synthetic geometry only",
+          "consequence": "A round builds the app-side import against the synthetic grid. It risks rework if Riot says no."
+        }
+      ],
+      "recommend": "Hold until Riot answers. Nothing derived may ship yet, and the import is quick to build once the answer is known."
+    },
+    {
+      "text": "(react) The real grid and the R2 outputs on brain (~/.local/share/navgrid/, outside every repo). Keep them or delete them now?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep until ticket 2 is answered",
+          "consequence": "They stay local, so any check can be redone without another PC session."
+        },
+        {
+          "label": "Delete now",
+          "consequence": "Brain holds no Riot-derived file. Any later check needs a new pc-run on your PC."
+        }
+      ],
+      "recommend": "Keep until ticket 2 is answered. They are local, never in git, and can be deleted in one command."
+    }
+  ],
+  "links": [
+    {
+      "label": "Report: numbers only (context)",
+      "href": "/app/previews/m166-r2-navgrid-real-file/REPORT-R2.md"
+    }
+  ]
+}
