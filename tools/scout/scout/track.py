@@ -10,6 +10,19 @@ spot) would otherwise become an absorbing state of the track. A detection carrie
 most one track and a track takes at most one detection. Same-label detections
 are accepted at any distance (recall, teleport, respawn); a different label
 only within `mismatch_gate`, so an overlap cannot swap identities.
+
+Possessions (Viego's passive): after a takedown Viego may take the victim's
+soul and then wears the victim's portrait in his own team's ring until he
+casts his ultimate, the possession ends, or he takes another soul. The
+template detector ignores the ring, so that icon carries the victim's label.
+While a victim is dead its own icon is off the map, so for `window` seconds
+after the takedown a detection with the victim's label is handed to the
+possessor; one inside the victim's fountain means the victim has respawned and
+closes that window. Pickup delay, an early end and a switch to another soul
+need no timing: they only change which label the possessor's icon has. The
+window also ends when the possessor dies, and a victim-labelled detection
+farther from the takedown than the possessor could have walked (a background
+patch matching the dead victim) is dropped.
 """
 
 from __future__ import annotations
@@ -54,6 +67,24 @@ class KalmanCV:
 
 
 @dataclass
+class Possession:
+    """A takedown after which `possessor` may wear `victim`'s icon (world units)."""
+    possessor: str
+    victim: str
+    t: float                         # takedown, game seconds
+    fountain: tuple[float, float]    # the victim's fountain: it respawns there
+    at: tuple[float, float] | None = None   # takedown position; None skips the reach check
+    until: float | None = None       # the possessor's next death, if before the window ends
+
+
+POSSESS_WINDOW_S = 25.0      # soul pickup delay plus the longest possession: verify on run
+POSSESS_GRACE_S = 1.0        # the frame of the takedown may still show the victim alive
+POSSESS_FOUNTAIN_RADIUS = 1000.0
+POSSESS_REACH = 2000.0       # possessor's distance from the takedown (assists happen at range)
+POSSESS_SPEED = 450.0        # world units per second the possessor can walk after it
+
+
+@dataclass
 class WorldDet:
     label: str
     x: float
@@ -63,7 +94,9 @@ class WorldDet:
 
 class Tracker:
     def __init__(self, champions: list[str], mismatch_gate: float = 600.0,
-                 mismatch_penalty: float = 2000.0, jump_reset: float = 3000.0):
+                 mismatch_penalty: float = 2000.0, jump_reset: float = 3000.0,
+                 possessions: list[Possession] | None = None,
+                 possess_window: float = POSSESS_WINDOW_S):
         if len(set(champions)) != len(champions):
             raise ValueError("champions must be distinct")
         self.champions = list(champions)
@@ -73,6 +106,37 @@ class Tracker:
         self.filters: dict[str, KalmanCV | None] = {c: None for c in champions}
         self.last_t: float | None = None
         self.samples: list[dict] = []
+        self.possessions = sorted(possessions or [], key=lambda p: p.t)
+        self.possess_window = possess_window
+        self.respawned: set[int] = set()   # indexes into possessions closed at the fountain
+        self.relabelled: dict[str, int] = {}   # victim -> detections handed to the possessor
+        self.dropped: dict[str, int] = {}      # victim -> detections out of the possessor's reach
+
+    def _relabel_possessed(self, t: float, dets: list[WorldDet]) -> list[WorldDet]:
+        live: dict[str, tuple[int, Possession]] = {}   # victim -> latest open takedown
+        for i, p in enumerate(self.possessions):
+            end = p.t + self.possess_window if p.until is None else min(p.until, p.t + self.possess_window)
+            if p.t + POSSESS_GRACE_S <= t <= end and i not in self.respawned:
+                live[p.victim] = (i, p)
+        if not live:
+            return dets
+        out = []
+        for d in dets:
+            hit = live.get(d.label)
+            if hit is None:
+                out.append(d)
+                continue
+            i, p = hit
+            if np.hypot(d.x - p.fountain[0], d.y - p.fountain[1]) <= POSSESS_FOUNTAIN_RADIUS:
+                self.respawned.add(i)
+                out.append(d)
+            elif (p.at is not None and np.hypot(d.x - p.at[0], d.y - p.at[1])
+                  > POSSESS_REACH + POSSESS_SPEED * (t - p.t)):
+                self.dropped[p.victim] = self.dropped.get(p.victim, 0) + 1
+            else:
+                self.relabelled[p.victim] = self.relabelled.get(p.victim, 0) + 1
+                out.append(WorldDet(p.possessor, d.x, d.y, d.score))
+        return out
 
     def _cost(self, champ: str, pred, det: WorldDet) -> float:
         same = det.label == champ
@@ -88,7 +152,7 @@ class Tracker:
         self.last_t = t
         preds = {c: (f.predict(dt) if f is not None else None) for c, f in self.filters.items()}
         pos: dict[str, list[float] | None] = {c: None for c in self.champions}
-        dets = best_per_label(dets)
+        dets = best_per_label(self._relabel_possessed(t, dets))
         if dets:
             cost = np.array([[self._cost(c, preds[c], d) for d in dets] for c in self.champions])
             rows, cols = linear_sum_assignment(cost)

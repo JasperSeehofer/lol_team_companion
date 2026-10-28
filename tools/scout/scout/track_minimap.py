@@ -19,6 +19,7 @@ import os
 import shutil
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -29,7 +30,8 @@ from .detect import TemplateDetector, YoloDetector, fetch_icons, load_icon_files
 from .render import minimap_only_render, preserved_render
 from .replay_api import DEFAULT_BASE, ReplayClient
 from .screen import all_monitors, describe, pick_monitor
-from .track import StaticSpots, Tracker, WorldDet, find_gaps
+from .score import FOUNTAINS, events, participant_map, team_of
+from .track import Possession, StaticSpots, Tracker, WorldDet, find_gaps
 from .util import (frame_name, list_frames, parse_box, read_json, reset_sample_dir, run_logger,
                    sample_evenly, write_json)
 
@@ -49,6 +51,31 @@ def champions_from_client(client: ReplayClient) -> list[str]:
     players = client.get("/liveclientdata/playerlist")
     order = sorted(players, key=lambda p: 0 if p.get("team") == "ORDER" else 1)
     return [p.get("rawChampionName", "").rsplit("_", 1)[-1] or p["championName"] for p in order]
+
+
+POSSESSORS = ("Viego",)   # champions whose passive takes over a victim's icon
+
+
+def possessions_from_timeline(timeline: dict, match: dict) -> list[Possession]:
+    """Every takedown (kill or assist) by a possessor, from CHAMPION_KILL events,
+    with its position and the possessor's next death (a possession ends there)."""
+    champ = participant_map(match)
+    kills = events(timeline, "CHAMPION_KILL")
+    out = []
+    for pid, name in champ.items():
+        if name not in POSSESSORS:
+            continue
+        deaths = sorted(e["timestamp"] / 1000.0 for e in kills if e.get("victimId") == pid)
+        for e in kills:
+            victim = e.get("victimId")
+            if victim in champ and (e.get("killerId") == pid
+                                    or pid in e.get("assistingParticipantIds", [])):
+                t = e["timestamp"] / 1000.0
+                pos = e.get("position")
+                out.append(Possession(name, champ[victim], t, FOUNTAINS[team_of(victim)],
+                                      at=(pos["x"], pos["y"]) if pos else None,
+                                      until=next((d for d in deaths if d > t), None)))
+    return sorted(out, key=lambda p: p.t)
 
 
 def auto_minimap_box(screen_w: int, screen_h: int) -> dict:
@@ -106,7 +133,8 @@ def capture_live(client: ReplayClient, box: dict | None, scratch: Path, speed: f
 
 def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
                 anchors: Path | None = None, max_frames: int = 24, match_id: str | None = None,
-                log=None) -> dict:
+                log=None, workers: int | None = None,
+                possessions: list[Possession] | None = None) -> dict:
     frames = list_frames(frames_dir)
     if not frames:
         raise SystemExit(f"no tNNNNN.png frames in {frames_dir}")
@@ -118,14 +146,23 @@ def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
     # Two passes (finding F): detect every frame and count each label's
     # recurring spots, then track with the static spots rejected. The live
     # path captures to the scratch directory first, so it runs this too.
+    # Frames are independent; OpenCV releases the GIL in imread and
+    # matchTemplate, so threads use every core. YOLO's predict is not
+    # thread-safe and stays sequential.
+    if workers is None:
+        workers = os.cpu_count() or 1
+    if getattr(detector, "kind", None) == "yolo":
+        workers = 1
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        all_dets = list(pool.map(lambda p: detector.detect(cv2.imread(str(p))),
+                                 [path for _, path in frames]))
     spots = StaticSpots()
     per_frame = []
-    for t, path in frames:
-        dets = detector.detect(cv2.imread(str(path)))
+    for (t, _), dets in zip(frames, all_dets):
         spots.observe(dets)
         per_frame.append((t, dets))
     static = spots.static()
-    tracker = Tracker(champions)
+    tracker = Tracker(champions, possessions=possessions)
     for t, dets in per_frame:
         tracker.step(t, [WorldDet(d.label, *mapping.to_world(d.x, d.y), d.score)
                          for d in spots.filter(dets, static)])
@@ -141,6 +178,9 @@ def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
         "calibration": mapping.as_dict(), "frame_size": [first.shape[1], first.shape[0]],
         "wards": [], "static_spots": spots.describe(mapping.to_world),
         "icon_sources": getattr(detector, "icon_sources", None),
+        "possessions": {"takedowns": len(tracker.possessions),
+                        "relabelled": dict(sorted(tracker.relabelled.items())),
+                        "dropped_out_of_reach": dict(sorted(tracker.dropped.items()))},
     }
     write_json(out_dir / "track_minimap.json", track)
     if log:
@@ -149,6 +189,11 @@ def run_offline(frames_dir: Path, champions: list[str], detector, out_dir: Path,
             log.info("frames_minimap: %d sample frames of an earlier run removed", removed)
         log.info("track_minimap.json: %d samples, %d positions, %d gaps", len(tracker.samples),
                  seen, len(track["gaps"]))
+        if tracker.possessions:
+            log.info("possessions: %d takedowns by %s; detections relabelled per victim %s, "
+                     "dropped out of reach %s", len(tracker.possessions),
+                     ", ".join(sorted({p.possessor for p in tracker.possessions})),
+                     track["possessions"]["relabelled"], track["possessions"]["dropped_out_of_reach"])
         for sp in track["static_spots"]["spots"]:
             log.info("static spot rejected: %s at px %.0f,%.0f (%d of %d frames)", sp["champion"],
                      sp["px"], sp["py"], sp["frames"], spots.frames)
@@ -182,6 +227,9 @@ def main(argv=None) -> int:
     ap.add_argument("--frames", type=Path, help="offline: directory of tNNNNN.png minimap crops")
     ap.add_argument("--champions", help="ten champion ids, blue 1-5 then red 6-10, comma-separated")
     ap.add_argument("--match", type=Path, help="match.json (from fetch_timeline) for champion names")
+    ap.add_argument("--timeline", type=Path,
+                    help="timeline.json: Viego's takedowns, so his possessed icon stays his "
+                         "(default: RUN_DIR/timeline.json when --match is given)")
     ap.add_argument("--icons", type=Path, help="directory of {champion}.png icons (default: Data Dragon)")
     ap.add_argument("--weights", type=Path, help="pyLoL yolov12.pt; without it the template detector runs")
     ap.add_argument("--threshold", type=float, default=0.55, help="template score threshold")
@@ -194,6 +242,8 @@ def main(argv=None) -> int:
     ap.add_argument("--start", type=float, default=0.0)
     ap.add_argument("--end", type=float, help="game seconds (default: replay length)")
     ap.add_argument("--max-frames", type=int, default=24)
+    ap.add_argument("--workers", type=int,
+                    help="detection threads (default: all cores; YOLO always uses one)")
     ap.add_argument("--scratch", type=Path,
                     default=Path(os.environ.get("TEMP", tempfile.gettempdir())) / "scout-frames")
     ap.add_argument("--base", default=DEFAULT_BASE, help="Replay API base URL")
@@ -201,7 +251,7 @@ def main(argv=None) -> int:
     log = run_logger(args.out, "track_minimap")
 
     client = None if args.frames else ReplayClient(args.base)
-    match_id = None
+    match_id, match = None, None
     if args.champions:
         champions = [c.strip() for c in args.champions.split(",")]
     elif args.match:
@@ -229,8 +279,14 @@ def main(argv=None) -> int:
     first = cv2.imread(str(list_frames(frames_dir)[0][1]))
     icon_px = args.icon_px or max(10, round(first.shape[1] * ICON_FRACTION))
     detector = build_detector(args, champions, icon_px, log)
+    possessions = None
+    tl_path = args.timeline or (args.out / "timeline.json" if match else None)
+    if match and tl_path and tl_path.is_file():
+        possessions = possessions_from_timeline(read_json(tl_path), match)
+    elif args.timeline:
+        log.warning("--timeline needs --match (participant ids to champions); possessions not used")
     track = run_offline(frames_dir, champions, detector, args.out, args.anchors, args.max_frames,
-                        match_id, log)
+                        match_id, log, args.workers, possessions)
     if capture:
         track["capture"] = capture
         track["hdr"] = capture.get("hdr")
