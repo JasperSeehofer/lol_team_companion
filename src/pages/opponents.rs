@@ -120,7 +120,7 @@ pub async fn save_player(
     use crate::server::{authz, db};
 
     // Validate notes length on the server (client also enforces 1000 via maxlength)
-    if notes.len() > 1000 {
+    if notes.chars().count() > 1000 {
         return Err(ServerFnError::ServerError(
             DbError::Invalid("Notes are at most 1000 characters.".into()).to_string(),
         ));
@@ -875,7 +875,6 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
         .riot_summoner_name
         .as_deref()
         .is_some_and(|r| !r.trim().is_empty());
-    let role_clone = player.role.clone();
     // Reactive signal for whether there's a note
     let has_note = Signal::derive(move || {
         let n = notes_field.get();
@@ -913,6 +912,10 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
         let role = prole.get_value();
         let riot = riot_id.get_untracked();
         let notes = notes_field.get_untracked();
+        // Skip save if the text equals the current pnotes value
+        if notes == pnotes.get_untracked() {
+            return;
+        }
         leptos::task::spawn_local(async move {
             save.saving();
             match save_player(id.clone(), name, role, riot, notes.clone()).await {
@@ -989,6 +992,14 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
         });
     });
     let field_id = format!("opp-riot-{}", player.role);
+    // Strip the table prefix from player id for use in DOM ids
+    let player_id_key = player
+        .id
+        .clone()
+        .unwrap_or_default()
+        .strip_prefix("opponent_player:")
+        .unwrap_or(&player.id.clone().unwrap_or_default())
+        .to_string();
     view! {
         <li class="flex flex-col gap-3 border-b border-rule py-4" data-role=player.role.clone()>
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -1049,7 +1060,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                     let expanded = notes_expanded.get();
                     if expanded {
                         view! {
-                            <Field id=format!("opp-note-{}", role_clone) label="Notes on this player">
+                            <Field id=format!("opp-note-{}", player_id_key) label="Notes on this player">
                                 <TextField
                                     value=notes_field
                                     rows=2
@@ -1067,8 +1078,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                                 variant=ButtonVariant::Quiet
                                 size=ButtonSize::Sm
                                 on_click=toggle_notes
-                                attr:aria-expanded=move || notes_expanded.get()
-                                attr:aria-controls=format!("opp-note-{}", role_clone)
+                                attr:aria-expanded=move || notes_expanded.get().to_string()
                             >
                                 {move || if has_note.get() {
                                     "Edit note"
@@ -1080,7 +1090,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                                 let preview = note_preview.get();
                                 let has_preview = !preview.is_empty();
                                 has_preview.then(|| view! {
-                                    <span class="text-secondary text-label truncate">
+                                    <span class="text-secondary text-label truncate" data-testid="opp-note-preview">
                                         {preview}
                                     </span>
                                 })
