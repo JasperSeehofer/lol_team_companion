@@ -41,6 +41,9 @@ dotenvy = { version = "0.15", optional = true }
 # M141 H2: screenshot attachments are decoded (PNG, JPEG, WebP) and
 # re-encoded to WebP on the server, which strips every metadata block.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"], optional = true }
+# M149 B: the reporter's screenshots go into "Download my data" as base64
+# (already in the lock file through other dependencies).
+base64 = { version = "0.22", optional = true }
 
 # Client-only
 console_error_panic_hook = { version = "0.1", optional = true }
@@ -52,7 +55,7 @@ js-sys = { version = "0.3", optional = true }
 # Shared
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-web-sys = { version = "0.3", features = ["DragEvent", "DataTransfer", "Window", "Document", "HtmlDocument", "HtmlDialogElement", "HtmlImageElement", "Element", "HtmlElement", "Node", "Storage", "Navigator", "Clipboard", "SvgsvgElement", "SvgGraphicsElement", "DomRect", "Performance", "MediaQueryList", "PointerEvent", "MouseEvent", "FocusOptions", "File", "FileList", "Blob", "HtmlInputElement", "ClipboardEvent", "DataTransferItemList", "DataTransferItem", "Request", "RequestInit", "Response", "Url", "Selection", "Event", "EventTarget", "BeforeUnloadEvent"] }
+web-sys = { version = "0.3", features = ["DragEvent", "DataTransfer", "Window", "Document", "HtmlDocument", "HtmlDialogElement", "HtmlImageElement", "Element", "HtmlElement", "Node", "Storage", "Navigator", "Clipboard", "SvgsvgElement", "SvgGraphicsElement", "DomRect", "Performance", "MediaQueryList", "PointerEvent", "MouseEvent", "FocusOptions", "File", "FileList", "Blob", "HtmlInputElement", "ClipboardEvent", "DataTransferItemList", "DataTransferItem", "Request", "RequestInit", "Response", "Url", "Selection", "Event", "EventTarget", "BeforeUnloadEvent", "KeyboardEvent", "MediaDevices", "DisplayMediaStreamConstraints", "MediaStream", "MediaStreamTrack", "HtmlMediaElement", "HtmlVideoElement", "HtmlCanvasElement", "CanvasRenderingContext2d", "NodeList"] }
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
@@ -84,6 +87,7 @@ ssr = [
   "dep:tracing-subscriber",
   "dep:dotenvy",
   "dep:image",
+  "dep:base64",
   "leptos/ssr",
   "leptos_meta/ssr",
   "leptos_router/ssr",

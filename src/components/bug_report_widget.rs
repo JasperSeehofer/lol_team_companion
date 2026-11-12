@@ -11,6 +11,14 @@
 //! `models::bug_report::FeedbackKind`), the text, and "Send feedback". On
 //! success a toast offers "Your reports" (`/bugs?tab=mine`).
 //!
+//! On a desktop browser with screen capture (M149 B), the screenshot floor
+//! starts with "Select an area of the page": the dialog hides, the browser's
+//! own share prompt asks for the tab, one frame is drawn and every track is
+//! stopped at once (nothing is recorded), and [`AreaPicker`] lets the
+//! reporter crop that still; the crop goes through the same checks and
+//! preview as an attached file. Phones and browsers without
+//! `getDisplayMedia` never see the button (decided after hydration).
+//!
 //! Mounted in `app.rs`; it renders only for signed-in users and never on
 //! `/auth`, `/closed-beta` or `/legal`. Plain, neutral copy: no exclamation
 //! marks, no emoji, no guilt on Cancel.
@@ -23,6 +31,7 @@ use crate::components::ui::{
     DialogSize, Field, Keycap, Segment, SegmentSize, SegmentedControl, TextField, Toast,
     ToastContext,
 };
+use crate::models::area_select::{size_readout, Rect};
 use crate::models::bug_report::FeedbackKind;
 use crate::pages::profile::get_current_user;
 
@@ -45,6 +54,11 @@ enum WidgetState {
     Idle,
     Selecting,
     Editing,
+    /// The dialog is hidden while the browser's share prompt is open and
+    /// one frame is grabbed (M149 B).
+    Capturing,
+    /// The area picker is over the captured still.
+    Picking,
 }
 
 /// Persist a bug report or wish from the signed-in user. Rate limited per
@@ -133,6 +147,267 @@ pub fn size_label(bytes: f64) -> String {
         format!("{:.1} MB", bytes / (1024.0 * 1024.0))
     } else {
         format!("{} KB", (bytes / 1024.0).ceil().max(1.0) as i64)
+    }
+}
+
+/// What the screenshot floor says when "Select an area of the page" ends
+/// without a picture (M149 B, card B wording).
+pub const CAPTURE_CANCELLED: &str = "Screen capture was cancelled. Nothing was attached.";
+pub const CAPTURE_DENIED: &str =
+    "The browser did not allow screen capture. You can still attach an image or paste one.";
+pub const CAPTURE_FAILED: &str = "Could not capture this page. Attach an image instead.";
+/// Where focus lands when the dialog comes back from the area picker.
+pub const FOCUS_PICK_BUTTON: &str = "[data-area-pick] button";
+pub const FOCUS_REMOVE: &str = "[data-testid=report-attachment-attached] button";
+
+/// Focus the element matching `selector` once the dialog has reopened.
+#[cfg(feature = "hydrate")]
+fn focus_later(selector: &'static str) {
+    use wasm_bindgen::{closure::Closure, JsCast};
+    let Some(win) = web_sys::window() else {
+        return;
+    };
+    let cb = Closure::once(move || {
+        let el = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.query_selector(selector).ok().flatten())
+            .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok());
+        if let Some(el) = el {
+            let _ = el.focus();
+        }
+    });
+    let _ =
+        win.set_timeout_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 50);
+    cb.forget();
+}
+
+/// Screen capture for "Select an area of the page" (M149 B), browser only.
+/// One frame is drawn from the stream and every track is stopped right
+/// after, on every path; nothing is recorded or sent anywhere.
+#[cfg(feature = "hydrate")]
+mod capture {
+    use crate::models::area_select::Crop;
+    use wasm_bindgen::{JsCast, JsValue};
+    use wasm_bindgen_futures::JsFuture;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum CaptureError {
+        Cancelled,
+        NotAllowed,
+        Failed,
+    }
+
+    impl CaptureError {
+        pub fn message(self) -> &'static str {
+            match self {
+                CaptureError::Cancelled => super::CAPTURE_CANCELLED,
+                CaptureError::NotAllowed => super::CAPTURE_DENIED,
+                CaptureError::Failed => super::CAPTURE_FAILED,
+            }
+        }
+    }
+
+    /// Dismissing the share prompt is a `NotAllowedError` too; a refusal
+    /// by the system or a permissions policy says so in its message.
+    fn classify(e: &JsValue) -> CaptureError {
+        let field = |k: &str| {
+            js_sys::Reflect::get(e, &JsValue::from_str(k))
+                .ok()
+                .and_then(|v| v.as_string())
+                .unwrap_or_default()
+        };
+        let name = field("name");
+        let message = field("message").to_lowercase();
+        match name.as_str() {
+            "NotAllowedError" if message.contains("system") || message.contains("policy") => {
+                CaptureError::NotAllowed
+            }
+            "NotAllowedError" => CaptureError::Cancelled,
+            "SecurityError" | "NotSupportedError" => CaptureError::NotAllowed,
+            _ => CaptureError::Failed,
+        }
+    }
+
+    /// `getDisplayMedia` exists, the window is at least `md` wide and the
+    /// main pointer is fine (a mouse or trackpad).
+    pub fn supported() -> bool {
+        let Some(win) = web_sys::window() else {
+            return false;
+        };
+        let api = win.navigator().media_devices().ok().is_some_and(|d| {
+            js_sys::Reflect::get(&d, &JsValue::from_str("getDisplayMedia"))
+                .is_ok_and(|f| f.is_function())
+        });
+        let fits = win
+            .match_media("(min-width: 768px) and (pointer: fine)")
+            .ok()
+            .flatten()
+            .is_some_and(|m| m.matches());
+        api && fits
+    }
+
+    /// Ask for the stream. Must run inside the click (a user gesture).
+    /// `preferCurrentTab`, `selfBrowserSurface` and `displaySurface` are
+    /// not in web-sys's dictionary, so they are set as plain properties;
+    /// browsers that do not know them ignore them.
+    pub fn request() -> Result<js_sys::Promise, CaptureError> {
+        let win = web_sys::window().ok_or(CaptureError::Failed)?;
+        let devices = win
+            .navigator()
+            .media_devices()
+            .map_err(|_| CaptureError::NotAllowed)?;
+        let constraints = web_sys::DisplayMediaStreamConstraints::new();
+        let video = js_sys::Object::new();
+        let _ = js_sys::Reflect::set(
+            &video,
+            &JsValue::from_str("displaySurface"),
+            &JsValue::from_str("browser"),
+        );
+        constraints.set_video(&video);
+        constraints.set_audio_bool(false);
+        let _ = js_sys::Reflect::set(
+            &constraints,
+            &JsValue::from_str("preferCurrentTab"),
+            &JsValue::TRUE,
+        );
+        let _ = js_sys::Reflect::set(
+            &constraints,
+            &JsValue::from_str("selfBrowserSurface"),
+            &JsValue::from_str("include"),
+        );
+        devices
+            .get_display_media_with_constraints(&constraints)
+            .map_err(|e| classify(&e))
+    }
+
+    /// Wait for the stream, draw one frame to a canvas, stop every track.
+    pub async fn grab(
+        promise: js_sys::Promise,
+    ) -> Result<web_sys::HtmlCanvasElement, CaptureError> {
+        let value = JsFuture::from(promise).await.map_err(|e| classify(&e))?;
+        let Ok(stream) = value.dyn_into::<web_sys::MediaStream>() else {
+            return Err(CaptureError::Failed);
+        };
+        let frame = first_frame(&stream).await;
+        // At once, whether the frame was drawn or not.
+        stop_tracks(&stream);
+        frame
+    }
+
+    pub fn stop_tracks(stream: &web_sys::MediaStream) {
+        for t in stream.get_tracks().iter() {
+            if let Ok(track) = t.dyn_into::<web_sys::MediaStreamTrack>() {
+                track.stop();
+            }
+        }
+    }
+
+    async fn first_frame(
+        stream: &web_sys::MediaStream,
+    ) -> Result<web_sys::HtmlCanvasElement, CaptureError> {
+        let doc = web_sys::window()
+            .and_then(|w| w.document())
+            .ok_or(CaptureError::Failed)?;
+        let video: web_sys::HtmlVideoElement = doc
+            .create_element("video")
+            .ok()
+            .and_then(|e| e.dyn_into().ok())
+            .ok_or(CaptureError::Failed)?;
+        video.set_muted(true);
+        video.set_src_object(Some(stream));
+        let drawn = draw_video(&doc, &video).await;
+        video.set_src_object(None);
+        drawn
+    }
+
+    async fn draw_video(
+        doc: &web_sys::Document,
+        video: &web_sys::HtmlVideoElement,
+    ) -> Result<web_sys::HtmlCanvasElement, CaptureError> {
+        if let Ok(p) = video.play() {
+            let _ = JsFuture::from(p).await;
+        }
+        // HAVE_CURRENT_DATA (2) with a size, for up to three seconds.
+        for _ in 0..60 {
+            if video.ready_state() >= 2 && video.video_width() > 0 && video.video_height() > 0 {
+                break;
+            }
+            sleep(50).await;
+        }
+        let (w, h) = (video.video_width(), video.video_height());
+        if w == 0 || h == 0 {
+            return Err(CaptureError::Failed);
+        }
+        let canvas = new_canvas(doc, w, h)?;
+        context(&canvas)?
+            .draw_image_with_html_video_element(video, 0.0, 0.0)
+            .map_err(|_| CaptureError::Failed)?;
+        Ok(canvas)
+    }
+
+    fn new_canvas(
+        doc: &web_sys::Document,
+        w: u32,
+        h: u32,
+    ) -> Result<web_sys::HtmlCanvasElement, CaptureError> {
+        let canvas: web_sys::HtmlCanvasElement = doc
+            .create_element("canvas")
+            .ok()
+            .and_then(|e| e.dyn_into().ok())
+            .ok_or(CaptureError::Failed)?;
+        canvas.set_width(w);
+        canvas.set_height(h);
+        Ok(canvas)
+    }
+
+    fn context(
+        canvas: &web_sys::HtmlCanvasElement,
+    ) -> Result<web_sys::CanvasRenderingContext2d, CaptureError> {
+        canvas
+            .get_context("2d")
+            .ok()
+            .flatten()
+            .and_then(|c| c.dyn_into::<web_sys::CanvasRenderingContext2d>().ok())
+            .ok_or(CaptureError::Failed)
+    }
+
+    /// The crop of the still as a PNG blob.
+    pub async fn crop_png(source: &web_sys::HtmlCanvasElement, c: Crop) -> Option<web_sys::Blob> {
+        let doc = web_sys::window().and_then(|w| w.document())?;
+        let out = new_canvas(&doc, c.w, c.h).ok()?;
+        let (x, y, w, h) = (c.x as f64, c.y as f64, c.w as f64, c.h as f64);
+        context(&out)
+            .ok()?
+            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                source, x, y, w, h, 0.0, 0.0, w, h,
+            )
+            .ok()?;
+        let promise =
+            js_sys::Promise::new(&mut |resolve: js_sys::Function, reject: js_sys::Function| {
+                if out.to_blob_with_type(&resolve, "image/png").is_err() {
+                    let _ = reject.call0(&JsValue::NULL);
+                }
+            });
+        JsFuture::from(promise)
+            .await
+            .ok()?
+            .dyn_into::<web_sys::Blob>()
+            .ok()
+    }
+
+    async fn sleep(ms: i32) {
+        let promise = js_sys::Promise::new(
+            &mut |resolve: js_sys::Function, _reject: js_sys::Function| {
+                let scheduled = web_sys::window().is_some_and(|w| {
+                    w.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms)
+                        .is_ok()
+                });
+                if !scheduled {
+                    let _ = resolve.call0(&JsValue::NULL);
+                }
+            },
+        );
+        let _ = JsFuture::from(promise).await;
     }
 }
 
@@ -232,20 +507,18 @@ fn WidgetInner() -> impl IntoView {
         attached.set(None);
         attach_error.set(None);
     };
+    // One path for a chosen file, a pasted image and a selected area
+    // (M149 B): the same type and size checks, the same preview.
     #[cfg(feature = "hydrate")]
-    let take_file = move |file: web_sys::File| {
-        let mime = file.type_();
-        let bytes = file.size();
+    let take_blob = move |blob: web_sys::Blob, name: String| {
+        let mime = blob.type_();
+        let bytes = blob.size();
         if let Some(problem) = attach_problem(&mime, bytes) {
             attach_error.set(Some(problem.into()));
             return;
         }
         clear_attachment();
-        let blob: web_sys::Blob = file.clone().into();
         let preview = web_sys::Url::create_object_url_with_blob(&blob).unwrap_or_default();
-        let name = Some(file.name())
-            .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| "Pasted image".into());
         attached_blob.set_value(Some(blob));
         attached.set(Some(AttachedImage {
             name,
@@ -253,6 +526,116 @@ fn WidgetInner() -> impl IntoView {
             preview,
         }));
     };
+    #[cfg(feature = "hydrate")]
+    let take_file = move |file: web_sys::File| {
+        let name = Some(file.name())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "Pasted image".into());
+        let blob: web_sys::Blob = file.into();
+        take_blob(blob, name);
+    };
+
+    // "Select an area of the page" (M149 B): shown only on a desktop
+    // browser with screen capture, decided after hydration (the server
+    // renders nothing, so there is no mismatch and no dead control).
+    let area_supported = RwSignal::new(false);
+    Effect::new(move |_| {
+        #[cfg(feature = "hydrate")]
+        area_supported.set(capture::supported());
+    });
+    let area = RwSignal::new(Rect::new(0.0, 0.0, 0.0, 0.0));
+    let area_view = RwSignal::new((0.0_f64, 0.0_f64));
+    let still_box = NodeRef::<leptos::html::Div>::new();
+    #[cfg(feature = "hydrate")]
+    let still: StoredValue<Option<web_sys::HtmlCanvasElement>, leptos::prelude::LocalStorage> =
+        StoredValue::new_local(None);
+    // The captured still goes into the picker once it is mounted.
+    #[cfg(feature = "hydrate")]
+    Effect::new(move |_| {
+        if let (Some(el), Some(canvas)) = (still_box.get(), still.get_value()) {
+            canvas.set_class_name("block h-full w-full object-contain");
+            let _ = el.append_child(&canvas);
+        }
+    });
+    // Back to the dialog, with the floor's message and focus where it belongs.
+    let reopen = move |message: Option<&'static str>, focus: &'static str| {
+        state.set(WidgetState::Editing);
+        dialog_open.set(true);
+        if let Some(m) = message {
+            attach_error.set(Some(m.into()));
+        }
+        #[cfg(feature = "hydrate")]
+        focus_later(focus);
+        #[cfg(not(feature = "hydrate"))]
+        let _ = focus;
+    };
+    let start_area = move || {
+        if state.get_untracked() != WidgetState::Editing {
+            return;
+        }
+        attach_error.set(None);
+        // Capturing first, so closing the dialog does not end the report.
+        state.set(WidgetState::Capturing);
+        dialog_open.set(false);
+        #[cfg(feature = "hydrate")]
+        {
+            // Called here, inside the click: the browser only asks from a
+            // user gesture.
+            let request = capture::request();
+            spawn_local(async move {
+                let grabbed = match request {
+                    Ok(p) => capture::grab(p).await,
+                    Err(e) => Err(e),
+                };
+                match grabbed {
+                    Ok(canvas) => {
+                        still.set_value(Some(canvas));
+                        state.set(WidgetState::Picking);
+                    }
+                    Err(e) => reopen(Some(e.message()), FOCUS_PICK_BUTTON),
+                }
+            });
+        }
+    };
+    let confirm_area = Callback::new(move |_: ()| {
+        #[cfg(feature = "hydrate")]
+        {
+            let Some(source) = still.get_value() else {
+                return;
+            };
+            let (vw, vh) = area_view.get_untracked();
+            let Some(crop) = crate::models::area_select::crop_to_source(
+                area.get_untracked(),
+                vw,
+                vh,
+                f64::from(source.width()),
+                f64::from(source.height()),
+            ) else {
+                return;
+            };
+            // Taken out first: a second Enter does nothing.
+            still.set_value(None);
+            spawn_local(async move {
+                match capture::crop_png(&source, crop).await {
+                    Some(blob) => {
+                        take_blob(blob, "Selected area".into());
+                        let focus = if attached.get_untracked().is_some() {
+                            FOCUS_REMOVE
+                        } else {
+                            FOCUS_PICK_BUTTON
+                        };
+                        reopen(None, focus);
+                    }
+                    None => reopen(Some(CAPTURE_FAILED), FOCUS_PICK_BUTTON),
+                }
+            });
+        }
+    });
+    let cancel_area = Callback::new(move |_: ()| {
+        #[cfg(feature = "hydrate")]
+        still.set_value(None);
+        reopen(Some(CAPTURE_CANCELLED), FOCUS_PICK_BUTTON);
+    });
     let toast = use_context::<ToastContext>();
     let navigate = leptos_router::hooks::use_navigate();
     let navigate = StoredValue::new(navigate);
@@ -554,6 +937,16 @@ fn WidgetInner() -> impl IntoView {
             </div>
         </Show>
 
+        <Show when=move || state.get() == WidgetState::Picking fallback=|| ()>
+            <AreaPicker
+                sel=area
+                view=area_view
+                still_box=still_box
+                on_confirm=confirm_area
+                on_cancel=cancel_area
+            />
+        </Show>
+
         <Dialog
             id="bug-report"
             open=dialog_open
@@ -634,6 +1027,14 @@ fn WidgetInner() -> impl IntoView {
                         {move || match attached.get() {
                             None => view! {
                                 <div class="flex flex-wrap items-center gap-3">
+                                    <Show when=move || area_supported.get() fallback=|| ()>
+                                        <span class="contents" data-area-pick>
+                                            <Button
+                                                variant=ButtonVariant::Secondary
+                                                on_click=Callback::new(move |_| start_area())
+                                            >"Select an area of the page"</Button>
+                                        </span>
+                                    </Show>
                                     <Button
                                         variant=ButtonVariant::Secondary
                                         on_click=Callback::new(move |_| {
@@ -643,6 +1044,9 @@ fn WidgetInner() -> impl IntoView {
                                         })
                                     >"Attach an image"</Button>
                                     <span class="hidden text-caption text-muted md:inline">"or paste an image (Ctrl+V)"</span>
+                                    <Show when=move || area_supported.get() fallback=|| ()>
+                                        <p class="w-full text-caption text-muted">"A captured area stays in your browser until you send."</p>
+                                    </Show>
                                 </div>
                             }.into_any(),
                             Some(a) => view! {
@@ -660,5 +1064,327 @@ fn WidgetInner() -> impl IntoView {
                 </Field>
             </div>
         </Dialog>
+    }
+}
+
+/// "Select an area of the page" (M149 B): a full-viewport overlay on the
+/// captured still. Outside the selection a flat `bg-page` layer at 60 %
+/// (four edge rectangles), the selection a `border-accent` rectangle with
+/// square handles and a size readout; selections under 24 x 24 px are
+/// ignored. Starts with a centred rectangle half the viewport each way.
+///
+/// A11y: a modal dialog (`role="dialog"`, `aria-modal`) labelled "Select an
+/// area of the page", focused on open; arrow keys move the area 8 px (Shift:
+/// 1 px), Alt + arrows resize it, Enter confirms, Esc cancels, Tab cycles the
+/// bar's native "Use area" and "Cancel" buttons; a polite live region reads
+/// the size and position (debounced); focus returns to the feedback dialog.
+/// The still stays in the browser until the reporter sends.
+#[component]
+fn AreaPicker(
+    /// The selection in CSS pixels over the still box.
+    sel: RwSignal<Rect>,
+    /// The still box's size in CSS pixels, measured on mount.
+    view: RwSignal<(f64, f64)>,
+    /// Where the captured still (a canvas) is mounted.
+    still_box: NodeRef<leptos::html::Div>,
+    on_confirm: Callback<()>,
+    on_cancel: Callback<()>,
+) -> impl IntoView {
+    let overlay = NodeRef::<leptos::html::Div>::new();
+    // Drag start (box coordinates) and the selection before the drag.
+    #[allow(unused_variables)]
+    let drag: RwSignal<Option<(f64, f64, Rect)>> = RwSignal::new(None);
+    let spoken = RwSignal::new(String::new());
+    #[allow(unused_variables)]
+    let speak_timer: RwSignal<Option<i32>> = RwSignal::new(None);
+
+    // Measure, start centred, take focus.
+    Effect::new(move |_| {
+        if let Some(el) = overlay.get() {
+            #[cfg(feature = "hydrate")]
+            {
+                let (w, h) = still_box
+                    .get_untracked()
+                    .map(|b| {
+                        let r = b.get_bounding_client_rect();
+                        (r.width(), r.height())
+                    })
+                    .unwrap_or((0.0, 0.0));
+                view.set((w, h));
+                sel.set(Rect::centred(w, h));
+                let _ = el.focus();
+            }
+            #[cfg(not(feature = "hydrate"))]
+            let _ = el;
+        }
+    });
+
+    // The live region, debounced so a held arrow key is read once.
+    Effect::new(move |_| {
+        let text = crate::models::area_select::announcement(sel.get());
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::{closure::Closure, JsCast};
+            let Some(win) = web_sys::window() else {
+                return;
+            };
+            if let Some(id) = speak_timer.get_untracked() {
+                win.clear_timeout_with_handle(id);
+            }
+            let cb = Closure::once(move || spoken.set(text));
+            if let Ok(id) = win.set_timeout_with_callback_and_timeout_and_arguments_0(
+                cb.as_ref().unchecked_ref(),
+                500,
+            ) {
+                speak_timer.set(Some(id));
+            }
+            cb.forget();
+        }
+        #[cfg(not(feature = "hydrate"))]
+        let _ = text;
+    });
+
+    // A point of a pointer event in still-box coordinates.
+    #[cfg(feature = "hydrate")]
+    let local = move |ev: &web_sys::PointerEvent| -> Option<(f64, f64)> {
+        let r = still_box.get_untracked()?.get_bounding_client_rect();
+        Some((
+            f64::from(ev.client_x()) - r.left(),
+            f64::from(ev.client_y()) - r.top(),
+        ))
+    };
+
+    let on_keydown = move |ev: web_sys::KeyboardEvent| {
+        let key = ev.key();
+        // Enter on a bar button is that button's own click.
+        #[cfg(feature = "hydrate")]
+        let on_button = {
+            use wasm_bindgen::JsCast;
+            ev.target()
+                .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                .is_some_and(|el| el.tag_name().eq_ignore_ascii_case("button"))
+        };
+        #[cfg(not(feature = "hydrate"))]
+        let on_button = false;
+        let (vw, vh) = view.get_untracked();
+        let step = if ev.shift_key() { 1.0 } else { 8.0 };
+        let (dx, dy) = match key.as_str() {
+            "ArrowLeft" => (-step, 0.0),
+            "ArrowRight" => (step, 0.0),
+            "ArrowUp" => (0.0, -step),
+            "ArrowDown" => (0.0, step),
+            "Escape" => {
+                ev.prevent_default();
+                ev.stop_propagation();
+                on_cancel.run(());
+                return;
+            }
+            "Enter" if !on_button => {
+                ev.prevent_default();
+                on_confirm.run(());
+                return;
+            }
+            "Tab" => {
+                // Keep focus inside the picker: cycle the bar's buttons.
+                ev.prevent_default();
+                #[cfg(feature = "hydrate")]
+                if let Some(root) = overlay.get_untracked() {
+                    use wasm_bindgen::JsCast;
+                    let buttons: Vec<web_sys::HtmlElement> = root
+                        .query_selector_all("[data-area-bar] button")
+                        .ok()
+                        .map(|l| {
+                            (0..l.length())
+                                .filter_map(|i| l.get(i))
+                                .filter_map(|n| n.dyn_into::<web_sys::HtmlElement>().ok())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if buttons.is_empty() {
+                        return;
+                    }
+                    let active = web_sys::window()
+                        .and_then(|w| w.document())
+                        .and_then(|d| d.active_element());
+                    let at = buttons.iter().position(|b| {
+                        active
+                            .as_ref()
+                            .is_some_and(|a| a == b.unchecked_ref::<web_sys::Element>())
+                    });
+                    let n = buttons.len();
+                    let next = match (at, ev.shift_key()) {
+                        (Some(i), false) => (i + 1) % n,
+                        (Some(i), true) => (i + n - 1) % n,
+                        (None, false) => 0,
+                        (None, true) => n - 1,
+                    };
+                    let _ = buttons[next].focus();
+                }
+                return;
+            }
+            _ => return,
+        };
+        ev.prevent_default();
+        let cur = sel.get_untracked();
+        sel.set(if ev.alt_key() {
+            cur.resized(dx, dy, vw, vh)
+        } else {
+            cur.moved(dx, dy, vw, vh)
+        });
+    };
+
+    let rect_style = move || {
+        let r = sel.get().normalised();
+        format!(
+            "left:{}px;top:{}px;width:{}px;height:{}px",
+            r.x, r.y, r.w, r.h
+        )
+    };
+    // The four dim layers around the selection.
+    let dim_top = move || {
+        format!(
+            "left:0;top:0;right:0;height:{}px",
+            sel.get().normalised().y.max(0.0)
+        )
+    };
+    let dim_bottom = move || {
+        let r = sel.get().normalised();
+        format!("left:0;right:0;top:{}px;bottom:0", r.y + r.h)
+    };
+    let dim_left = move || {
+        let r = sel.get().normalised();
+        format!(
+            "left:0;top:{}px;width:{}px;height:{}px",
+            r.y,
+            r.x.max(0.0),
+            r.h
+        )
+    };
+    let dim_right = move || {
+        let r = sel.get().normalised();
+        format!(
+            "right:0;left:{}px;top:{}px;height:{}px",
+            r.x + r.w,
+            r.y,
+            r.h
+        )
+    };
+    // The readout sits under the selection, or inside it near the bottom.
+    let readout_style = move || {
+        let r = sel.get().normalised();
+        let (_, vh) = view.get();
+        let top = if r.y + r.h + 32.0 < vh {
+            r.y + r.h + 6.0
+        } else {
+            (r.y + r.h - 26.0).max(0.0)
+        };
+        format!("left:{}px;top:{}px", r.x, top)
+    };
+
+    view! {
+        <div
+            node_ref=overlay
+            // The selection rectangle is the focus indicator here. lint:allow(g12)
+            class="fixed inset-0 z-(--z-dialog) cursor-crosshair select-none bg-page outline-none" // lint:allow(g12)
+            role="dialog"
+            aria-modal="true"
+            aria-label="Select an area of the page"
+            aria-describedby="area-picker-help"
+            tabindex="-1"
+            data-testid="area-picker"
+            on:keydown=on_keydown
+            on:pointerdown=move |ev: web_sys::PointerEvent| {
+                #[cfg(feature = "hydrate")]
+                {
+                    if ev.button() != 0 {
+                        return;
+                    }
+                    let Some((x, y)) = local(&ev) else { return };
+                    ev.prevent_default();
+                    if let Some(el) = overlay.get_untracked() {
+                        let _ = el.set_pointer_capture(ev.pointer_id());
+                        let _ = el.focus();
+                    }
+                    drag.set(Some((x, y, sel.get_untracked())));
+                    sel.set(Rect::new(x, y, 0.0, 0.0));
+                }
+                #[cfg(not(feature = "hydrate"))]
+                let _ = ev;
+            }
+            on:pointermove=move |ev: web_sys::PointerEvent| {
+                #[cfg(feature = "hydrate")]
+                {
+                    let Some((ax, ay, _)) = drag.get_untracked() else { return };
+                    let Some((x, y)) = local(&ev) else { return };
+                    let (vw, vh) = view.get_untracked();
+                    sel.set(Rect::from_corners(ax, ay, x, y).clamped(vw, vh));
+                }
+                #[cfg(not(feature = "hydrate"))]
+                let _ = ev;
+            }
+            on:pointerup=move |ev: web_sys::PointerEvent| {
+                #[cfg(feature = "hydrate")]
+                {
+                    let Some((_, _, before)) = drag.get_untracked() else { return };
+                    drag.set(None);
+                    if let Some(el) = overlay.get_untracked() {
+                        let _ = el.release_pointer_capture(ev.pointer_id());
+                    }
+                    // A click or a tiny drag keeps the previous selection.
+                    if !sel.get_untracked().is_usable() {
+                        sel.set(before);
+                    }
+                }
+                #[cfg(not(feature = "hydrate"))]
+                let _ = ev;
+            }
+        >
+            <div node_ref=still_box class="absolute inset-0" aria-hidden="true"></div>
+            <div class="absolute bg-page/60" style=dim_top aria-hidden="true"></div>
+            <div class="absolute bg-page/60" style=dim_bottom aria-hidden="true"></div>
+            <div class="absolute bg-page/60" style=dim_left aria-hidden="true"></div>
+            <div class="absolute bg-page/60" style=dim_right aria-hidden="true"></div>
+            <div class="absolute border-2 border-accent" style=rect_style data-testid="area-selection" aria-hidden="true">
+                <span class="absolute -left-1.5 -top-1.5 size-3 bg-accent"></span>
+                <span class="absolute -right-1.5 -top-1.5 size-3 bg-accent"></span>
+                <span class="absolute -bottom-1.5 -left-1.5 size-3 bg-accent"></span>
+                <span class="absolute -bottom-1.5 -right-1.5 size-3 bg-accent"></span>
+            </div>
+            <span
+                class="figures absolute bg-ink-2 px-2 text-caption text-primary"
+                style=readout_style
+                data-testid="area-size"
+                aria-hidden="true"
+            >
+                {move || size_readout(sel.get())}
+            </span>
+            <p id="area-picker-help" class="sr-only">"Drag to select, or use the arrow keys."</p>
+            <p class="sr-only" aria-live="polite">{move || spoken.get()}</p>
+            <div
+                class="absolute inset-x-0 bottom-6 mx-auto flex w-fit cursor-default items-center gap-3 border border-rule bg-ink-2 px-4 py-3"
+                data-area-bar
+                on:pointerdown=|ev: web_sys::PointerEvent| ev.stop_propagation()
+            >
+                <span class="hidden items-center gap-1 text-caption text-secondary lg:flex">
+                    <Keycap keys="Enter" />
+                    " use, "
+                    <Keycap keys="Esc" />
+                    " cancel, arrows move, Alt + arrows resize"
+                </span>
+                <Button
+                    variant=ButtonVariant::Primary
+                    size=ButtonSize::Touch
+                    on_click=Callback::new(move |_| on_confirm.run(()))
+                >
+                    "Use area"
+                </Button>
+                <Button
+                    variant=ButtonVariant::Quiet
+                    on_click=Callback::new(move |_| on_cancel.run(()))
+                >
+                    "Cancel"
+                </Button>
+            </div>
+        </div>
     }
 }

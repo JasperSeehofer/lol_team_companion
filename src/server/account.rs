@@ -4,7 +4,8 @@
 //! JSON document: the account, the Riot link, the team membership and join
 //! requests, the personal pages (pool, champion notes, learnings, goals),
 //! synced games and ranked snapshots, notes and pair notes the user wrote,
-//! bug reports, votes and survey answers, and a list of the team records the
+//! bug reports with the screenshots attached to them (base64 WebP, M149),
+//! votes and survey answers, and a list of the team records the
 //! user created (kind, id, name, date; their content is the team's). Nothing
 //! about other users: no teammates, no admin notes, no password hash.
 //!
@@ -448,7 +449,7 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
     ),
     (
         "bug_reports",
-        "SELECT page_url, element_label, description, category, viewport_w, viewport_h, \
+        "SELECT id, page_url, element_label, description, category, viewport_w, viewport_h, \
          created_at, status, on_board, public_title, public_note, fixed_in, reporter_seen_at \
          FROM bug_report WHERE user = $u",
     ),
@@ -494,8 +495,77 @@ pub fn export_section_names() -> Vec<&'static str> {
     EXPORT_SECTIONS.iter().map(|(n, _)| *n).collect()
 }
 
-/// Everything stored about `user_id`, as one JSON document.
+/// Most screenshot bytes one export carries (before base64). Each stored
+/// file is at most `attachments::MAX_STORED_BYTES` (1 MB); past this budget
+/// the rest are counted in `bug_report_screenshots_omitted`, never dropped
+/// silently.
+pub const EXPORT_SCREENSHOT_BUDGET: usize = 32 * 1024 * 1024;
+
+/// One exported screenshot: `{report_id, content_type, data_base64}`. The
+/// stored file is always the server's re-encoded WebP.
+pub fn screenshot_entry(report_id: &str, webp: &[u8]) -> serde_json::Value {
+    use base64::Engine;
+    serde_json::json!({
+        "report_id": report_id,
+        "content_type": "image/webp",
+        "data_base64": base64::engine::general_purpose::STANDARD.encode(webp),
+    })
+}
+
+/// The stored screenshots of the user's own bug reports under `dir`
+/// (M149 B): the report ids come from the database, filtered by the user,
+/// and each path from `attachments::path_in` (never from the client).
+/// Returns the entries and how many were left out over the budget.
+async fn export_screenshots(
+    db: &Surreal<Db>,
+    user_id: &str,
+    dir: Option<&std::path::Path>,
+) -> DbResult<(Vec<serde_json::Value>, usize)> {
+    use crate::server::attachments;
+    let Some(dir) = dir else {
+        return Ok((Vec::new(), 0));
+    };
+    let mut ids = crate::server::community::store::user_report_ids(db, user_id).await?;
+    ids.sort();
+    let (mut entries, mut omitted, mut used) = (Vec::new(), 0usize, 0usize);
+    for id in ids {
+        let Some(path) = attachments::path_in(dir, &id) else {
+            continue;
+        };
+        let bytes = match tokio::fs::read(&path).await {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                tracing::error!(report = %id, "could not read screenshot for export: {e}");
+                omitted += 1;
+                continue;
+            }
+        };
+        if bytes.len() > attachments::MAX_STORED_BYTES
+            || used + bytes.len() > EXPORT_SCREENSHOT_BUDGET
+        {
+            omitted += 1;
+            continue;
+        }
+        used += bytes.len();
+        entries.push(screenshot_entry(&id, &bytes));
+    }
+    Ok((entries, omitted))
+}
+
+/// Everything stored about `user_id`, as one JSON document, with the
+/// screenshots in the installed attachments directory.
 pub async fn export_user_data(db: &Surreal<Db>, user_id: &str) -> DbResult<serde_json::Value> {
+    export_user_data_in(db, user_id, crate::server::attachments::dir()).await
+}
+
+/// [`export_user_data`] with the screenshots read from `attachments_dir`
+/// (`None`: no screenshots; tests pass a temporary directory).
+pub async fn export_user_data_in(
+    db: &Surreal<Db>,
+    user_id: &str,
+    attachments_dir: Option<&std::path::Path>,
+) -> DbResult<serde_json::Value> {
     let mut query = String::from("LET $u = type::record('user', $user_key); ");
     for (_, q) in EXPORT_SECTIONS {
         query.push_str(q);
@@ -516,10 +586,21 @@ pub async fn export_user_data(db: &Surreal<Db>, user_id: &str) -> DbResult<serde
     {
         return Err(DbError::NotFound);
     }
+    let (shots, omitted) = export_screenshots(db, user_id, attachments_dir).await?;
+    sections.insert(
+        "bug_report_screenshots".to_string(),
+        serde_json::Value::Array(shots),
+    );
+    if omitted > 0 {
+        sections.insert(
+            "bug_report_screenshots_omitted".to_string(),
+            serde_json::json!(omitted),
+        );
+    }
     Ok(serde_json::json!({
         "format": "companion-export-1",
         "exported_at": chrono::Utc::now().to_rfc3339(),
-        "about": "Everything Team Companion stores about your account. Team records you created are listed by kind, id, name and date; their content belongs to the team and is not part of this file.",
+        "about": "Everything Team Companion stores about your account. Team records you created are listed by kind, id, name and date; their content belongs to the team and is not part of this file. Screenshots you attached to your feedback are in bug_report_screenshots as base64-encoded WebP images, matched to bug_reports by report_id.",
         "not_included": [
             "Your password: only an Argon2 hash is stored, and it is never exported.",
             "Other people's data: teammates, their pages, admin notes on your bug reports.",
@@ -682,5 +763,24 @@ mod tests {
                 "{t}.{f} links a team but DELETE_TEAM leaves it"
             );
         }
+    }
+
+    /// M149 B: an exported screenshot names its report, says it is WebP and
+    /// carries the stored bytes as standard base64.
+    #[test]
+    fn a_screenshot_entry_is_base64_webp() {
+        use base64::Engine;
+        let bytes = b"RIFF\x10\0\0\0WEBPVP8 hello";
+        let e = screenshot_entry("bug_report:abc", bytes);
+        assert_eq!(e["report_id"], "bug_report:abc");
+        assert_eq!(e["content_type"], "image/webp");
+        let data = e["data_base64"].as_str().unwrap();
+        let back = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .unwrap();
+        assert_eq!(back, bytes);
+        assert_eq!(screenshot_entry("x", b"hello")["data_base64"], "aGVsbG8=");
+        let keys: Vec<&String> = e.as_object().unwrap().keys().collect();
+        assert_eq!(keys.len(), 3, "{keys:?}");
     }
 }

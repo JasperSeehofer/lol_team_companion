@@ -10,6 +10,10 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ### Feedback batch 1, round 2 (2026-10-18)
 
+#### Added
+- Feedback on a computer: the screenshot part of "Give Feedback" has "Select an area of the page" in browsers that can capture the screen. The feedback window steps aside, your browser asks which tab to share, Team Companion takes one picture of it and stops sharing at once (nothing is recorded), and you drag a rectangle over the part you mean, or move it with the arrow keys (Alt and the arrows change its size), then choose "Use area" or press Enter. The area is attached like an image you chose yourself and stays in your browser until you send. Cancelling, or a browser that does not allow it, brings the feedback window back with a short note; attaching or pasting an image works as before. Phones do not show the button.
+- "Download my data" now includes the screenshots you attached to your feedback, as WebP images written out in the file (base64) next to the report each belongs to.
+
 #### Fixed
 - Match detail on a phone: late in a game the timeline's markers sit too close together to tap one reliably, so phones now show "Events near the playhead" under the rails: the up to five shown events closest to the playhead as large buttons, each with its marker and clock. Pressing one selects that event and moves the playhead to it, exactly like tapping its marker; Previous event and Next event still step through every shown event. On a phone the keyboard reaches the events through this row instead of every marker on the track; on wider screens the timeline is unchanged.
 - A main button that cannot be used yet (such as "Sync my games" before a Riot account is linked) is now drawn as a plain grey button with readable text instead of a faded highlight, so its label stays easy to read.

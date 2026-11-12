@@ -2946,6 +2946,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-login",
+ "base64 0.22.1",
  "chrono",
  "console_error_panic_hook",
  "dotenvy",

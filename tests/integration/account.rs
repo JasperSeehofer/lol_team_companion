@@ -542,3 +542,80 @@ async fn bug_reports_survive_deletion_anonymised() {
     assert_eq!(bens.description, "Ben's own words");
     assert_eq!(bens.viewport_w, Some(400));
 }
+
+/// M149 B: "Download my data" carries the screenshots of the user's own bug
+/// reports (base64 WebP, matched by report id), read from the attachments
+/// directory; another user's screenshot never appears, and a report without
+/// a file has no entry.
+#[tokio::test]
+async fn export_carries_the_reporters_own_screenshots() {
+    use base64::Engine;
+    use lol_team_companion::server::attachments;
+
+    let dir = std::env::temp_dir().join(format!(
+        "companion-export-shots-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let db = crate::common::test_db().await;
+    let ana = db::create_user(&db, "ana".into(), "ana@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let ben = db::create_user(&db, "ben".into(), "ben@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let report = |user: String, text: &'static str| {
+        let db = db.clone();
+        async move {
+            db::create_bug_report(
+                &db,
+                &user,
+                "/draft".into(),
+                "Save button".into(),
+                text.into(),
+                "bug".into(),
+                None,
+                None,
+            )
+            .await
+            .unwrap()
+        }
+    };
+    let with_shot = report(ana.clone(), "with a screenshot").await;
+    let _without = report(ana.clone(), "without one").await;
+    let bens = report(ben.clone(), "ben's report").await;
+    let ana_bytes = b"RIFF....WEBPana-picture".to_vec();
+    attachments::store_in(&dir, &with_shot, &ana_bytes).unwrap();
+    attachments::store_in(&dir, &bens, b"RIFF....WEBPben-picture").unwrap();
+
+    let doc = account::export_user_data_in(&db, &ana, Some(&dir))
+        .await
+        .unwrap();
+    let shots = doc["data"]["bug_report_screenshots"].as_array().unwrap();
+    assert_eq!(shots.len(), 1, "{shots:?}");
+    assert_eq!(shots[0]["report_id"], with_shot.as_str());
+    assert_eq!(shots[0]["content_type"], "image/webp");
+    let back = base64::engine::general_purpose::STANDARD
+        .decode(shots[0]["data_base64"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(back, ana_bytes);
+    assert!(doc["data"].get("bug_report_screenshots_omitted").is_none());
+    // The report it belongs to carries the same id.
+    let reports = doc["data"]["bug_reports"].as_array().unwrap();
+    assert!(reports.iter().any(|r| r["id"] == with_shot.as_str()));
+    let text = doc.to_string();
+    let ben_b64 = base64::engine::general_purpose::STANDARD.encode(b"RIFF....WEBPben-picture");
+    assert!(!text.contains(&ben_b64), "ben's screenshot leaked");
+    assert!(!text.contains("ben's report"));
+
+    // Without an attachments directory the section is there and empty.
+    let doc = account::export_user_data_in(&db, &ana, None).await.unwrap();
+    assert_eq!(doc["data"]["bug_report_screenshots"], serde_json::json!([]));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
