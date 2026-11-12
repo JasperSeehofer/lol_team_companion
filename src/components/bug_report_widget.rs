@@ -395,6 +395,46 @@ mod capture {
             .ok()
     }
 
+    /// Resolves once the open `<dialog data-dialog="{id}">` has fired its
+    /// `close` event (at once when it is not open; after a second at the
+    /// latest). `HTMLDialogElement::close()` queues that event as a task, so
+    /// a capture refused at once (a microtask) would otherwise reopen the
+    /// dialog first and the late `close` would shut it again.
+    /// Call it before the dialog is asked to close.
+    pub fn dialog_closed(id: &str) -> js_sys::Promise {
+        let dialog = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| {
+                d.query_selector(&format!("dialog[data-dialog=\"{id}\"]"))
+                    .ok()
+                    .flatten()
+            })
+            .and_then(|e| e.dyn_into::<web_sys::HtmlDialogElement>().ok())
+            .filter(|d| d.open());
+        js_sys::Promise::new(
+            &mut |resolve: js_sys::Function, _reject: js_sys::Function| {
+                let Some(dialog) = dialog.as_ref() else {
+                    let _ = resolve.call0(&JsValue::NULL);
+                    return;
+                };
+                let opts = web_sys::AddEventListenerOptions::new();
+                opts.set_once(true);
+                let listened = dialog
+                    .add_event_listener_with_callback_and_add_event_listener_options(
+                        "close", &resolve, &opts,
+                    )
+                    .is_ok();
+                let timed = web_sys::window().is_some_and(|w| {
+                    w.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 1000)
+                        .is_ok()
+                });
+                if !listened && !timed {
+                    let _ = resolve.call0(&JsValue::NULL);
+                }
+            },
+        )
+    }
+
     async fn sleep(ms: i32) {
         let promise = js_sys::Promise::new(
             &mut |resolve: js_sys::Function, _reject: js_sys::Function| {
@@ -574,6 +614,10 @@ fn WidgetInner() -> impl IntoView {
             return;
         }
         attach_error.set(None);
+        // Before closing: resolves once the dialog's queued `close` event
+        // has run, so a quick refusal cannot be undone by it.
+        #[cfg(feature = "hydrate")]
+        let closed = capture::dialog_closed("bug-report");
         // Capturing first, so closing the dialog does not end the report.
         state.set(WidgetState::Capturing);
         dialog_open.set(false);
@@ -587,6 +631,9 @@ fn WidgetInner() -> impl IntoView {
                     Ok(p) => capture::grab(p).await,
                     Err(e) => Err(e),
                 };
+                // One finish path: every outcome waits for the close, then
+                // either shows the picker or reopens with its message.
+                let _ = wasm_bindgen_futures::JsFuture::from(closed).await;
                 match grabbed {
                     Ok(canvas) => {
                         still.set_value(Some(canvas));
