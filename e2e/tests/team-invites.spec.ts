@@ -216,11 +216,13 @@ test("a coach invites players; a plain member sees no invite panel", async ({ br
   // The coach sees "Invite a player" and mints a link of their own.
   const coachLink = await mintLink(coach.page, "");
   expect(coachLink).not.toBe(link);
-  await expect(coach.page.locator("[data-team-invites]")).toContainText("until the leader places them");
+  await expect(coach.page.locator("[data-team-invites]")).toContainText("until you or the leader place them");
   // Both links of the team are listed for the coach.
   await expect(coach.page.locator("[data-team-invites] [data-team-invite]")).toHaveCount(2);
-  // No join requests panel for the coach: answering them stays with the leader.
-  await expect(coach.page.locator("[data-join-requests]")).toHaveCount(0);
+  // M160 item 3: the coach answers join requests too, so the panel is there
+  // (empty here: no one has asked yet).
+  await expect(coach.page.locator("[data-join-requests]")).toHaveCount(1);
+  await expect(coach.page.locator("[data-join-requests]")).toContainText("No requests waiting");
 
   // A plain member gets no invite panel.
   await member.page.goto("/team/dashboard");
