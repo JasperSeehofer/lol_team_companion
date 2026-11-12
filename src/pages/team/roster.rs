@@ -89,7 +89,7 @@ pub fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl I
                     }
                 }
                 Err(e) => {
-                    create_error.set(Some(e.to_string()));
+                    create_error.set(Some(crate::models::utils::error_text(&e)));
                     creating.set(false);
                 }
             }
@@ -104,7 +104,9 @@ pub fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl I
                         .push
                         .run(Toast::success(format!("Request sent to {team_name}")));
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });

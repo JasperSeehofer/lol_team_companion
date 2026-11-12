@@ -93,7 +93,7 @@ pub async fn sync_team_stats(queue_id: Option<i32>) -> Result<String, ServerFnEr
 
     if !riot_client.is_configured() {
         return Err(ServerFnError::new(
-            "RIOT_API_KEY not configured. Set it in .env to enable match syncing.",
+            "Riot features are off on this server right now. Games stored earlier still show.",
         ));
     }
     authz::rate_limit(Bucket::Riot).await?;

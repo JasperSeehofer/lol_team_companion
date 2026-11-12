@@ -689,7 +689,9 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
         leptos::task::spawn_local(async move {
             match mark_brief_read(id, read).await {
                 Ok(()) => on_change.run(()),
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -1380,7 +1382,9 @@ fn MatchEditor(
                     toast.push.run(Toast::success("Match removed"));
                     on_saved.run(());
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });

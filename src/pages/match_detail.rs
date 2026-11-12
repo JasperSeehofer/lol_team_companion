@@ -85,7 +85,7 @@ pub async fn fetch_match_detail(
     let riot_client = authz::riot()?;
     if !riot_client.is_configured() {
         return Err(ServerFnError::new(
-            "Riot API key not configured. Ask an admin to add a RIOT_API_KEY.",
+            "Riot features are off on this server right now.",
         ));
     }
     // Match + timeline.

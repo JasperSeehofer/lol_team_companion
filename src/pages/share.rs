@@ -242,7 +242,9 @@ pub fn ShareDialog(
                     toast.push.run(Toast::success("Link created"));
                     links.refetch();
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
             creating.set(false);
         });
@@ -256,7 +258,9 @@ pub fn ShareDialog(
                         .run(Toast::success("Link revoked: it opens nothing now"));
                     links.refetch();
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });

@@ -593,7 +593,9 @@ pub fn DraftGraphPanel(
             }
             let cb = Closure::once(move || {
                 leptos::task::spawn_local(async move {
-                    let r = graph_candidates(json).await.map_err(|e| e.to_string());
+                    let r = graph_candidates(json)
+                        .await
+                        .map_err(|e| crate::models::utils::error_text(&e));
                     if generation.get_value() == gen {
                         asked.set_value((gen, asked_json));
                         result.set(Some(r));
@@ -751,7 +753,7 @@ pub fn DraftGraphPanel(
                         .run(Toast::success("Team note saved; the ranking uses it now"));
                     refresh.update(|n| *n += 1);
                 }
-                Err(e) => rel_error.set(Some(e.to_string())),
+                Err(e) => rel_error.set(Some(crate::models::utils::error_text(&e))),
             }
             rel_busy.set(false);
         });

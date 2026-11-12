@@ -698,7 +698,7 @@ fn OpponentDetail(
             for (pid, rid) in list {
                 match fetch_player_intel_fn(pid, rid).await {
                     Ok(()) => ok += 1,
-                    Err(e) => last_err = Some(e.to_string()),
+                    Err(e) => last_err = Some(crate::models::utils::error_text(&e)),
                 }
             }
             refreshing.set(false);
@@ -880,7 +880,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                     on_changed.run(());
                     toast.push.run(Toast::success("Player surveyed"));
                 }
-                Err(e) => error.set(Some(e.to_string())),
+                Err(e) => error.set(Some(crate::models::utils::error_text(&e))),
             }
             fetching.set(false);
         });

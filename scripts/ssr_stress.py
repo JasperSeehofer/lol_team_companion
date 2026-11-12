@@ -32,7 +32,7 @@ TIMEOUT = float(sys.argv[4]) if len(sys.argv) > 4 else 20.0
 INVITE = os.environ.get("INVITE_CODE", "E2E-INVITE-CODE")
 DUMP = os.environ.get("STRESS_DUMP_DIR")
 
-SIGNED_IN = ["/", "/profile", "/stats", "/me", "/team/roster", "/opponents",
+SIGNED_IN = ["/", "/profile", "/stats", "/me", "/team/dashboard", "/opponents",
              "/draft", "/changelog", "/bugs", "/what-next"]
 PUBLIC = [f"/auth/register?invite={INVITE}", "/auth/login", "/legal/datenschutz"]
 

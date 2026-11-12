@@ -740,7 +740,9 @@ fn TeamView(
                     toast.push.run(Toast::success(what));
                     reload.run(());
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -756,7 +758,9 @@ fn TeamView(
                         .run(Toast::success(format!("{name} was removed from the team")));
                     reload.run(());
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -788,7 +792,9 @@ fn TeamView(
                         let _ = w.location().set_href("/team/dashboard");
                     }
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -991,7 +997,7 @@ fn EditTeam(
                     toast.push.run(Toast::success("Team saved"));
                     reload.run(());
                 }
-                Err(e) => error.set(Some(e.to_string())),
+                Err(e) => error.set(Some(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -1389,7 +1395,9 @@ fn JoinRequests(
                     requests.refetch();
                     reload.run(());
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -1451,7 +1459,9 @@ fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl Into
                     draft.set(String::new());
                     notes.refetch();
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
             adding.set(false);
         });
@@ -1471,13 +1481,17 @@ fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl Into
                             leptos::task::spawn_local(async move {
                                 match undo_note_edit(id).await {
                                     Ok(()) => notes.refetch(),
-                                    Err(e) => toast.push.run(Toast::error(e.to_string())),
+                                    Err(e) => toast
+                                        .push
+                                        .run(Toast::error(crate::models::utils::error_text(&e))),
                                 }
                             });
                         }),
                     ));
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -1494,13 +1508,17 @@ fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl Into
                             leptos::task::spawn_local(async move {
                                 match restore_note(id).await {
                                     Ok(()) => notes.refetch(),
-                                    Err(e) => toast.push.run(Toast::error(e.to_string())),
+                                    Err(e) => toast
+                                        .push
+                                        .run(Toast::error(crate::models::utils::error_text(&e))),
                                 }
                             });
                         }),
                     ));
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -1508,7 +1526,9 @@ fn TeamNotes(notes: Resource<Result<Vec<TeamNote>, ServerFnError>>) -> impl Into
         leptos::task::spawn_local(async move {
             match toggle_note_pin(id, pinned).await {
                 Ok(()) => notes.refetch(),
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });

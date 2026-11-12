@@ -263,7 +263,7 @@ pub fn AdminTraitsPage() -> impl IntoView {
                         .run(Toast::success(format!("Saved {name}'s traits")));
                     rows.refetch();
                 }
-                Err(e) => error.set(Some(e.to_string())),
+                Err(e) => error.set(Some(crate::models::utils::error_text(&e))),
             }
             busy.set(false);
         });
@@ -281,7 +281,7 @@ pub fn AdminTraitsPage() -> impl IntoView {
                     )));
                     rows.refetch();
                 }
-                Err(e) => error.set(Some(e.to_string())),
+                Err(e) => error.set(Some(crate::models::utils::error_text(&e))),
             }
             busy.set(false);
         });

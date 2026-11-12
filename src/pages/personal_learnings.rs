@@ -271,13 +271,17 @@ pub fn PersonalLearningsPage() -> impl IntoView {
                                     .await;
                                     match res {
                                         Ok(_) => learnings.refetch(),
-                                        Err(e) => toast.push.run(Toast::error(e.to_string())),
+                                        Err(e) => toast.push.run(Toast::error(
+                                            crate::models::utils::error_text(&e),
+                                        )),
                                     }
                                 });
                             }),
                         ));
                 }
-                Err(e) => toast.push.run(Toast::error(e.to_string())),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
         });
     });
@@ -567,7 +571,9 @@ pub fn NewLearningPage() -> impl IntoView {
                     }
                 }
                 Err(e) => {
-                    toast.push.run(Toast::error(e.to_string()));
+                    toast
+                        .push
+                        .run(Toast::error(crate::models::utils::error_text(&e)));
                     saving.set(false);
                 }
             }

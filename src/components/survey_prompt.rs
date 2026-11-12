@@ -201,7 +201,7 @@ pub fn SurveyBand(
                     }
                 }
                 Err(e) => {
-                    let msg = e.to_string();
+                    let msg = crate::models::utils::error_text(&e);
                     error.set(Some(if msg.contains("closed") || msg.contains("already") {
                         "This question has closed. Thanks anyway.".to_string()
                     } else {

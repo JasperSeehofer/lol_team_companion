@@ -1668,9 +1668,10 @@ fn DraftEditor(
                         .push
                         .run(Toast::success(format!("Deleted \u{201c}{name}\u{201d}")));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not delete: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not delete: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -2437,9 +2438,10 @@ fn PlanSection(
         leptos::task::spawn_local(async move {
             match persist(snap).await {
                 Ok(id) => go(nav, &format!("/opponents?return_to=draft&draft_id={id}")),
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not save the draft: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not save the draft: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -2683,7 +2685,9 @@ fn NextSteps(cx: Ctx) -> impl IntoView {
             match check_draft_has_game_plan(id.clone()).await {
                 Ok(None) => go(nav, &format!("/game-plan?draft_id={id}")),
                 Ok(Some(plan)) => existing.set(Some(plan)),
-                Err(e) => toast.push.run(Toast::error(format!("{e}"))),
+                Err(e) => toast
+                    .push
+                    .run(Toast::error(crate::models::utils::error_text(&e))),
             }
             busy.set(false);
         });
@@ -2906,7 +2910,10 @@ fn BanPriorities() -> impl IntoView {
                     editing.set(false);
                     toast.push.run(Toast::success("Ban priorities saved"));
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not save: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });

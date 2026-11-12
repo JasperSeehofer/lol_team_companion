@@ -145,7 +145,8 @@ pub fn AdminInvitesPage() -> impl IntoView {
                 }
                 Err(e) => {
                     if let Some(t) = toast {
-                        t.show.run((ToastKind::Error, e.to_string()));
+                        t.show
+                            .run((ToastKind::Error, crate::models::utils::error_text(&e)));
                     }
                 }
             }
@@ -156,7 +157,8 @@ pub fn AdminInvitesPage() -> impl IntoView {
         if let Some(result) = disable.value().get() {
             if let Err(e) = result {
                 if let Some(t) = toast {
-                    t.show.run((ToastKind::Error, e.to_string()));
+                    t.show
+                        .run((ToastKind::Error, crate::models::utils::error_text(&e)));
                 }
             }
             invites.refetch();
