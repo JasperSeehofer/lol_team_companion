@@ -1,0 +1,8 @@
+# M160 item 8 — fix round 1 (from the Sonnet verifier; commits c85e90e, cad5521)
+1. src/pages/opponents.rs ~:122: the 1000 limit counts bytes (`notes.len()`); use `notes.chars().count()` so it matches the client's maxlength (characters).
+2. ~:1066-1070: put `aria-expanded` on the toggle in BOTH states (the same button element whether collapsed or expanded, or one on each with the right value) as a string: `attr:aria-expanded=move || notes_expanded.get().to_string()` (copy home.rs ~:1064). `aria-controls` must point to an id that exists only when it exists — simplest: drop aria-controls.
+3. Make the notes Field/TextField id unique per player: `opp-note-{player_id_key}` (strip the table prefix the way the file builds other ids) instead of `opp-note-{role}`; update the e2e selectors that use it.
+4. Skip the save when the text equals the current `pnotes` value (on blur and on Ctrl+Enter), so collapsing after a save never triggers a second save.
+5. Add `data-testid="opp-note-preview"` to the one-line preview and use it in e2e/tests/opponent-notes.spec.ts instead of the class selector.
+6. e2e: read how the dossier selection survives `page.reload()` in opponents.rs (URL query such as `?opponent=`? replace_url?). If it does NOT persist, after each reload in the spec re-open the dossier the same way the test opened it first. Add one test: type a note and press Control+Enter (no blur) → preview shows the text after reload. Keep the spec focused: remove tests that only repeat the same flow (keep at most 4 tests).
+7. cargo fmt; memory permitting: cargo clippy --features ssr -- -D warnings and the hydrate wasm clippy. Change nothing else.
