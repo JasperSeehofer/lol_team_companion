@@ -103,3 +103,31 @@ This run had no subagent tool; I wrote this one file myself and touched no code.
 - STALE: `src/pages/match_detail.rs` RAILS comment and the Vision caption once recall inference lands.
 - STALE: `src/components/ui/timeline.rs` header ("reserved for M4", "no playback") vs its use on match detail.
 - STALE: `docs/DESIGN.md` Button row "Targets at least 24px" vs the 44 px phone rule; state the phone rule for timeline markers in 6.3.
+
+## Closing critique (frames of 39a1d5e)
+
+Mode: critique, fresh context (the cards above were written in an earlier context; same role across a reset, per playbook 5.7).
+Read from the CI frames of run 43299035974 (`publish-round-r1/frames/after/`), not from a browser run of mine. No subagent
+tool was available, so the reads and the pixel measurements below are my own; I changed no code and wrote only this section.
+Before frames: `M141-team-companion-feedback-batch-1/publish-round-r1/frames/after/match-detail-390.png` and `me-390.png`
+(M152's frames contain no match detail or /me). `match-detail-review-*.png` come from M159's `match-thread.spec.ts`: noted here, not judged.
+
+Rubric: `publish-round-r1/rubric-check.md` covers public pages only (the harness cannot sign in), so none of these five
+surfaces. I applied A1 to A4, I1 to I8 and V1 to V3 by hand. Its V2 hit (`data-feedback-…`, off-scale spacing) on the auth
+pages belongs to the floating feedback button. This branch did not cause it; it carries over.
+
+| Surface | Card | Verdict | Reasons |
+|---|---|---|---|
+| Match detail 390 (`-390`, `-390-flow`, `-timeline-390`) | C, A | FIX, cosmetic (R3), not blocking | Card C is met: five 44 px buttons in the "Events near the playhead" row (about 42 to 44 px from pixels, `size-11`), in time order with side colour, a glyph and a clock. Previous / Next stay full width. The 1280 markup is `md:hidden`. The clock sits inside the button, not below it as the card said. It is readable, so I accept it. Card A: "Map view comes with the Rift Board." is plain text after the legend, with no link (honesty rule met). FIX: the vision caption "Re-import this game to see recalls and positions." tells a member to do something only an admin can do (`/admin/reimport`). Use: "Wards: yours only. This game was stored without item purchases, so recalls and positions are not drawn." Compared with M141: the old caption "none are drawn" is gone, and the hierarchy and scoreboard are unchanged. A1 carry-over, not from this branch: the rail filter chips and the bordered rail labels are about 28 px tall at 390. |
+| Match detail 1280 | C (no change) | PASS | Header and scoreboard match the M141 render. The timeline at 1280 is not in the frames, so card C step 2 ("1280 identical") is checked from the code (`md:hidden`), not from a render. Add a 1280 timeline still to the next frame set. |
+| Feedback dialog 1280 + picker | B | PASS | The order matches the card: "Select an area of the page", then "Attach an image", "or paste", and the line "stays in your browser until you send". Overlay: the area outside is flat and dimmed (no blur or gradient), with a 2 px chalk border, square chalk handles, a `648 x 400` readout in `figures`, and a bottom bar with Keycap hints, "Use area" (Primary) and "Cancel" (Quiet). One signature moment, no motion (A3 n/a), and a full keyboard path (A4). The bar button measures 32 px at 1280: that is `ButtonSize::Touch` at `md` (h-8 for a fine pointer), so it is as specified. The dark bands above and below the still are letterboxing from the 16:9 stubbed stream, not the overlay. "Use area" instead of "Use this area" is acceptable. |
+| Feedback dialog 390 | B gate | PASS | No area button, no paste line and no capture line below `md`. The floor is unchanged from M141. A1 carry-over: "Attach an image" is about 32 px tall on the phone. |
+| /me Sync, disabled (390, 1280) | D | PASS | From pixels: text (149,161,162) on fill (28,43,43) = 5.52:1 (the card computed 5.54). The fill against the page is 1.28:1, so the full `border-outline` carries the shape, as specified. With no chalk fill it reads as off. The reason is visible next to it ("No Riot account linked" plus the callout), so card D step 4 is met without `aria-describedby`. M141's 50% chalk button is gone. |
+| /admin/reimport (390, 1280) | none (new page) | PASS, with a gap | Plain admin page: eyebrow, headline, one meta line, a compact empty state, no ornament. V3 is fine at 390. Only the empty state is rendered. The waiting count, the Primary Touch button and the result line are unrendered and not judged. Add one frame with games waiting. |
+
+No REJECT: every effect uses the right primitive. One FIX, which is copy only (R3).
+
+## Staleness flags (closing)
+
+- CONTRADICTION: `src/pages/match_detail.rs` `has_purchase_data` (any purchase event) vs `src/server/db.rs` `NEEDS_REIMPORT` (timeline version). A current-version game without purchases shows the re-import caption while `/admin/reimport` says "Every stored game is up to date". The seeded game in these frames is likely this case. A builder should check it; the caption rewording above makes the copy true either way.
+- STALE: `publish-round-r1/rubric-check.md` covers public pages only, so the signed-in surfaces have no harness evidence.
