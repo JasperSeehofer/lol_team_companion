@@ -100,7 +100,7 @@ test("a signed-in player joins with the link; one already in a team cannot", asy
   await loner.waitForLoadState("networkidle");
   await box.getByTestId("invite-join-button").click();
   await waitForHome(loner);
-  await loner.goto("/team/roster");
+  await loner.goto("/team/dashboard");
   await expect(loner.getByRole("heading", { name: "Roster" })).toBeVisible();
   await expect(loner.locator("main")).toContainText(teamName);
 });

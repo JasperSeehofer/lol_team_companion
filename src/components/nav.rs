@@ -94,13 +94,7 @@ pub const PAGES: &[NavPage] = &[
         "/team/dashboard",
         "Team",
         "team",
-        "notes roster bench substitutes",
-    ),
-    page(
-        "/team/roster",
-        "Roster",
-        "team",
-        "members players join invite",
+        "notes roster bench substitutes members players join invite",
     ),
     page("/me", "My games", "you", "solo ranked lp trends history"),
     page(
@@ -492,10 +486,7 @@ const MENU_GROUPS: &[(&str, &[&str])] = &[
         &["/", "/opponents", "/draft", "/tree-drafter", "/game-plan"],
     ),
     ("After the game", &["/post-game", "/action-items", "/stats"]),
-    (
-        "Team",
-        &["/team/dashboard", "/team/roster", "/champion-pool"],
-    ),
+    ("Team", &["/team/dashboard", "/champion-pool"]),
     ("You", &["/me", "/personal-learnings", "/profile"]),
 ];
 

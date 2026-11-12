@@ -76,7 +76,7 @@ pub fn RosterPage() -> impl IntoView {
     });
     let team = Resource::new(|| (), |_| get_team_dashboard());
     // Created before any Suspense, so server and browser agree on them.
-    let requests = Resource::new(|| (), |_| get_pending_requests());
+    let _requests = Resource::new(|| (), |_| get_pending_requests());
     let teams = Resource::new(|| (), |_| list_teams());
     view! {
         <PageShell width=PageWidth::Standard attr:data-feedback-label="Roster">
@@ -88,7 +88,7 @@ pub fn RosterPage() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     match team.await {
-                        Ok(Some((t, members, me))) => view! { <MemberRoster team=t members=members me=me requests=requests /> }.into_any(),
+                        Ok(Some((t, members, me))) => view! { <MemberRoster team=t members=members me=me /> }.into_any(),
                         Ok(None) => view! { <NoTeamRoster teams=teams /> }.into_any(),
                         Err(_) => view! {
                             <PageHeader title="Roster" />
@@ -101,14 +101,9 @@ pub fn RosterPage() -> impl IntoView {
     }
 }
 
-/// A member's view: the roster by place and how new players join.
+/// A member's view: the roster by place.
 #[component]
-fn MemberRoster(
-    team: Team,
-    members: Vec<TeamMember>,
-    me: String,
-    requests: Resource<Result<Vec<crate::models::user::JoinRequest>, ServerFnError>>,
-) -> impl IntoView {
+fn MemberRoster(team: Team, members: Vec<TeamMember>, me: String) -> impl IntoView {
     let is_leader = team.created_by == me;
     let groups = group_roster(&members);
     let place_word = |m: &TeamMember| -> &'static str {
@@ -171,36 +166,12 @@ fn MemberRoster(
                 </tbody>
             </Table>
         </section>
-        <section class="mt-12 max-w-prose" aria-labelledby="joining-h" data-roster-joining>
-            <SectionHeader title="How players join" id="joining-h" />
-            <p class="text-body text-secondary">
-                {format!("The team leader or a coach sends new players an invite link from the team page (\u{201c}Invite a player\u{201d}): signing up with it puts them on {} at once. Players who already have an account open this page, find the team under \u{201c}Join a team\u{201d} and ask to join; the leader answers on the team page. New members start as \u{201c}not placed yet\u{201d} until the leader puts them in the starting five, on the bench or with the coaches.", team.name)}
-            </p>
-            {is_leader.then(|| view! {
-                <Suspense fallback=|| ()>
-                    {move || requests.get().map(|r| {
-                        let n = r.map(|l| l.len()).unwrap_or(0);
-                        view! {
-                            <p class="mt-3 text-body text-primary" data-pending-requests=n>
-                                {match n {
-                                    0 => "No requests waiting right now.".to_string(),
-                                    1 => "1 request is waiting.".to_string(),
-                                    n => format!("{n} requests are waiting."),
-                                }}
-                                " "
-                                <A href="/team/dashboard" attr:class="underline decoration-outline underline-offset-4 hover:decoration-accent">"Answer on the team page"</A>
-                            </p>
-                        }
-                    })}
-                </Suspense>
-            })}
-        </section>
     }
 }
 
 /// No team yet: create one, or ask to join one.
 #[component]
-fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl IntoView {
+pub fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let name = RwSignal::new(String::new());
     let region = RwSignal::new("EUW".to_string());

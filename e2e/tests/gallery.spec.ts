@@ -344,7 +344,7 @@ test("command bar: Ctrl+K opens it, typing filters, Enter goes", async ({ adminP
   await expect(bar).toHaveAttribute("open", "");
   await adminPage.keyboard.type("roster");
   await adminPage.keyboard.press("Enter");
-  await adminPage.waitForURL("**/team/roster");
+  await adminPage.waitForURL("**/team/dashboard");
 });
 
 test("segmented control and switch work from the keyboard", async ({ adminPage }) => {

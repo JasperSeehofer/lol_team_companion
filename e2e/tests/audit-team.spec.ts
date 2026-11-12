@@ -71,7 +71,7 @@ test("bench: the leader starts, benches and unbenches a player", async ({ authed
   await expect(leader.locator('[data-roster-group="substitutes"] [data-place="substitute"]')).toHaveCount(0);
 
   // The player sees the roster with their team; no leader actions.
-  await navigateTo(player, "/team/roster");
+  await navigateTo(player, "/team/dashboard");
   await expect(player.getByRole("heading", { level: 2, name: "Members" })).toBeVisible();
   await navigateTo(player, "/team/dashboard");
   await expect(player.getByRole("button", { name: /Roster actions for/ })).toHaveCount(0);

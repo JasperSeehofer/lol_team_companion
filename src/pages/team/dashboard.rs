@@ -9,15 +9,17 @@ use crate::components::ui::{ctrl_enter_submits, enter_submits, Keycap};
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, Callout, ChampionAvatar, ConfirmDialog,
     ConfirmTone, Dialog, EmptySize, EmptyState, Field, GameResult, GlyphSize, InputKind,
-    LoadFailed, Menu, MenuAlign, MenuItem, NoTeamState, PageHeader, PageShell, ResultGlyph, Role,
-    RoleLabel, SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape,
-    TextField, Toast, ToastContext, UserAvatar,
+    LoadFailed, Menu, MenuAlign, MenuItem, PageHeader, PageShell, ResultGlyph, Role, RoleLabel,
+    SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast,
+    ToastContext, UserAvatar,
 };
 use crate::models::game_plan::PoolGapWarning;
 use crate::models::invite::Invite;
 use crate::models::team::Team;
 use crate::models::team_note::TeamNote;
 use crate::models::user::{JoinRequest, TeamMember};
+use crate::pages::team::roster::list_teams;
+use crate::pages::team::roster::NoTeamRoster;
 use leptos::prelude::*;
 use leptos_router::components::A;
 
@@ -610,10 +612,10 @@ pub fn TeamDashboard() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     match team.await {
-                        Ok(Some((t, members, me))) => view! { <TeamView team=t members=members me=me reload=reload res=res /> }.into_any(),
+                        Ok(Some((t, members, me))) => view! { <TeamView team=t members=members me=me reload=reload res /> }.into_any(),
                         Ok(None) => view! {
                             <PageHeader title="Team" />
-                            <NoTeamState />
+                            <NoTeamRoster teams=Resource::new(|| (), |_| list_teams()) />
                         }.into_any(),
                         Err(_) => view! {
                             <PageHeader title="Team" />
@@ -634,6 +636,7 @@ fn TeamView(
     reload: Callback<()>,
     res: TeamResources,
 ) -> impl IntoView {
+    let _requests = res.requests;
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let is_leader = team.created_by == me;
     // The leader and the team's coaches manage invite links (M148); the
@@ -655,6 +658,7 @@ fn TeamView(
     let lead_open = RwSignal::new(false);
     let member_count = members.len();
     let region = team.region.clone();
+    let _team_name = team.name.clone();
 
     let on_action = Callback::new(move |(user_id, name, action): (String, String, String)| {
         if action == "kick" {
@@ -833,7 +837,6 @@ fn TeamView(
                 <span>{if is_leader { "You lead this team".to_string() } else { format!("Led by {leader_name}") }}</span>
             }
             actions=move || view! {
-                <Button href="/team/roster">"Roster and joining"</Button>
                 {if is_leader {
                     view! { <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| edit_open.set(true))>"Edit team"</Button> }.into_any()
                 } else {

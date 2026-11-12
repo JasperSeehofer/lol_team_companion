@@ -7,8 +7,7 @@ import { test, expect } from "./fixtures";
 
 const AUTHED_PAGES = [
   { path: "/profile", content: /profile|account|riot/i },
-  { path: "/team/dashboard", content: /team|dashboard|roster/i },
-  { path: "/team/roster", content: /team|create|join/i },
+  { path: "/team/dashboard", content: /team|dashboard|roster|create|join/i },
   { path: "/draft", content: /draft|ban|pick/i },
   { path: "/tree-drafter", content: /tree|draft/i },
   { path: "/stats", content: /team games|games/i },

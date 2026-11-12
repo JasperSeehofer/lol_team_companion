@@ -69,6 +69,25 @@ for (const [path, title] of [
   });
 }
 
+test("GET /team/roster redirects to /team/dashboard", async ({ authedPage: page }) => {
+  await page.goto("/team/roster");
+  await page.waitForURL("**/team/dashboard", { timeout: 10000 });
+  expect(page.url()).toContain("/team/dashboard");
+});
+
+test("a fresh account can create a team from /team/dashboard", async ({ authedPage: page }) => {
+  await page.goto("/team/dashboard");
+  await page.waitForLoadState("networkidle");
+  
+  const teamName = `TestTeam_${Date.now()}`;
+  await page.locator('#create-team-name input').fill(teamName);
+  await page.getByTestId("create-team").click();
+  
+  await page.waitForURL("**/team/dashboard", { timeout: 10000 });
+  await expect(page.getByRole("heading", { name: teamName })).toBeVisible();
+  await expect(page.locator("[data-roster-group='starters']")).toBeVisible();
+});
+
 test("a team member still sees every hub and the editors", async ({ teamPage: page }) => {
   await page.setViewportSize({ width: 1280, height: 860 });
   await navigateTo(page, "/game-plan");

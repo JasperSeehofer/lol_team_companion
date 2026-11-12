@@ -44,7 +44,7 @@ use crate::pages::{
     profile::ProfilePage,
     share::{PlayerCardPage, SharePage},
     stats::StatsPage,
-    team::{dashboard::TeamDashboard, roster::RosterPage},
+    team::dashboard::TeamDashboard,
     tree_drafter::TreeDrafterPage,
 };
 
@@ -123,7 +123,6 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/auth/register") view=RegisterPage />
                         <Route path=path!("/auth/reset") view=ResetPasswordPage />
                         <Route path=path!("/team/dashboard") view=TeamDashboard />
-                        <Route path=path!("/team/roster") view=RosterPage />
                         <Route path=path!("/team/player/:id") view=PlayerCardPage />
                         // Public, read-only share links (no sign-in).
                         <Route path=path!("/s/:token") view=SharePage />

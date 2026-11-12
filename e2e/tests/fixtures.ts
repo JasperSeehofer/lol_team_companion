@@ -65,7 +65,7 @@ export async function authenticatePage(page: Page): Promise<{ email: string; use
  * (the create form is not shown then).
  */
 export async function createTeam(page: Page, name: string): Promise<void> {
-  await page.goto("/team/roster");
+  await page.goto("/team/dashboard");
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
 

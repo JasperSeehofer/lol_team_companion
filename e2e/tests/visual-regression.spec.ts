@@ -86,7 +86,7 @@ test.describe("utility auth-required routes", () => {
   });
 
   test("/team/roster visual baseline", async ({ authedPage }) => {
-    await authedPage.goto("/team/roster");
+    await authedPage.goto("/team/dashboard");
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
     await expect(authedPage).toHaveScreenshot("authed-team-roster.png", VR_OPTS);
