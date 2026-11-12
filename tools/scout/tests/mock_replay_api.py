@@ -1,7 +1,10 @@
 """A mock of the League client's Replay API for tests: plain HTTP on
 127.0.0.1, ephemeral port, in a thread. Quirks are configurable so the probe
 has something to find: speed clamped, the minimap hidden with the rest of the
-interface, camera height capped, one recording per session."""
+interface, camera height capped, frames written into the client's own
+subfolder under the given path (as the real client does). `one_recording`
+(off by default) stands in for a client that ignores a second recording; the
+2026-10-22 runs that looked like that were a frame-counting bug (finding G)."""
 
 from __future__ import annotations
 
@@ -21,7 +24,8 @@ class Quirks:
     ignore_minimap: bool = True        # interfaceAll=false hides the minimap too
     max_camera_y: float = 25000.0
     spec_path: str | None = "/swagger/v3/openapi.json"
-    one_recording: bool = True
+    one_recording: bool = False         # finding G, corrected: not observed on the real client
+    client_subfolder: str | None = "16-21_EUW1-7100000099_01"   # the client writes here under `path`
     time_scale: float = 0.25           # wall seconds per game second while recording
 
 
@@ -101,6 +105,8 @@ class State:
             import cv2
 
             out = Path(body["path"])
+            if self.quirks.client_subfolder:
+                out = out / self.quirks.client_subfolder
             out.mkdir(parents=True, exist_ok=True)
             for i in range(n):
                 cv2.imwrite(str(out / f"{i:05d}.png"), np.zeros((36, 64, 3), np.uint8))

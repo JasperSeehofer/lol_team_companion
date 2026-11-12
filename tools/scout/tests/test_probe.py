@@ -38,7 +38,8 @@ def test_probe_records_mock_quirks(mock_api, tmp_path):
     assert res["fog"]["fogOfWar"]["honoured"] is True
     rec = res["recording"]
     assert rec["realtime"]["frames_written"] == 8 and rec["realtime"]["frame_size"] == [64, 36]
-    assert rec["accelerated"]["frames_written"] == 0                 # quirk: one per session
+    assert rec["accelerated"]["frames_written"] == 8                 # a second recording works too
+    assert rec["realtime"]["read_back"]["path"] == rec["realtime"]["scratch"]
     # restored afterwards
     assert mock_api.state.render["interfaceAll"] is True
     assert "probe_camera_2000.png" in shots
@@ -70,3 +71,19 @@ def test_probe_dry_posts_nothing(capsys, tmp_path):
 def test_client_verify_only_off_for_loopback():
     assert ReplayClient("https://127.0.0.1:2999").verify is False
     assert ReplayClient("https://example.org").verify is True
+
+
+def test_probe_counts_frames_in_the_client_subfolder(tmp_path):
+    """The client writes PNGs into its own subfolder under the given path; the
+    probe counted only the top folder and reported 0 frames (2026-10-22, finding G)."""
+    from mock_replay_api import MockReplayApi, Quirks
+
+    with MockReplayApi(Quirks(client_subfolder="16-21_EUW1-7100000099_01")) as api:
+        p = probe.Probe(ReplayClient(api.base), tmp_path, settle=0.0, rec_seconds=1.0, rec_fps=4,
+                        rec_timeout=5.0, scratch=tmp_path / "rec")
+        res = p.recording()
+    for kind in ("realtime", "accelerated"):
+        assert res[kind]["frames_written"] == 4, kind
+        assert res[kind]["frame_size"] == [64, 36]
+        subs = [d.name for d in (tmp_path / "rec").glob(f"probe-{kind}-*/*") if d.is_dir()]
+        assert subs == ["16-21_EUW1-7100000099_01"]

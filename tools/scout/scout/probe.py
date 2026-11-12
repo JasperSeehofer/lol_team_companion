@@ -220,7 +220,9 @@ class Probe:
             if not self.c.recording().get("recording"):
                 break
         wall = time.time() - w0
-        pngs = sorted(path.glob("*.png"))
+        # The client writes into its own subfolder (e.g. "16-21_EUW1-..._01") under the path it is
+        # given: count PNGs below it, not only at its top (the 2026-10-22 probe counted 0, finding G).
+        pngs = sorted(path.rglob("*.png"))
         size = None
         if pngs:
             import cv2
@@ -235,7 +237,8 @@ class Probe:
                 "scratch": str(path)}
 
     def recording(self) -> dict:
-        # Note: one recording per desktop session is reported; the second may write nothing.
+        # Two recordings in a row. Finding G ("one recording per sign-in") came from frame counts
+        # that missed the client's subfolder; Jasper reports several recordings per sign-in working.
         return {"realtime": self._record("realtime", True, 1.0),
                 "accelerated": self._record("accelerated", False, 4.0)}
 
