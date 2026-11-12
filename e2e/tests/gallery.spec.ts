@@ -322,9 +322,9 @@ test("command bar: Ctrl+K opens it, typing filters, Enter goes", async ({ adminP
   await expect(bar).toHaveAttribute("open", "");
   const input = bar.locator('[role="combobox"]');
   await expect(input).toBeFocused();
-  await adminPage.keyboard.type("roster");
+  await adminPage.keyboard.type("team");
   const options = bar.locator('[role="option"]');
-  await expect(options.first()).toHaveText(/Roster/);
+  await expect(options.first()).toHaveText(/Find or create a team/);
   await expect(options.first()).toHaveAttribute("aria-selected", "true");
   await expect(input).toHaveAttribute("aria-activedescendant", /command-bar-opt-/);
   await adminPage.keyboard.press("Escape");
@@ -342,7 +342,7 @@ test("command bar: Ctrl+K opens it, typing filters, Enter goes", async ({ adminP
   // Arrow keys move the active option, and Enter follows a link.
   await adminPage.keyboard.press("Control+k");
   await expect(bar).toHaveAttribute("open", "");
-  await adminPage.keyboard.type("roster");
+  await adminPage.keyboard.type("team");
   await adminPage.keyboard.press("Enter");
   await adminPage.waitForURL("**/team/dashboard");
 });

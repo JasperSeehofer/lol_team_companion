@@ -73,19 +73,22 @@ test("GET /team/roster redirects to /team/dashboard", async ({ authedPage: page 
   await page.goto("/team/roster");
   await page.waitForURL("**/team/dashboard", { timeout: 10000 });
   expect(page.url()).toContain("/team/dashboard");
+  // A fresh account lands on the team page's create-or-join state.
+  await expect(page.getByTestId("create-team")).toBeVisible({ timeout: 10000 });
 });
 
 test("a fresh account can create a team from /team/dashboard", async ({ authedPage: page }) => {
   await page.goto("/team/dashboard");
   await page.waitForLoadState("networkidle");
-  
+  await expect(page.getByTestId("create-team")).toBeVisible({ timeout: 10000 });
+
   const teamName = `TestTeam_${Date.now()}`;
-  await page.locator('#create-team-name input').fill(teamName);
+  await page.locator("#create-team-name").fill(teamName);
   await page.getByTestId("create-team").click();
-  
+
   await page.waitForURL("**/team/dashboard", { timeout: 10000 });
   await expect(page.getByRole("heading", { name: teamName })).toBeVisible();
-  await expect(page.locator("[data-roster-group='starters']")).toBeVisible();
+  await expect(page.locator('[data-roster-group="starters"]')).toBeVisible();
 });
 
 test("a team member still sees every hub and the editors", async ({ teamPage: page }) => {

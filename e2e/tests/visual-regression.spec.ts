@@ -12,7 +12,7 @@
  *   Public:  /closed-beta, /auth/login, /auth/register (with invite query),
  *            /legal/impressum, /legal/datenschutz
  *   Utility authed (flat baselines, Phase 17, unchanged):
- *            /profile, /team/roster, /game-plan,
+ *            /profile, /game-plan,
  *            /opponents, /action-items, /stats,
  *            /personal-learnings, /admin/invites
  *   Scoped authed (subfolder baselines, Phase 18):
@@ -85,8 +85,9 @@ test.describe("utility auth-required routes", () => {
     await expect(authedPage).toHaveScreenshot("authed-profile.png", VR_OPTS);
   });
 
-  test("/team/roster visual baseline", async ({ authedPage }) => {
-    await authedPage.goto("/team/dashboard");
+  test("/team/roster redirects to the team page (visual baseline)", async ({ authedPage }) => {
+    await authedPage.goto("/team/roster");
+    await authedPage.waitForURL("**/team/dashboard", { timeout: 10000 });
     await authedPage.waitForLoadState("networkidle");
     await authedPage.waitForTimeout(500);
     await expect(authedPage).toHaveScreenshot("authed-team-roster.png", VR_OPTS);

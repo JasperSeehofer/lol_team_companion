@@ -1,7 +1,7 @@
 /**
- * Team page and roster (M5): create a team, the team page's sections, join
- * and place a second player (start, bench, unbench), the roster page for
- * members, and team notes with Undo on edit and delete.
+ * Team page (M5, M160 one team page): create a team, the team page's
+ * sections, join and place a second player (start, bench, unbench), how
+ * players join, and team notes with Undo on edit and delete.
  * Requires a running dev server: cargo leptos watch
  */
 import { test, expect, authenticatePage, createTeam } from "./fixtures";
@@ -23,11 +23,10 @@ test("team: create a new team and see the team page", async ({ authedPage }) => 
   expect(filterRealErrors(errors)).toHaveLength(0);
 });
 
-test("roster: members see their team, never 'not on a team'", async ({ teamPage }) => {
+test("team page: members see the roster and how players join, never 'not on a team'", async ({ teamPage }) => {
   const page = teamPage;
-  await navigateTo(page, "/team/roster");
-  await expect(page.getByRole("heading", { level: 1, name: "Roster" })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 2, name: "Members" })).toBeVisible();
+  await navigateTo(page, "/team/dashboard");
+  await expect(page.getByRole("heading", { level: 2, name: "Roster" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "How players join" })).toBeVisible();
   await expect(page.locator("text=/not on a team/i")).toHaveCount(0);
   await expect(page.getByTestId("create-team")).toHaveCount(0);
@@ -42,7 +41,7 @@ test("bench: the leader starts, benches and unbenches a player", async ({ authed
   const ctx = await browser.newContext();
   const player = await ctx.newPage();
   await authenticatePage(player);
-  await navigateTo(player, "/team/roster");
+  await navigateTo(player, "/team/dashboard");
   await player.locator("#team-search").fill(teamName);
   const row = player.locator("[data-join-team] li", { hasText: teamName });
   await row.getByRole("button", { name: "Ask to join" }).click();
@@ -72,7 +71,7 @@ test("bench: the leader starts, benches and unbenches a player", async ({ authed
 
   // The player sees the roster with their team; no leader actions.
   await navigateTo(player, "/team/dashboard");
-  await expect(player.getByRole("heading", { level: 2, name: "Members" })).toBeVisible();
+  await expect(player.getByRole("heading", { level: 2, name: "Roster" })).toBeVisible();
   await navigateTo(player, "/team/dashboard");
   await expect(player.getByRole("button", { name: /Roster actions for/ })).toHaveCount(0);
   await ctx.close();

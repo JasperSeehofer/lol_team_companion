@@ -32,7 +32,7 @@ export async function waitForHome(page: Page, timeout = 20000): Promise<void> {
  * `/auth/register` without `?invite=...` redirects to `/closed-beta`, and an
  * unknown or used-up code is rejected. The fixture uses `INVITE_CODE`.
  * Tests that need a team use the `teamPage` fixture, which creates one on
- * `/team/roster`.
+ * `/team/dashboard`.
  */
 export async function authenticatePage(page: Page): Promise<{ email: string; username: string }> {
   // The worker index keeps parallel workers (same TIMESTAMP) apart.
@@ -60,7 +60,7 @@ export async function authenticatePage(page: Page): Promise<{ email: string; use
 }
 
 /**
- * Create a team for the current authenticated user on /team/roster and
+ * Create a team for the current authenticated user on /team/dashboard and
  * wait for the team page. Safe to call when the user already has a team
  * (the create form is not shown then).
  */

@@ -25,7 +25,7 @@ test("first sign-in shows the welcome once; Skip keeps the checklist", async ({ 
   await expect(welcome).toBeVisible();
   await expect(welcome.getByRole("heading", { level: 2 })).toContainText("Welcome to Team Companion");
   await expect(welcome.getByRole("list", { name: "The loop" })).toContainText("Review");
-  await expect(page.getByTestId("welcome-start")).toHaveAttribute("href", "/team/roster");
+  await expect(page.getByTestId("welcome-start")).toHaveAttribute("href", "/team/dashboard");
   const checklist = page.locator("[data-checklist]");
   await expect(checklist).toBeVisible();
   await expect(checklist).toContainText("0 of 7 done");
@@ -46,7 +46,7 @@ test("Start records the welcome: it does not come back", async ({ authedPage }) 
   await navigateTo(page, "/");
   await expect(page.locator("[data-welcome]")).toBeVisible();
   await page.getByTestId("welcome-start").click();
-  await page.waitForURL((u) => new URL(u).pathname === "/team/roster", { timeout: 10000 });
+  await page.waitForURL((u) => new URL(u).pathname === "/team/dashboard", { timeout: 10000 });
   await page.waitForTimeout(500);
   await navigateTo(page, "/");
   await expect(page.locator("[data-welcome]")).toHaveCount(0);

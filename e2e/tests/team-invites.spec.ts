@@ -1,8 +1,11 @@
 /**
  * Team-bound invites (polish pass): a leader creates an invite link on the
  * team page; a new player who registers with it lands in the team (welcome:
- * "You are on TEAM", roster: not placed yet). A signed-in player without a
- * team joins with the link; one already in a team is told to leave first.
+ * "You are on TEAM"). A link that carries a position places the joiner into
+ * that starter slot when it is open (M160 item 2b), with a callout for the
+ * leader; without a position the joiner starts "not placed yet". A signed-in
+ * player without a team joins with the link; one already in a team is told
+ * to leave first.
  */
 import { test, expect, type Page } from "@playwright/test";
 import { authenticatePage, createTeam, waitForHome, TEST_PASSWORD } from "./fixtures";
@@ -58,12 +61,18 @@ test("a new player registers into the team with the leader's link", async ({ bro
   await expect(player.locator("[data-welcome]")).toContainText(`You are on ${teamName}`);
   await shot(player, "team-invite-welcome");
 
-  // The leader sees the new member, not placed yet, with the code's position.
+  // The leader sees the new member: the link carried Mid and the slot was
+  // open, so the invite placed them in the starting five (M160 item 2b),
+  // with the auto-place callout to keep or undo.
   await leader.goto("/team/dashboard");
   await leader.waitForLoadState("networkidle");
-  const unplaced = leader.locator('[data-roster-group="unplaced"]');
-  await expect(unplaced).toContainText(`invited_${STAMP}`);
-  await expect(unplaced).toContainText("MID");
+  const starters = leader.locator('[data-roster-group="starters"]');
+  const invitedRow = starters.locator("[data-roster-row]", { hasText: `invited_${STAMP}` });
+  await expect(invitedRow).toHaveCount(1, { timeout: 10000 });
+  await expect(invitedRow).toHaveAttribute("data-place", "starter");
+  await expect(invitedRow).toContainText("MID");
+  await expect(leader.locator("[data-auto-placed]")).toContainText(`invited_${STAMP} joined as Mid starter.`);
+  await expect(leader.locator('[data-roster-group="unplaced"]')).not.toContainText(`invited_${STAMP}`);
   await expect(leader.locator("[data-team-invite]").first()).toContainText("1 of 2 used");
 });
 
@@ -88,7 +97,7 @@ test("a signed-in player joins with the link; one already in a team cannot", asy
 
   // Signed in without a team: one click joins.
   const loner = await (await browser.newContext()).newPage();
-  await authenticatePage(loner);
+  const lonerWho = await authenticatePage(loner);
   await loner.goto(link);
   const box = loner.getByTestId("invite-join-existing");
   await expect(box).toContainText(`This link is an invite to ${teamName}`);
@@ -103,6 +112,8 @@ test("a signed-in player joins with the link; one already in a team cannot", asy
   await loner.goto("/team/dashboard");
   await expect(loner.getByRole("heading", { name: "Roster" })).toBeVisible();
   await expect(loner.locator("main")).toContainText(teamName);
+  // The link had no position: the joiner starts "not placed yet".
+  await expect(loner.locator('[data-roster-group="unplaced"]')).toContainText(lonerWho.username);
 });
 
 // ---------------------------------------------------------------------------
