@@ -1047,7 +1047,7 @@ async fn coach_rights_are_scoped_to_their_team_and_never_cover_the_leader() {
         "placing a member through another team's id",
     );
     assert_not_found(
-        db::assign_to_slot(&db, &t.team2, &member, "mid").await,
+        db::assign_to_slot(&db, &t.team2, &member, "mid", false).await,
         "assigning to a slot through another team's id",
     );
     // Inside the team the DB layer moves any member; which actor may do it
@@ -1055,9 +1055,81 @@ async fn coach_rights_are_scoped_to_their_team_and_never_cover_the_leader() {
     db::set_member_place(&db, &t.team1, &member, db::RosterPlace::Substitute)
         .await
         .unwrap();
-    db::assign_to_slot(&db, &t.team1, &member, "mid")
+    db::assign_to_slot(&db, &t.team1, &member, "mid", false)
         .await
         .unwrap();
+}
+
+/// M160 item 3 fix 1: `assign_to_slot` with `protect_leader` refuses to
+/// bench the team's leader (the guard runs inside the transaction, before
+/// the demote UPDATE), so a coach taking the leader's position is refused
+/// and the leader stays the starter there. With `protect_leader = false`
+/// (the leader's own call) the swap happens.
+#[tokio::test]
+async fn assign_to_slot_protect_leader_never_benches_the_leader() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let member = db::create_user(&db, "plain".into(), "plain@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    db::join_team(&db, &member, &t.team1).await.unwrap();
+    // The leader starts at mid.
+    db::assign_to_slot(&db, &t.team1, &t.a, "mid", false)
+        .await
+        .unwrap();
+    // (roster_type, role) of one member of team 1, read through the
+    // leader's membership.
+    let place_of = |user: &str| {
+        let db = db.clone();
+        let team1 = t.team1.clone();
+        let leader = t.a.clone();
+        let user = user.to_string();
+        async move {
+            let (_, members) = db::get_user_team_with_members(&db, &leader)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                db::get_user_team_id(&db, &leader).await.unwrap().as_deref(),
+                Some(team1.as_str())
+            );
+            members
+                .into_iter()
+                .find(|m| m.user_id == user)
+                .map(|m| (m.roster_type, m.role))
+        }
+    };
+
+    // protect_leader = true (a coach placing the member at mid): refused
+    // with the leader-only wording, and nothing changed.
+    match db::assign_to_slot(&db, &t.team1, &member, "mid", true).await {
+        Err(DbError::Invalid(msg)) => {
+            assert_eq!(msg, lol_team_companion::server::authz::LEADER_ONLY)
+        }
+        other => panic!("expected Invalid(LEADER_ONLY), got {other:?}"),
+    }
+    assert_eq!(
+        place_of(&t.a).await,
+        Some(("starter".to_string(), "mid".to_string()))
+    );
+    assert_eq!(
+        place_of(&member).await,
+        Some(("member".to_string(), "unassigned".to_string()))
+    );
+
+    // protect_leader = false (the leader's own call): the member starts at
+    // mid and the leader moves to the bench.
+    db::assign_to_slot(&db, &t.team1, &member, "mid", false)
+        .await
+        .unwrap();
+    assert_eq!(
+        place_of(&member).await,
+        Some(("starter".to_string(), "mid".to_string()))
+    );
+    assert_eq!(
+        place_of(&t.a).await,
+        Some(("substitute".to_string(), "mid".to_string()))
+    );
 }
 
 // ---------------------------------------------------------------------------

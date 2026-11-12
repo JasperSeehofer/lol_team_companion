@@ -199,7 +199,17 @@ pub async fn set_member_place(member_user_id: String, place: String) -> Result<(
         }
         position => match Role::parse(position) {
             Some(r) if r.key() == position => {
-                db::assign_to_slot(&ctx.db, &team_id, &member_user_id, position).await
+                // A coach may never bench the leader by taking their
+                // position (M160 item 3 fix 1): the guard runs inside
+                // `assign_to_slot`'s transaction.
+                db::assign_to_slot(
+                    &ctx.db,
+                    &team_id,
+                    &member_user_id,
+                    position,
+                    !actor_is_leader,
+                )
+                .await
             }
             _ => return Err(ServerFnError::new("Unknown roster place")),
         },
@@ -574,11 +584,20 @@ fn intern(s: String) -> &'static str {
 /// coaches get the place items (M160 item 3); "Make coach", "Make team
 /// leader" and "Remove from team" are the leader's alone
 /// (`actor_is_leader`), and a coach never sees them on the leader's or a
-/// coach's row (the menu is not shown there at all).
-fn member_actions(m: &TeamMember, is_self: bool, actor_is_leader: bool) -> Vec<MenuItem> {
+/// coach's row (the menu is not shown there at all). A coach also gets no
+/// "Start as X" for a position the leader currently starts
+/// (`leader_starts`, M160 item 3 fix 1: the server refuses to bench the
+/// leader, `assign_to_slot`'s `protect_leader`).
+fn member_actions(
+    m: &TeamMember,
+    is_self: bool,
+    actor_is_leader: bool,
+    leader_starts: &[Role],
+) -> Vec<MenuItem> {
     let mut items: Vec<MenuItem> = Role::ALL
         .iter()
         .filter(|r| !(m.roster_type == "starter" && Role::parse(&m.role) == Some(**r)))
+        .filter(|r| actor_is_leader || !leader_starts.contains(r))
         .map(|r| MenuItem::new(r.key(), format!("Start as {}", r.label())))
         .collect();
     if m.roster_type != "substitute" {
@@ -776,6 +795,16 @@ fn TeamView(
 
     let me_row = StoredValue::new(me.clone());
     let created_by_row = StoredValue::new(team.created_by.clone());
+    // The positions the leader currently starts in: a coach gets no
+    // "Start as X" for those (M160 item 3 fix 1 — the server refuses to
+    // bench the leader, so the menu does not offer it).
+    let leader_starts: Vec<Role> = groups
+        .starters
+        .iter()
+        .flatten()
+        .filter(|s| s.user_id == created_by_row.get_value())
+        .filter_map(|s| Role::parse(&s.role))
+        .collect();
     let row = move |m: Option<TeamMember>, position: Option<Role>| -> AnyView {
         match m {
             None => view! {
@@ -793,7 +822,7 @@ fn TeamView(
                 let target_is_leader = m.user_id == created_by_row.get_value();
                 let show_actions =
                     can_manage && (is_leader || (!target_is_leader && m.roster_type != "coach"));
-                let items = member_actions(&m, is_self, is_leader);
+                let items = member_actions(&m, is_self, is_leader, &leader_starts);
                 let uid = m.user_id.clone();
                 let uname = m.username.clone();
                 let card_href = format!("/team/player/{}", m.user_id);
@@ -1691,12 +1720,12 @@ mod tests {
 
     #[test]
     fn leader_actions_skip_the_current_place() {
-        let items = member_actions(&m("a", "mid", "starter"), false, true);
+        let items = member_actions(&m("a", "mid", "starter"), false, true, &[]);
         let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
         assert!(!ids.contains(&"mid"));
         assert!(ids.contains(&"top") && ids.contains(&"substitute") && ids.contains(&"coach"));
         assert_eq!(ids.last(), Some(&"kick"));
-        let own = member_actions(&m("a", "unassigned", "member"), true, true);
+        let own = member_actions(&m("a", "unassigned", "member"), true, true, &[]);
         assert!(!own.iter().any(|i| i.id == "kick" || i.id == "member"));
     }
 
@@ -1704,12 +1733,38 @@ mod tests {
     fn coach_actions_have_no_coach_lead_or_kick() {
         // M160 item 3: a coach places players but never makes a coach,
         // hands over leadership or kicks (those stay with the leader).
-        let items = member_actions(&m("a", "mid", "starter"), false, false);
+        let items = member_actions(&m("a", "mid", "starter"), false, false, &[]);
         let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
         assert!(ids.contains(&"top") && ids.contains(&"substitute") && ids.contains(&"member"));
         assert!(!ids.contains(&"coach") && !ids.contains(&"lead") && !ids.contains(&"kick"));
         // On the leader's or a coach's row the menu is not shown at all
         // (the `row` closure's `show_actions`), so the server's
         // `may_set_place` refusal is the second line of defence.
+    }
+
+    #[test]
+    fn coach_actions_hide_the_leaders_starting_positions() {
+        // M160 item 3 fix 1: the leader starts at mid, so a coach's menu
+        // has no "Start as Mid" (the server's `assign_to_slot` refuses to
+        // bench the leader); the other positions stay available.
+        let leader_starts = vec![Role::Mid];
+        let items = member_actions(
+            &m("a", "unassigned", "member"),
+            false,
+            false,
+            &leader_starts,
+        );
+        let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert!(!ids.contains(&"mid"));
+        assert!(
+            ids.contains(&"top")
+                && ids.contains(&"jungle")
+                && ids.contains(&"bot")
+                && ids.contains(&"support")
+        );
+        // The leader's own menu is unaffected.
+        let items = member_actions(&m("a", "unassigned", "member"), false, true, &leader_starts);
+        let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert!(ids.contains(&"mid"));
     }
 }

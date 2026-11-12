@@ -933,7 +933,7 @@ async fn create_team(
             .map_err(|e| e.to_string())?;
     }
     for (user_id, role) in members.iter().zip(ROLES) {
-        db::assign_to_slot(db, &team_id, user_id, role)
+        db::assign_to_slot(db, &team_id, user_id, role, false)
             .await
             .map_err(|e| e.to_string())?;
     }

@@ -136,9 +136,13 @@ async fn test_assign_to_slot_bumps_existing_starter() {
     db::join_team(&db, &u3, &team_id).await.unwrap();
 
     // Assign u2 as mid starter
-    db::assign_to_slot(&db, &team_id, &u2, "mid").await.unwrap();
+    db::assign_to_slot(&db, &team_id, &u2, "mid", false)
+        .await
+        .unwrap();
     // Assign u3 as mid starter — should bump u2 to sub
-    db::assign_to_slot(&db, &team_id, &u3, "mid").await.unwrap();
+    db::assign_to_slot(&db, &team_id, &u3, "mid", false)
+        .await
+        .unwrap();
 
     let (_, members) = db::get_user_team_with_members(&db, &owner)
         .await
@@ -174,7 +178,7 @@ async fn test_remove_from_slot() {
         .await
         .unwrap();
     db::join_team(&db, &player, &team_id).await.unwrap();
-    db::assign_to_slot(&db, &team_id, &player, "top")
+    db::assign_to_slot(&db, &team_id, &player, "top", false)
         .await
         .unwrap();
     db::remove_from_slot(&db, &team_id, &player).await.unwrap();
@@ -221,7 +225,7 @@ async fn new_members_are_unplaced_and_the_leader_places_them() {
     );
 
     // Start, bench (keeps the position), make coach (drops it).
-    db::assign_to_slot(&db, &team_id, &player, "jungle")
+    db::assign_to_slot(&db, &team_id, &player, "jungle", false)
         .await
         .unwrap();
     db::set_member_place(&db, &team_id, &player, db::RosterPlace::Substitute)
@@ -249,11 +253,11 @@ async fn new_members_are_unplaced_and_the_leader_places_them() {
 
     // Only real positions start; outsiders cannot be placed.
     assert!(matches!(
-        db::assign_to_slot(&db, &team_id, &player, "coach").await,
+        db::assign_to_slot(&db, &team_id, &player, "coach", false).await,
         Err(db::DbError::Invalid(_))
     ));
     assert!(matches!(
-        db::assign_to_slot(&db, &team_id, &outsider, "top").await,
+        db::assign_to_slot(&db, &team_id, &outsider, "top", false).await,
         Err(db::DbError::NotFound)
     ));
     assert!(matches!(

@@ -83,4 +83,22 @@ test("a coach answers a join request and places the new member", async ({ browse
   await expect(coach.getByRole("menuitem", { name: "Remove from team" })).toHaveCount(0);
   await expect(coach.getByRole("menuitem", { name: "Start as Mid" })).toHaveCount(1);
   await coach.keyboard.press("Escape");
+
+  // M160 item 3 fix 1: the leader starts as Mid from their own menu, then
+  // the coach's menu on the member row has no "Start as Mid" — the server
+  // refuses to bench the leader (`assign_to_slot`'s `protect_leader`).
+  await leader.goto("/team/dashboard");
+  await leader.waitForLoadState("networkidle");
+  const leaderOwnRow = leader.locator("[data-roster-row]", { hasText: leaderWho.username }).first();
+  await leaderOwnRow.getByRole("button", { name: /Roster actions for/ }).click();
+  await leader.getByRole("menuitem", { name: "Start as Mid" }).click();
+  await expect(leader.locator('[data-roster-group="starters"]')).toContainText(leaderWho.username, { timeout: 10000 });
+
+  await coach.goto("/team/dashboard");
+  await coach.waitForLoadState("networkidle");
+  const memberRow = coach.locator("[data-roster-row]", { hasText: joinerWho.username }).first();
+  await memberRow.getByRole("button", { name: /Roster actions for/ }).click();
+  await expect(coach.getByRole("menuitem", { name: "Start as Mid" })).toHaveCount(0);
+  await expect(coach.getByRole("menuitem", { name: "Start as Top" })).toHaveCount(1);
+  await coach.keyboard.press("Escape");
 });

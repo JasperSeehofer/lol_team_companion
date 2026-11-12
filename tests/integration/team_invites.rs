@@ -436,7 +436,9 @@ async fn auto_place_when_slot_taken() {
         .unwrap();
     let mia = new_user(&db, "mia").await;
     db::join_team(&db, &mia, &team).await.unwrap();
-    db::assign_to_slot(&db, &team, &mia, "mid").await.unwrap();
+    db::assign_to_slot(&db, &team, &mia, "mid", false)
+        .await
+        .unwrap();
     mid_code(&db, &lead, &team, "MID-TAKEN").await;
     let grant = db::consume_invite_grant(&db, "MID-TAKEN")
         .await
@@ -558,7 +560,7 @@ async fn clear_auto_placed_undo_and_keep() {
     ));
     let sam = new_user(&db, "sam").await;
     db::join_team(&db, &sam, &team).await.unwrap();
-    db::assign_to_slot(&db, &team, &sam, "support")
+    db::assign_to_slot(&db, &team, &sam, "support", false)
         .await
         .unwrap();
     assert!(matches!(

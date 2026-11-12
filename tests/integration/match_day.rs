@@ -442,7 +442,7 @@ async fn player_cards_show_members_only() {
     db::add_to_champion_pool(&db, &t.a, "Ahri".into(), "mid".into())
         .await
         .unwrap();
-    db::assign_to_slot(&db, &t.team1, &t.a, "bot")
+    db::assign_to_slot(&db, &t.team1, &t.a, "bot", false)
         .await
         .unwrap();
     let card = db::player_card(&db, &t.team1, &t.a).await.unwrap();

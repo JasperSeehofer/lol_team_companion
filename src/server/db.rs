@@ -1950,11 +1950,18 @@ pub async fn count_pending_join_requests(db: &Surreal<Db>, team_id: &str) -> DbR
     Ok(row.map(|c| c.n as usize).unwrap_or(0))
 }
 
+/// Start `user_id` in `role`, benching whoever currently starts there. With
+/// `protect_leader` (a coach placing someone, M160 item 3) the same
+/// transaction refuses to bench the team's leader, so a coach can never
+/// displace the leader by taking their position: the guard runs before the
+/// demote UPDATE, inside the BEGIN/COMMIT, so there is no check-then-write
+/// race. The leader's own calls pass `false`.
 pub async fn assign_to_slot(
     db: &Surreal<Db>,
     team_id: &str,
     user_id: &str,
     role: &str,
+    protect_leader: bool,
 ) -> DbResult<()> {
     // Bench the current starter for that role and promote this member in one
     // transaction, so a role never ends up with two starters or none.
@@ -1965,6 +1972,7 @@ pub async fn assign_to_slot(
         .query(
             "BEGIN TRANSACTION; \
              IF array::len((SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key))) = 0 { THROW 'NOT_MEMBER' }; \
+             IF $protect_leader AND array::len((SELECT id FROM team_member WHERE team = type::record('team', $team_key) AND role = $role AND roster_type = 'starter' AND user = type::record('team', $team_key).created_by)) > 0 { THROW 'LEADER_ONLY' }; \
              UPDATE team_member SET roster_type = 'substitute' WHERE team = type::record('team', $team_key) AND role = $role AND roster_type = 'starter'; \
              UPDATE team_member SET role = $role, roster_type = 'starter' WHERE team = type::record('team', $team_key) AND user = type::record('user', $user_key); \
              COMMIT TRANSACTION;",
@@ -1972,9 +1980,14 @@ pub async fn assign_to_slot(
         .bind(("team_key", record_key(team_id, "team")))
         .bind(("user_key", record_key(user_id, "user")))
         .bind(("role", role.to_string()))
+        .bind(("protect_leader", protect_leader))
         .await?;
     match check_tx(response) {
         Err(e) if thrown_tag(&e).as_deref() == Some("NOT_MEMBER") => Err(DbError::NotFound),
+        // The same user-facing refusal the authz LEADER_ONLY path gives.
+        Err(e) if thrown_tag(&e).as_deref() == Some("LEADER_ONLY") => Err(DbError::Invalid(
+            crate::server::authz::LEADER_ONLY.to_string(),
+        )),
         other => other.map(|_| ()),
     }
 }
