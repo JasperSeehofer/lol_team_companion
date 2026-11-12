@@ -6,7 +6,7 @@
 use crate::components::local_time::LocalTime;
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar,
-    EmptyState, GameResult, GlyphSize, NoTeamState, PageHeader, PageShell, ReadoutSize,
+    EmptyState, GameResult, GlyphSize, LoadFailed, NoTeamState, PageHeader, PageShell, ReadoutSize,
     ResultGlyph, SectionHeader, Segment, SegmentSize, SegmentedControl, Skeleton, SkeletonGroup,
     SortState, SortStatus, SortTh, StatReadout, Table, Td, Toast, ToastContext, Tr,
 };
@@ -359,7 +359,7 @@ pub fn StatsPage() -> impl IntoView {
             </Suspense>
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading team games"><Skeleton lines=6 /></SkeletonGroup> }>
                 {move || stats.get().map(|r| match r {
-                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"The team's games did not load. Reload the page in a moment."</Callout> }.into_any(),
+                    Err(_) => view! { <LoadFailed what="The team's games" on_retry=Callback::new(move |_| stats.refetch()) /> }.into_any(),
                     Ok(rows) if rows.is_empty() => {
                         if matches!(has_team.get(), Some(false)) {
                             view! { <NoTeamState /> }.into_any()

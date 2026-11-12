@@ -375,10 +375,12 @@ pub fn ChampionPoolPage() -> impl IntoView {
             <p class="sr-only" aria-live="polite" data-testid="pool-announce">{move || announce.get()}</p>
             <Transition fallback=|| view! { <SkeletonGroup label="Loading your pool"><Skeleton shape=SkeletonShape::Line lines=6 /></SkeletonGroup> }>
                 {move || Suspend::new(async move {
-                    let champs = champions_resource.await.unwrap_or_default();
-                    let champs = StoredValue::new(champs);
-                    view! {
-                        <div class="grid grid-cols-1 gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+                    match champions_resource.await {
+                        Err(_) => view! { <LoadFailed what="Champions" on_retry=Callback::new(move |_| champions_resource.refetch()) /> }.into_any(),
+                        Ok(champs) => {
+                            let champs = StoredValue::new(champs);
+                            view! {
+                                <div class="grid grid-cols-1 gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
                             <div class="flex min-w-0 flex-col gap-6">
                                 <Tabs
                                     group="pool-roles"
@@ -403,6 +405,8 @@ pub fn ChampionPoolPage() -> impl IntoView {
                             </div>
                             <ChampionDetail pool=pool local=local champs=champs selected=selected save=save retry_action=retry_action />
                         </div>
+                    }.into_any()
+                        }
                     }
                 })}
             </Transition>
@@ -525,9 +529,17 @@ fn RoleLedger(
                             />
                         }.into_any();
                     }
-                    let stats_list = stats.get().and_then(|r| r.ok()).unwrap_or_default();
-                    view! {
-                        <ol class="flex flex-col border-t border-rule" aria-label=format!("{role_word} tiers")>
+                    let stats_result = stats.get();
+                    match stats_result {
+                        Some(Err(_)) => {
+                            return view! {
+                                <LoadFailed what="Stats" on_retry=Callback::new(move |_| stats.refetch()) />
+                            }.into_any();
+                        }
+                        _ => {
+                            let stats_list = stats_result.and_then(|r| r.ok()).unwrap_or_default();
+                            view! {
+                                <ol class="flex flex-col border-t border-rule" aria-label=format!("{role_word} tiers")>
                             {TIERS.iter().map(|&tier| {
                                 let in_tier: Vec<ChampionPoolEntry> = entries.iter().filter(|e| e.tier == tier).cloned().collect();
                                 let count = in_tier.len();
@@ -684,6 +696,8 @@ fn RoleLedger(
                             }).collect_view()}
                         </ol>
                     }.into_any()
+                        }
+                    }
                 })}
             </Transition>
         </div>
@@ -1075,18 +1089,20 @@ fn ChampionNotes(
                 <TabPanel group="pool-notes" tab=kind selected=tab>
                     <div class="flex flex-col gap-2">
                         <Transition fallback=|| view! { <Skeleton shape=SkeletonShape::Line lines=2 /> }>
-                            {move || notes.get().map(|r| {
-                                let kinds = group(kind);
-                                let list: Vec<ChampionNote> = r.unwrap_or_default().into_iter().filter(|n| kinds.contains(&n.note_type.as_str())).collect();
-                                if list.is_empty() {
-                                    let msg = match kind {
-                                        "matchup" => "No matchup notes yet: how you play against a champion, and how hard it is.",
-                                        "lesson" => "No lessons yet: what you learned in a game, written after it.",
-                                        _ => "No play notes yet: power spikes, combos, synergies and positioning.",
-                                    };
-                                    return view! { <p class="text-label text-secondary">{msg}</p> }.into_any();
-                                }
-                                view! {
+                            {move || notes.get().map(|r| match r {
+                                Err(_) => view! { <LoadFailed what="Notes list" on_retry=Callback::new(move |_| notes.refetch()) /> }.into_any(),
+                                Ok(r) => {
+                                    let kinds = group(kind);
+                                    let list: Vec<ChampionNote> = r.into_iter().filter(|n| kinds.contains(&n.note_type.as_str())).collect();
+                                    if list.is_empty() {
+                                        let msg = match kind {
+                                            "matchup" => "No matchup notes yet: how you play against a champion, and how hard it is.",
+                                            "lesson" => "No lessons yet: what you learned in a game, written after it.",
+                                            _ => "No play notes yet: power spikes, combos, synergies and positioning.",
+                                        };
+                                        return view! { <p class="text-label text-secondary">{msg}</p> }.into_any();
+                                    }
+                                    view! {
                                     <ul class="flex flex-col">
                                         {list.into_iter().map(|n| {
                                             let n_edit = n.clone();
@@ -1110,7 +1126,8 @@ fn ChampionNotes(
                                         }).collect_view()}
                                     </ul>
                                 }.into_any()
-                            })}
+                            }
+                        })}
                         </Transition>
                         <div>
                             <Button size=ButtonSize::Sm on_click=Callback::new(move |_| start(match kind { "play" => "power_spike", k => k }, None))>

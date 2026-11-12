@@ -4,9 +4,9 @@
 
 use crate::components::ui::{
     Badge, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ConfirmDialog, ConfirmTone,
-    Density, EmptySize, EmptyState, Field, GameResult, GlyphSize, PageHeader, PageShell,
-    ResultGlyph, Role, RoleLabel, SectionHeader, Segment, SegmentedControl, Select, SelectOption,
-    Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
+    Density, EmptySize, EmptyState, Field, GameResult, GlyphSize, LoadFailed, PageHeader,
+    PageShell, ResultGlyph, Role, RoleLabel, SectionHeader, Segment, SegmentedControl, Select,
+    SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField, Toast, ToastContext,
 };
 use crate::models::draft::Draft;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
@@ -1032,7 +1032,7 @@ pub fn PostGamePage() -> impl IntoView {
                         <SectionHeader title="Reviews" id="reviews-heading" />
                         <Suspense fallback=|| view! { <SkeletonGroup label="Loading reviews"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
                             {move || reviews.get().map(|r| match r {
-                                Err(_) => view! { <Callout tone=CalloutTone::Danger>"The reviews did not load."</Callout> }.into_any(),
+                                Err(_) => view! { <LoadFailed what="The reviews" on_retry=Callback::new(move |_| reviews.refetch()) /> }.into_any(),
                                 Ok(list) if list.is_empty() => view! {
                                     <EmptyState size=EmptySize::Compact message="Reviews your team writes after games are listed here. Write one on the right, or start one from a game plan." />
                                 }.into_any(),
@@ -1555,7 +1555,7 @@ fn LinkedPlan(plan_id: String) -> impl IntoView {
                     }.into_any()
                 }
                 Ok(None) => view! { <p class="text-label text-muted">"The linked plan no longer exists."</p> }.into_any(),
-                Err(_) => view! { <p class="text-label text-muted">"The linked plan did not load."</p> }.into_any(),
+                Err(_) => view! { <LoadFailed what="The linked plan" on_retry=Callback::new(move |_| plan.refetch()) /> }.into_any(),
             })}
         </Suspense>
     }

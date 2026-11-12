@@ -12,9 +12,10 @@ use crate::components::champion_autocomplete::ChampionAutocomplete;
 use crate::components::local_time::{LocalTime, TimeStyle};
 use crate::components::ui::{
     AvatarSize, Badge, BadgeTone, Button, ButtonSize, ButtonVariant, Callout, CalloutTone,
-    ChampionAvatar, Checkbox, EmptySize, EmptyState, Field, GameResult, GlyphSize, PageHeader,
-    PageShell, PageWidth, ResultGlyph, SectionHeader, Segment, SegmentSize, SegmentedControl,
-    Select, SelectOption, Skeleton, SkeletonGroup, TextField, Toast, ToastContext,
+    ChampionAvatar, Checkbox, EmptySize, EmptyState, Field, GameResult, GlyphSize, LoadFailed,
+    PageHeader, PageShell, PageWidth, ResultGlyph, SectionHeader, Segment, SegmentSize,
+    SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, TextField, Toast,
+    ToastContext,
 };
 use crate::models::champion::Champion;
 use crate::models::personal_learning::{PersonalLearning, LEARNING_TAGS};
@@ -309,7 +310,7 @@ pub fn PersonalLearningsPage() -> impl IntoView {
             </div>
             <Suspense fallback=|| view! { <SkeletonGroup label="Loading learnings"><Skeleton lines=6 /></SkeletonGroup> }>
                 {move || learnings.get().map(|r| match r {
-                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"Your learnings did not load. Reload the page in a moment."</Callout> }.into_any(),
+                    Err(_) => view! { <LoadFailed what="Your learnings" on_retry=Callback::new(move |_| learnings.refetch()) /> }.into_any(),
                     Ok(list) if list.is_empty() => view! {
                         <EmptyState
                             title="No learnings yet"
@@ -600,23 +601,25 @@ pub fn NewLearningPage() -> impl IntoView {
             <div class="flex flex-col gap-6">
                 <SegmentedControl id="new-learning-kind" label="Kind of learning" options=vec![Segment::new("general", "General"), Segment::new("champion", "Champion"), Segment::new("matchup", "Matchup")] value=kind />
                 <Suspense fallback=|| view! { <Skeleton lines=1 /> }>
-                    {move || {
-                        let list: Vec<Champion> = champions.get().and_then(|r| r.ok()).unwrap_or_default();
-                        let k = kind.get();
-                        let list2 = list.clone();
-                        view! {
-                            {(k != "general").then(|| view! {
-                                <Field id="learning-champion" label="Your champion">
-                                    <ChampionAutocomplete champions=list.clone() value=champion placeholder="Search a champion" />
-                                </Field>
-                            })}
-                            {(k == "matchup").then(|| view! {
-                                <Field id="learning-opponent" label="Against">
-                                    <ChampionAutocomplete champions=list2.clone() value=opponent placeholder="Search a champion" />
-                                </Field>
-                            })}
+                    {move || champions.get().map(|r| match r {
+                        Err(_) => view! { <LoadFailed what="Champions" on_retry=Callback::new(move |_| champions.refetch()) /> }.into_any(),
+                        Ok(list) => {
+                            let k = kind.get();
+                            let list_clone = list.clone();
+                            view! {
+                                {(k != "general").then(|| view! {
+                                    <Field id="learning-champion" label="Your champion">
+                                        <ChampionAutocomplete champions=list.clone() value=champion placeholder="Search a champion" />
+                                    </Field>
+                                })}
+                                {(k == "matchup").then(|| view! {
+                                    <Field id="learning-opponent" label="Against">
+                                        <ChampionAutocomplete champions=list_clone.clone() value=opponent placeholder="Search a champion" />
+                                    </Field>
+                                })}
+                            }.into_any()
                         }
-                    }}
+                    })}
                 </Suspense>
                 <SegmentedControl id="learning-result" label="Result of the game" options=vec![Segment::new("", "Not set"), Segment::new("win", "Win"), Segment::new("loss", "Loss")] value=result size=SegmentSize::Sm />
                 <Field id="learning-happened" label="What happened" required=true error=Signal::derive(move || errors[0].get())>

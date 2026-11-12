@@ -5,10 +5,10 @@
 
 use crate::components::ui::{ctrl_enter_submits, enter_submits};
 use crate::components::ui::{
-    AvatarSize, Button, ButtonSize, ButtonVariant, Callout, CalloutTone, ChampionAvatar,
-    ConfirmDialog, ConfirmTone, Density, Dialog, EmptySize, EmptyState, Field, HeadingLevel,
-    NoTeamState, PageHeader, PageShell, Role, RoleLabel, SectionHeader, Skeleton, SkeletonGroup,
-    SkeletonShape, TextField, Toast, ToastContext,
+    AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone,
+    Density, Dialog, EmptySize, EmptyState, Field, HeadingLevel, LoadFailed, NoTeamState,
+    PageHeader, PageShell, Role, RoleLabel, SectionHeader, Skeleton, SkeletonGroup, SkeletonShape,
+    TextField, Toast, ToastContext,
 };
 use crate::models::opponent::{is_stale, Opponent, OpponentPlayer};
 use crate::models::utils::format_timestamp;
@@ -456,7 +456,7 @@ pub fn OpponentsPage() -> impl IntoView {
                             <SectionHeader title="Dossiers" id="dossiers-heading" />
                             <Suspense fallback=|| view! { <SkeletonGroup label="Loading opponents"><Skeleton shape=SkeletonShape::Line lines=4 /></SkeletonGroup> }>
                                 {move || dossiers.get().map(|r| match r {
-                                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"The opponents did not load."</Callout> }.into_any(),
+                                    Err(_) => view! { <LoadFailed what="The opponents" on_retry=Callback::new(move |_| dossiers.refetch()) /> }.into_any(),
                                     Ok(list) if list.is_empty() => {
                                         if matches!(has_team.get(), Some(false)) {
                                             view! { <NoTeamState /> }.into_any()
@@ -512,7 +512,7 @@ pub fn OpponentsPage() -> impl IntoView {
                                             message="Choose an opponent from the list, or add a new one. A dossier shows each player's role, recent champions and mastery, with the date it was last surveyed."
                                         />
                                     }.into_any(),
-                                    Err(_) => view! { <Callout tone=CalloutTone::Danger>"The dossier did not load."</Callout> }.into_any(),
+                                    Err(_) => view! { <LoadFailed what="The dossier" on_retry=Callback::new(move |_| detail.refetch()) /> }.into_any(),
                                 })}
                             </Suspense>
                         </div>

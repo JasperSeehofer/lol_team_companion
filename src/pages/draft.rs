@@ -2310,7 +2310,7 @@ fn NotesPanel(ed: Editor) -> impl IntoView {
                     <p class="font-display text-heading font-semibold text-primary">{c.clone()}</p>
                     <Suspense fallback=|| view! { <SkeletonGroup label="Loading notes"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
                         {move || notes.get().map(|r| match r {
-                            Err(_) => view! { <Callout tone=CalloutTone::Danger>"The notes did not load."</Callout> }.into_any(),
+                            Err(_) => view! { <LoadFailed what="The notes" on_retry=Callback::new(move |_| notes.refetch()) /> }.into_any(),
                             Ok((pool, matchup)) if pool.is_empty() && matchup.is_empty() => view! {
                                 <EmptyState
                                     size=EmptySize::Compact
@@ -2977,7 +2977,7 @@ fn BanPriorities() -> impl IntoView {
                     <div class="flex flex-col gap-4">
                         <Suspense fallback=|| view! { <SkeletonGroup label="Loading ban priorities"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
                             {move || list.get().map(|r| match r {
-                                Err(_) => view! { <Callout tone=CalloutTone::Danger>"Ban priorities did not load."</Callout> }.into_any(),
+                                Err(_) => view! { <LoadFailed what="Ban priorities" on_retry=Callback::new(move |_| list.refetch()) /> }.into_any(),
                                 Ok(l) if l.is_empty() => view! {
                                     <EmptyState size=EmptySize::Compact message="No ban priorities yet. List the champions your team bans first, with a reason, and they appear here for every draft." />
                                 }.into_any(),
@@ -3032,7 +3032,7 @@ fn Tendencies() -> impl IntoView {
     view! {
         <Suspense fallback=|| view! { <SkeletonGroup label="Loading tendencies"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
             {move || data.get().map(|r| match r {
-                Err(_) => view! { <Callout tone=CalloutTone::Danger>"Tendencies did not load."</Callout> }.into_any(),
+                Err(_) => view! { <LoadFailed what="Tendencies" on_retry=Callback::new(move |_| data.refetch()) /> }.into_any(),
                 Ok(rows) => {
                     // Per champion: total appearances and the most common step.
                     let mut by_champ: HashMap<String, (i32, i32, i32)> = HashMap::new();
@@ -3128,7 +3128,7 @@ fn Outcomes() -> impl IntoView {
     view! {
         <Suspense fallback=|| view! { <SkeletonGroup label="Loading outcomes"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup> }>
             {move || data.get().map(|r| match r {
-                Err(_) => view! { <Callout tone=CalloutTone::Danger>"Outcomes did not load."</Callout> }.into_any(),
+                Err(_) => view! { <LoadFailed what="Outcomes" on_retry=Callback::new(move |_| data.refetch()) /> }.into_any(),
                 Ok(d) if d.blue_games + d.red_games == 0 && d.tag_stats.is_empty() && d.first_pick_stats.is_empty() => view! {
                     <EmptyState size=EmptySize::Compact message="Outcomes appear once post-game reviews are linked to drafts: win rates by side, composition and first pick." />
                 }.into_any(),
