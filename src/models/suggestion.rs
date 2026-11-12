@@ -113,6 +113,20 @@ pub fn claim_written(claim: &str, win_text: &str, notes_text: &str) -> bool {
         .any(|l| fold_line(l) == c)
 }
 
+/// The field's text with `claim` added as its last line ("Add to plan"):
+/// a newline first unless the field is empty or already ends with one.
+/// Plain text, no marker.
+pub fn append_claim(field: &str, claim: &str) -> String {
+    let claim = claim.trim();
+    if field.trim().is_empty() {
+        claim.to_string()
+    } else if field.ends_with('\n') {
+        format!("{field}{claim}")
+    } else {
+        format!("{field}\n{claim}")
+    }
+}
+
 /// The suggestions to show: the first [`MAX_SHOWN`] of `all` (already in
 /// the server's order) that are neither dismissed nor written in the plan.
 pub fn visible(
@@ -144,6 +158,15 @@ mod tests {
             strength: 2,
             target: SuggestionTarget::WinConditions,
         }
+    }
+
+    #[test]
+    fn append_claim_adds_one_line() {
+        assert_eq!(append_claim("", "A claim"), "A claim");
+        assert_eq!(append_claim("  \n", "A claim"), "A claim");
+        assert_eq!(append_claim("Win lane", "A claim"), "Win lane\nA claim");
+        assert_eq!(append_claim("Win lane\n", " A claim "), "Win lane\nA claim");
+        assert!(claim_written("A claim", &append_claim("x", "A claim"), ""));
     }
 
     #[test]

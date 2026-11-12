@@ -11,15 +11,15 @@ use crate::components::ui::{
 };
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, Checkbox, ConfirmDialog,
-    ConfirmTone, Density, EmptySize, EmptyState, Field, PageHeader, PageShell, PrepEmphasis,
-    PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment, SegmentSize,
-    SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape, TextField,
-    Toast, ToastContext,
+    ConfirmTone, Density, Dialog, DialogSize, EmptySize, EmptyState, Field, PageHeader, PageShell,
+    PrepEmphasis, PrepSequence, PrepState, PrepStep, Role, RoleLabel, SectionHeader, Segment,
+    SegmentSize, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup, SkeletonShape,
+    StrengthDots, SuggestionChip, TextField, Toast, ToastContext,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
 use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
-use crate::models::suggestion::Suggestion;
+use crate::models::suggestion::{Suggestion, SuggestionTarget};
 use crate::pages::navigate::{navigator, replace_url};
 use leptos::prelude::*;
 
@@ -576,6 +576,9 @@ struct PlanEd {
     match_deleted: RwSignal<bool>,
     /// M150: suggestion keys dismissed on this plan ("Not for us").
     dismissed: RwSignal<Vec<String>>,
+    /// M150: bumped whenever another plan (or a blank one) is loaded, so
+    /// the suggestions collapse again; a first save does not bump it.
+    loads: RwSignal<u32>,
 }
 
 impl PlanEd {
@@ -598,6 +601,7 @@ impl PlanEd {
             draft_deleted: RwSignal::new(false),
             match_deleted: RwSignal::new(false),
             dismissed: RwSignal::new(Vec::new()),
+            loads: RwSignal::new(0),
         }
     }
 
@@ -627,6 +631,7 @@ impl PlanEd {
         self.draft_deleted.set(false);
         self.match_deleted.set(false);
         self.dismissed.set(Vec::new());
+        self.loads.update(|g| *g = g.wrapping_add(1));
     }
 
     fn load(&self, p: &GamePlan) {
@@ -660,6 +665,7 @@ impl PlanEd {
         self.draft_deleted.set(p.draft_deleted);
         self.match_deleted.set(p.scheduled_match_deleted);
         self.dismissed.set(p.dismissed_suggestions.clone());
+        self.loads.update(|g| *g = g.wrapping_add(1));
     }
 
     /// Seed picks (and, for a new plan, name, tag, win conditions and role
@@ -777,6 +783,7 @@ pub fn GamePlanPage() -> impl IntoView {
     let champions = Resource::new(|| (), |_| get_champions_for_game_plan());
     let win_rates = Resource::new(|| (), |_| get_strategy_win_rates());
     let ed = PlanEd::new();
+    let echo = Echo::new();
     // The header's save state (`ui::status`, DESIGN 6.6).
     let save = use_save_state();
     save.show(SaveState::NotSaved);
@@ -1178,13 +1185,19 @@ pub fn GamePlanPage() -> impl IntoView {
                 <div class="flex min-w-0 flex-col gap-12">
                     <PlanSteps ed=ed />
                     <BasicsSection ed=ed drafts=drafts name_error=name_error />
-                    <MatchupSection ed=ed champions=champions />
-                    <StrategySection ed=ed win_rates=win_rates />
+                    <div class="flex flex-col gap-4">
+                        <MatchupSection ed=ed champions=champions />
+                        <SuggestionsSection ed=ed echo=echo />
+                    </div>
+                    <StrategySection ed=ed win_rates=win_rates echo=echo />
                     <RolesSection ed=ed champions=champions />
                     <section aria-labelledby="plan-notes-heading" class="flex flex-col gap-3">
                         <SectionHeader title="Notes" id="plan-notes-heading" />
                         <Field id="plan-notes" label="Anything else the team should know">
-                            <TextField value=ed.notes rows=3 placeholder="Swap lanes if they pick Kalista." />
+                            <div class="relative">
+                                <TextField value=ed.notes rows=3 placeholder="Swap lanes if they pick Kalista." />
+                                <EchoLayer echo=echo target=SuggestionTarget::Notes />
+                            </div>
                         </Field>
                     </section>
                     <ChecklistSection ed=ed />
@@ -1375,11 +1388,593 @@ fn MatchupSection(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Suggestions (M150)
+// ---------------------------------------------------------------------------
+
+/// What the echo overlay draws over a field after "Add to plan".
+#[derive(Clone, PartialEq)]
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+struct EchoData {
+    gen: u32,
+    target: SuggestionTarget,
+    /// The field's text before the claim (drawn transparent, for layout).
+    prefix: String,
+    claim: String,
+    /// The textarea's client box, in px.
+    width: i32,
+    height: i32,
+}
+
+/// The accept moment (card 4): the claim written in chalk over the new
+/// line, dried to ink, then removed. Phase 0 hidden, 1 written (chalk),
+/// 2 dried (ink).
+#[derive(Clone, Copy)]
+struct Echo {
+    data: RwSignal<Option<EchoData>>,
+    phase: RwSignal<u8>,
+}
+
+impl Echo {
+    fn new() -> Self {
+        Self {
+            data: RwSignal::new(None),
+            phase: RwSignal::new(0),
+        }
+    }
+}
+
+fn echo_dom_id(target: SuggestionTarget) -> &'static str {
+    match target {
+        SuggestionTarget::WinConditions => "plan-win-echo",
+        SuggestionTarget::Notes => "plan-notes-echo",
+    }
+}
+
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn field_dom_id(target: SuggestionTarget) -> &'static str {
+    match target {
+        SuggestionTarget::WinConditions => "plan-win",
+        SuggestionTarget::Notes => "plan-notes",
+    }
+}
+
+/// The overlay over one textarea (the page wraps the field in `relative`).
+/// Decorative: the line itself is plain text in the field underneath.
+#[component]
+fn EchoLayer(echo: Echo, target: SuggestionTarget) -> impl IntoView {
+    let phase_class = move || {
+        match echo.phase.get() {
+        0 => "block bg-ink-2 text-accent [clip-path:inset(0_100%_0_0)] transition-[clip-path,color] duration-[180ms] ease-out motion-reduce:transition-none",
+        1 => "block bg-ink-2 text-accent [clip-path:inset(0_0_0_0)] transition-[clip-path,color] duration-[180ms] ease-out motion-reduce:transition-none",
+        _ => "block bg-ink-2 text-primary [clip-path:inset(0_0_0_0)] transition-[clip-path,color] duration-[120ms] ease-out motion-reduce:transition-none",
+    }
+    };
+    let shown = Memo::new(move |_| echo.data.get().filter(|d| d.target == target));
+    view! {
+        {move || shown.get().map(|d| {
+            let style = format!("width:{}px;height:{}px", d.width, d.height);
+            view! {
+                <div
+                    id=echo_dom_id(target)
+                    aria-hidden="true"
+                    data-testid="suggestion-echo"
+                    class="pointer-events-none absolute left-px top-px overflow-hidden whitespace-pre-wrap break-words px-3 py-2 text-body leading-relaxed"
+                    style=style
+                >
+                    <span class="text-transparent">{d.prefix}</span>
+                    <span class="inline-block max-w-full bg-ink-2 align-top">
+                        <span class=phase_class>{d.claim}</span>
+                    </span>
+                </div>
+            }
+        })}
+    }
+}
+
+/// Whether the viewport is at least `md` wide (inline card) rather than a
+/// phone (bottom sheet). The server and a missing window say desktop.
+fn viewport_is_md() -> bool {
+    #[cfg(feature = "hydrate")]
+    {
+        web_sys::window()
+            .and_then(|w| w.match_media("(min-width: 48rem)").ok().flatten())
+            .is_none_or(|m| m.matches())
+    }
+    #[cfg(not(feature = "hydrate"))]
+    true
+}
+
+#[cfg(feature = "hydrate")]
+fn reduced_motion() -> bool {
+    web_sys::window()
+        .and_then(|w| {
+            w.match_media("(prefers-reduced-motion: reduce)")
+                .ok()
+                .flatten()
+        })
+        .is_some_and(|m| m.matches())
+}
+
+/// Starts the echo over the field `target` once the new text is in the
+/// DOM. Skipped when the field's bottom edge is off screen (the line is
+/// written all the same and the live region speaks).
+#[allow(unused_variables)]
+fn run_echo(echo: Echo, target: SuggestionTarget, prefix: String, claim: String) {
+    #[cfg(feature = "hydrate")]
+    request_animation_frame(move || {
+        use std::time::Duration;
+        let Some(field) = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.get_element_by_id(field_dom_id(target)))
+        else {
+            return;
+        };
+        // The textarea's own scroll only; the page never scrolls.
+        field.set_scroll_top(field.scroll_height());
+        let rect = field.get_bounding_client_rect();
+        let inner_h = web_sys::window()
+            .and_then(|w| w.inner_height().ok())
+            .and_then(|h| h.as_f64())
+            .unwrap_or(0.0);
+        if rect.bottom() > inner_h || rect.bottom() < 0.0 {
+            return;
+        }
+        let gen = echo
+            .data
+            .get_untracked()
+            .map(|d| d.gen.wrapping_add(1))
+            .unwrap_or(1);
+        let reduced = reduced_motion();
+        echo.phase.set(if reduced { 1 } else { 0 });
+        echo.data.set(Some(EchoData {
+            gen,
+            target,
+            prefix,
+            claim,
+            width: field.client_width(),
+            height: field.client_height(),
+        }));
+        let scroll = field.scroll_top();
+        let alive = move || echo.data.get_untracked().is_some_and(|d| d.gen == gen);
+        request_animation_frame(move || {
+            if let Some(el) = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.get_element_by_id(echo_dom_id(target)))
+            {
+                el.set_scroll_top(scroll);
+            }
+            if !reduced && alive() {
+                // Frame 0 is painted hidden; now the write (180 ms).
+                request_animation_frame(move || {
+                    if alive() {
+                        echo.phase.set(1);
+                    }
+                });
+                set_timeout(
+                    move || {
+                        if alive() {
+                            echo.phase.set(2);
+                        }
+                    },
+                    Duration::from_millis(180),
+                );
+            }
+            set_timeout(
+                move || {
+                    if alive() {
+                        echo.data.set(None);
+                    }
+                },
+                Duration::from_millis(300),
+            );
+        });
+    });
+}
+
+/// How long a retiring chip fades before it leaves the row.
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+const RETIRE_MS: u64 = 170;
+
+/// Up to three suggestions about the matchup, under the picks (M150).
+/// Collapsed by default on every load; nothing opens or writes on its own.
+#[component]
+fn SuggestionsSection(ed: PlanEd, echo: Echo) -> impl IntoView {
+    // The ten picks, settled 400 ms after the last change, so typing a
+    // champion's name does not ask the server on every key.
+    let picks = Memo::new(move |_| {
+        let side = |sigs: &[RwSignal<String>; 5]| -> Vec<String> {
+            sigs.iter().map(|s| s.get().trim().to_string()).collect()
+        };
+        (side(&ed.ours), side(&ed.theirs))
+    });
+    let settled = RwSignal::new(picks.get_untracked());
+    #[allow(unused_variables)]
+    let settle_timer: StoredValue<Option<leptos::prelude::TimeoutHandle>> = StoredValue::new(None);
+    Effect::new(move |prev: Option<()>| {
+        let now = picks.get();
+        if prev.is_none() {
+            settled.set(now);
+            return;
+        }
+        #[cfg(feature = "hydrate")]
+        {
+            if let Some(h) = settle_timer.get_value() {
+                h.clear();
+            }
+            let h = set_timeout_with_handle(
+                move || settled.set(now),
+                std::time::Duration::from_millis(400),
+            )
+            .ok();
+            settle_timer.set_value(h);
+        }
+        #[cfg(not(feature = "hydrate"))]
+        settled.set(now);
+    });
+    let full = Memo::new(move |_| {
+        settled.with(|(o, t)| {
+            o.iter().filter(|p| !p.is_empty()).count() == 5
+                && t.iter().filter(|p| !p.is_empty()).count() == 5
+        })
+    });
+    // Browser-only: keyed on the picks alone (never on the plan's text).
+    let all = LocalResource::new(move || {
+        let (ours, theirs) = settled.get();
+        let ask = full.get();
+        async move {
+            if ask {
+                plan_suggestions(ours, theirs).await
+            } else {
+                Ok(Vec::new())
+            }
+        }
+    });
+
+    let row_open = RwSignal::new(false);
+    let open_key = RwSignal::new(None::<String>);
+    // The card's content stays while it collapses.
+    let card = RwSignal::new(None::<Suggestion>);
+    // Inline card (md and up) or bottom sheet (phones), fixed when opened.
+    let inline_mode = RwSignal::new(true);
+    let sheet_open = RwSignal::new(false);
+    // (place in the row, suggestion) fading out after Add or Dismiss.
+    let retiring = RwSignal::new(None::<(usize, Suggestion)>);
+    let live = RwSignal::new(String::new());
+
+    // Another plan, or a new one: everything closed again.
+    Effect::new(move |_| {
+        let _ = ed.loads.get();
+        row_open.set(false);
+        open_key.set(None);
+        sheet_open.set(false);
+    });
+    // Escape or the scrim closed the sheet.
+    Effect::new(move |_| {
+        if !sheet_open.get() && !inline_mode.get_untracked() {
+            open_key.set(None);
+        }
+    });
+
+    let visible_now = Memo::new(move |_| {
+        let list = match all.get() {
+            Some(Ok(l)) => l,
+            _ => Vec::new(),
+        };
+        let dismissed = ed.dismissed.get();
+        crate::models::suggestion::visible(&list, &dismissed, &ed.win.get(), &ed.notes.get())
+    });
+    // The row: the visible chips, with a retiring one kept in its place
+    // until it has faded.
+    let shown = Memo::new(move |_| {
+        let mut v = visible_now.get();
+        if let Some((i, s)) = retiring.get() {
+            if !v.iter().any(|x| x.key == s.key) {
+                v.insert(i.min(v.len()), s);
+                v.truncate(crate::models::suggestion::MAX_SHOWN);
+            }
+        }
+        v
+    });
+    #[derive(Clone, Copy, PartialEq)]
+    enum Kind {
+        Nothing,
+        Wait,
+        None,
+        Chips,
+    }
+    let kind = Memo::new(move |_| {
+        if !full.get() {
+            return Kind::Wait;
+        }
+        match all.get() {
+            None => Kind::Nothing,
+            Some(Err(_)) => Kind::Nothing,
+            Some(Ok(_)) if visible_now.get().is_empty() && retiring.get().is_none() => Kind::None,
+            Some(Ok(_)) => Kind::Chips,
+        }
+    });
+    let count_text = move || match visible_now.with(|v| v.len()) {
+        1 => "1 suggestion".to_string(),
+        n => format!("{n} suggestions"),
+    };
+
+    // After Add or Dismiss: the next chip, else the line, else the quiet
+    // line (never the textarea, which would raise a phone's keyboard).
+    let focus_next = move || {
+        #[cfg(feature = "hydrate")]
+        {
+            use wasm_bindgen::JsCast;
+            let Some(doc) = web_sys::window().and_then(|w| w.document()) else {
+                return;
+            };
+            let el = doc
+                .query_selector("[data-testid=suggestion-chip]:not([data-retiring])")
+                .ok()
+                .flatten()
+                .or_else(|| doc.get_element_by_id("plan-suggestions-toggle"))
+                .or_else(|| doc.get_element_by_id("plan-suggestions-none"));
+            if let Some(el) = el.and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok()) {
+                let _ = el.focus();
+            }
+        }
+    };
+    let retire = move |s: Suggestion| {
+        let idx = shown.with_untracked(|v| v.iter().position(|x| x.key == s.key).unwrap_or(0));
+        let key = s.key.clone();
+        retiring.set(Some((idx, s)));
+        open_key.set(None);
+        sheet_open.set(false);
+        #[cfg(feature = "hydrate")]
+        set_timeout(
+            move || {
+                if retiring.with_untracked(|r| r.as_ref().is_some_and(|(_, x)| x.key == key)) {
+                    retiring.set(None);
+                }
+                // After the row has re-rendered (effects run first).
+                set_timeout(focus_next, std::time::Duration::ZERO);
+            },
+            std::time::Duration::from_millis(RETIRE_MS),
+        );
+        #[cfg(not(feature = "hydrate"))]
+        {
+            let _ = key;
+            retiring.set(None);
+            focus_next();
+        }
+    };
+    let feedback = |rule_id: String, action: &'static str| {
+        leptos::task::spawn_local(async move {
+            let _ = suggestion_feedback(rule_id, action.to_string()).await;
+        });
+    };
+    let accept = Callback::new(move |s: Suggestion| {
+        let (sig, label) = match s.target {
+            SuggestionTarget::WinConditions => (ed.win, "Added to Win conditions."),
+            SuggestionTarget::Notes => (ed.notes, "Added to Notes."),
+        };
+        let before = sig.get_untracked();
+        let after = crate::models::suggestion::append_claim(&before, &s.claim);
+        let prefix = after
+            .strip_suffix(s.claim.trim())
+            .unwrap_or_default()
+            .to_string();
+        sig.set(after);
+        live.set(label.to_string());
+        feedback(s.rule_id.clone(), "accept");
+        run_echo(echo, s.target, prefix, s.claim.trim().to_string());
+        retire(s);
+    });
+    let dismiss = Callback::new(move |s: Suggestion| {
+        ed.dismissed.update(|d| {
+            if !d.contains(&s.key) {
+                d.push(s.key.clone());
+            }
+        });
+        live.set("Dismissed for this plan.".to_string());
+        feedback(s.rule_id.clone(), "dismiss");
+        retire(s);
+    });
+    let open_chip = move |s: Suggestion| {
+        if open_key.get_untracked().as_deref() == Some(s.key.as_str()) {
+            open_key.set(None);
+            sheet_open.set(false);
+            return;
+        }
+        let md = viewport_is_md();
+        inline_mode.set(md);
+        open_key.set(Some(s.key.clone()));
+        card.set(Some(s));
+        if md {
+            crate::components::ui::a11y::focus_id_later("plan-suggestion-claim");
+        } else {
+            sheet_open.set(true);
+        }
+    };
+    let close_inline = move || {
+        if let Some(k) = open_key.get_untracked() {
+            open_key.set(None);
+            crate::components::ui::a11y::focus_id(&chip_dom_id(&k));
+        }
+    };
+
+    let rows = move || shown.get().into_iter().enumerate().collect::<Vec<_>>();
+    let inline_open = move || open_key.with(|k| k.is_some()) && inline_mode.get();
+    let inline_has = move || inline_mode.get() && card.with(|c| c.is_some());
+
+    view! {
+        <section aria-label="Suggestions" data-testid="plan-suggestions" class="flex flex-col border-t border-rule">
+            <p class="sr-only" aria-live="polite">{move || live.get()}</p>
+            {move || match kind.get() {
+                Kind::Nothing => ().into_any(),
+                Kind::Wait => view! {
+                    <p class="py-2 text-caption text-muted" data-testid="suggestions-wait">"Suggestions appear when both drafts are in."</p>
+                }.into_any(),
+                Kind::None => view! {
+                    <p id="plan-suggestions-none" tabindex="-1" class="py-2 text-caption text-muted" data-testid="suggestions-none">"No suggestions for these picks."</p>
+                }.into_any(),
+                Kind::Chips => view! {
+                    <button
+                        type="button"
+                        id="plan-suggestions-toggle"
+                        data-testid="suggestions-toggle"
+                        aria-expanded=move || if row_open.get() { "true" } else { "false" }
+                        aria-controls="plan-suggestion-row"
+                        class="flex min-h-11 w-full cursor-pointer items-center gap-2 text-left text-label font-medium text-secondary transition-colors duration-[160ms] ease-out hover:text-primary motion-reduce:transition-none md:min-h-8"
+                        on:click=move |_| {
+                            let next = !row_open.get_untracked();
+                            row_open.set(next);
+                            if !next {
+                                open_key.set(None);
+                            }
+                        }
+                    >
+                        // A drawn caret, so the button's text is only the count.
+                        <svg
+                            aria-hidden="true"
+                            viewBox="0 0 8 8"
+                            class=move || if row_open.get() { "size-2 shrink-0 rotate-90 fill-current text-muted" } else { "size-2 shrink-0 fill-current text-muted" }
+                        >
+                            <path d="M2 1l4 3-4 3z" />
+                        </svg>
+                        <span>{count_text}</span>
+                    </button>
+                    // Closed: zero rows, inert, and hidden once collapsed (visibility
+                    // flips at the end of the transition, at its start on open).
+                    <div
+                        id="plan-suggestion-row"
+                        class="invisible grid grid-rows-[0fr] transition-[grid-template-rows,visibility] duration-[180ms] ease-out motion-reduce:transition-none data-[open=true]:visible data-[open=true]:grid-rows-[1fr]"
+                        data-open=move || if row_open.get() { "true" } else { "false" }
+                        inert=move || !row_open.get()
+                    >
+                        <div class="min-h-0 overflow-hidden">
+                            <ul role="list" class="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain px-4 py-2 md:mx-0 md:flex-wrap md:snap-none md:overflow-visible md:px-0">
+                                <For
+                                    each=rows
+                                    key=|(_, s)| s.key.clone()
+                                    let:item
+                                >
+                                    {
+                                        let (i, s) = item;
+                                        let key = s.key.clone();
+                                        let key_exp = key.clone();
+                                        let key_ret = key.clone();
+                                        let source = crate::models::graph::ReasonSource::from_label(&s.source);
+                                        let claim = s.claim.clone();
+                                        view! {
+                                            <li class="shrink-0 snap-start">
+                                                <SuggestionChip
+                                                    claim=claim
+                                                    source=source
+                                                    index=i
+                                                    controls="plan-suggestion-card".to_string()
+                                                    expanded=Signal::derive(move || open_key.with(|k| k.as_deref() == Some(key_exp.as_str())))
+                                                    retiring=Signal::derive(move || retiring.with(|r| r.as_ref().is_some_and(|(_, x)| x.key == key_ret)))
+                                                    on_open=Callback::new(move |_| open_chip(s.clone()))
+                                                    attr:id=chip_dom_id(&key)
+                                                    attr:data-testid="suggestion-chip"
+                                                    attr:data-key=key.clone()
+                                                />
+                                            </li>
+                                        }
+                                    }
+                                </For>
+                            </ul>
+                            // Card 2: the margin note, in page flow (md and up).
+                            <div
+                                id="plan-suggestion-card"
+                                role="region"
+                                aria-labelledby="plan-suggestion-claim"
+                                data-testid=move || inline_has().then_some("suggestion-card")
+                                data-feedback-label=move || inline_has().then_some("Suggestion card")
+                                class="invisible grid grid-rows-[0fr] transition-[grid-template-rows,visibility] duration-[180ms] ease-out motion-reduce:transition-none data-[open=true]:visible data-[open=true]:grid-rows-[1fr]"
+                                data-open=move || if inline_open() { "true" } else { "false" }
+                                inert=move || !inline_open()
+                                on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                                    if ev.key() == "Escape" {
+                                        ev.prevent_default();
+                                        close_inline();
+                                    }
+                                }
+                            >
+                                <div class="min-h-0 overflow-hidden">
+                                    {move || inline_has().then(|| card.get()).flatten().map(|s| view! {
+                                        <div class="mt-3 flex max-w-[36rem] flex-col gap-2 border-t border-rule pb-1 pt-3">
+                                            <p id="plan-suggestion-claim" tabindex="-1" class="text-body font-medium text-primary">{s.claim.clone()}</p>
+                                            <SuggestionCardBody s=s accept=accept dismiss=dismiss full_width=false />
+                                        </div>
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }.into_any(),
+            }}
+            // Card 5: on phones the same note in a bottom sheet. Outside
+            // any Suspense, and fed from a signal (rule 59).
+            {move || (!inline_mode.get()).then(|| card.get()).flatten().map(|s| {
+                let title = s.claim.clone();
+                view! {
+                    <Dialog id="plan-suggestion-sheet" open=sheet_open title=title size=DialogSize::BottomSheet>
+                        <div data-testid="suggestion-card" data-feedback-label="Suggestion card" class="flex flex-col gap-2">
+                            <SuggestionCardBody s=s.clone() accept=accept dismiss=dismiss full_width=true />
+                        </div>
+                    </Dialog>
+                }
+            })}
+        </section>
+    }
+}
+
+fn chip_dom_id(key: &str) -> String {
+    format!("plan-chip-{key}")
+}
+
+/// The card's reason, facts and two actions (inline and in the sheet).
+#[component]
+fn SuggestionCardBody(
+    s: Suggestion,
+    accept: Callback<Suggestion>,
+    dismiss: Callback<Suggestion>,
+    full_width: bool,
+) -> impl IntoView {
+    let source = crate::models::graph::ReasonSource::from_label(&s.source).label();
+    let pair = match s.pair.as_slice() {
+        [a, b] => format!("{a} and {b}"),
+        [a] => a.clone(),
+        _ if s.key.ends_with(":theirs") => "Their picks".to_string(),
+        _ => "Our picks".to_string(),
+    };
+    let strength = s.strength;
+    let reason = s.reason.clone();
+    let s_add = s.clone();
+    let s_dis = s;
+    let buttons = if full_width {
+        "mt-1 flex flex-col gap-2"
+    } else {
+        "mt-1 flex flex-wrap gap-2"
+    };
+    view! {
+        <p class="note text-reading text-secondary">{reason}</p>
+        <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
+            <span>{source}</span>
+            <span aria-hidden="true">"\u{b7}"</span>
+            <span>{pair}</span>
+            <span aria-hidden="true">"\u{b7}"</span>
+            <StrengthDots value=strength />
+        </p>
+        <div class=buttons>
+            <Button variant=ButtonVariant::Secondary size=ButtonSize::Touch full_width=full_width on_click=Callback::new(move |_| accept.run(s_add.clone()))>"Add to plan"</Button>
+            <Button variant=ButtonVariant::Quiet size=ButtonSize::Touch full_width=full_width on_click=Callback::new(move |_| dismiss.run(s_dis.clone()))>"Not for us"</Button>
+        </div>
+    }
+}
+
 /// Win rates per strategy tag: (tag, games, wins).
 type WinRates = Resource<Result<Vec<(String, i32, i32)>, ServerFnError>>;
 
 #[component]
-fn StrategySection(ed: PlanEd, win_rates: WinRates) -> impl IntoView {
+fn StrategySection(ed: PlanEd, win_rates: WinRates, echo: Echo) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let outline = Callback::new(move |_: leptos::ev::MouseEvent| {
         let ours: Vec<String> = ed.ours.iter().map(|s| s.get_untracked()).collect();
@@ -1432,7 +2027,10 @@ fn StrategySection(ed: PlanEd, win_rates: WinRates) -> impl IntoView {
             </div>
             <div class="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
                 <Field id="plan-win" label="Win conditions" hint="One per line.">
-                    <TextField value=ed.win rows=4 placeholder="Force fights at the second dragon" />
+                    <div class="relative">
+                        <TextField value=ed.win rows=4 placeholder="Force fights at the second dragon" />
+                        <EchoLayer echo=echo target=SuggestionTarget::WinConditions />
+                    </div>
                 </Field>
                 <Field id="plan-objectives" label="Objective priority" hint="One per line, most important first.">
                     <TextField value=ed.objectives rows=4 placeholder="Dragon" />

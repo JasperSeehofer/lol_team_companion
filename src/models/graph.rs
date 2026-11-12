@@ -531,6 +531,21 @@ impl ReasonSource {
             ReasonSource::Scouting => "Scouting",
         }
     }
+
+    /// The source a [`label`](Self::label) names (M150: a suggestion
+    /// carries its source as the label); anything else reads as `Rule`.
+    pub fn from_label(label: &str) -> Self {
+        [
+            ReasonSource::Rule,
+            ReasonSource::TeamNote,
+            ReasonSource::MatchData,
+            ReasonSource::Pool,
+            ReasonSource::Scouting,
+        ]
+        .into_iter()
+        .find(|s| s.label() == label)
+        .unwrap_or(ReasonSource::Rule)
+    }
 }
 
 /// One sentence of explanation. Empty optional fields are left out of
@@ -868,6 +883,20 @@ pub const MIN_SAMPLE: u32 = 5;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reason_source_round_trips_its_label() {
+        for s in [
+            ReasonSource::Rule,
+            ReasonSource::TeamNote,
+            ReasonSource::MatchData,
+            ReasonSource::Pool,
+            ReasonSource::Scouting,
+        ] {
+            assert_eq!(ReasonSource::from_label(s.label()), s);
+        }
+        assert_eq!(ReasonSource::from_label("nonsense"), ReasonSource::Rule);
+    }
 
     #[test]
     fn vocab_keys_round_trip_through_serde_and_parse() {
