@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "navgrid"
+version = "0.1.0"
+description = "Reads the Summoner's Rift navgrid from one's own local client install, validates it and vectorises it (offline, local only)"
+requires-python = ">=3.10"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE", "NOTICE.md"]
+dependencies = [
+    "numpy",
+    "zstandard",   # BSD-3-Clause
+    "xxhash",      # BSD-2-Clause
+]
+
+[project.optional-dependencies]
+# Only `python -m navgrid vectorise` needs it; pc-run and validate never import it.
+vector = ["shapely>=2"]   # BSD-3-Clause
+test = ["pytest"]
+
+[project.scripts]
+navgrid = "navgrid.__main__:main"
+
+[tool.setuptools]
+packages = ["navgrid"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
