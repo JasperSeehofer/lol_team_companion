@@ -212,12 +212,15 @@ def facts(run_dir: Path, probe, spec, topdown, eye: dict) -> list[dict]:
             return (f"{r.get('game_s_per_wall_s')} game-s per wall-s, frames "
                     f"{r.get('frames_written')}/{r.get('frames_expected')}, size {r.get('frame_size')}")
         acc, rt = rec.get("accelerated", {}), rec.get("realtime", {})
-        fast = realtime_only(probe)
+        fast = realtime_only(probe, topdown)
+        rate, src = recording_rate(probe, topdown)
         lossless = (acc.get("read_back") or {}).get("lossless")
+        from_td = f"; top-down recording {rate} game-s per wall-s" if src and src.startswith("track") else ""
         rows.append({"n": 3, "value": f"faster than real time: {_yn(None if fast is None else not fast)} "
-                                      f"(accelerated {one(acc)}; real time {one(rt)}); lossless read "
+                                      f"(accelerated {one(acc)}; real time {one(rt)}{from_td}); lossless read "
                                       f"back: {_yn(lossless)}",
-                     "evidence": "probe.json recording.accelerated, recording.realtime (codec png)"})
+                     "evidence": "probe.json recording.accelerated, recording.realtime (codec png)"
+                                 + ("; track_topdown.json recording" if from_td else "")})
     cam, why = _sub(probe, "camera")
     fit = (probe or {}).get("camera_fit")
     if why and not fit:
@@ -332,16 +335,30 @@ def _cell(s: str) -> str:
     return str(s).replace("|", "\\|").replace("\n", " ")
 
 
-def realtime_only(probe) -> bool | None:
-    """True when no accelerated recording was shown to run faster than real time."""
-    rec = (probe or {}).get("recording")
-    if not rec:
-        return None
+def recording_rate(probe, td=None) -> tuple[float | None, str | None]:
+    """Game-s per wall-s of an accelerated recording: the probe's, when it wrote
+    frames, else the top-down pass's own recording (frames / fps over wall
+    time). The probe's 0-frame counts of 2026-10-22 were a counting bug (the
+    client writes into a subfolder, finding G), so a run without a probe, or
+    with a probe that saw no frames, is read from the recording it did make."""
+    acc = ((probe or {}).get("recording") or {}).get("accelerated") or {}
+    if acc.get("frames_written") and acc.get("game_s_per_wall_s"):
+        return float(acc["game_s_per_wall_s"]), "probe.json recording.accelerated"
+    rec = (td or {}).get("recording") or {}
+    n, wall, fps = rec.get("frames_written"), rec.get("wall_s"), rec.get("fps")
+    if n and wall and fps:
+        return round(n / float(fps) / float(wall), 2), "track_topdown.json recording"
+    return None, None
+
+
+def realtime_only(probe, td=None) -> bool | None:
+    """True when no accelerated recording was shown to run faster than real
+    time; None when nothing recorded and no probe ran."""
     th = rules.load_thresholds().get("realtime_only_below", 1.5)
-    rate = (rec.get("accelerated") or {}).get("game_s_per_wall_s")
-    if rate is None or not (rec.get("accelerated") or {}).get("frames_written"):
-        return True
-    return rate < th
+    rate, _ = recording_rate(probe, td)
+    if rate is not None:
+        return rate < th
+    return True if (probe or {}).get("recording") else None
 
 
 # ---------------------------------------------------------------- 3. scoring
@@ -398,12 +415,22 @@ def alive_adjusted(track: dict, timeline: dict, pmap: dict[int, str]) -> dict:
             "gaps_count": len(other), "death_gaps": len(death_gaps)}
 
 
+def _fit_failed(td: dict) -> bool:
+    """An R2 track whose fit found no pairs (no calibration): on the PC the
+    top-down pass ran against a minimap track that was later replaced (the
+    2026-10-28 run: first minimap pass with a wrong box, fit "no bar matched")."""
+    return td.get("calibration") is None and not (td.get("fit") or {}).get("n_pairs")
+
+
 def refresh_topdown(run_dir: Path, out: Path, td: dict | None, timeline, mm) -> tuple[dict | None, Path | None]:
-    """A track written before R2 (raw blobs, no fit) is rebuilt from its stored
-    detections_px with the R2 rules (stale second, merged bars, fit against
-    the timeline): OUT/track_topdown_r2.json. Returns (track, path or None)."""
-    if not td or td.get("processing") == track_topdown.PROCESSING or not td.get("detections_px") \
-            or not td.get("frame_size"):
+    """A track written before R2 (raw blobs, no fit), or an R2 track whose fit
+    found no pairs while a minimap track and the timeline are here now, is
+    rebuilt from its stored detections_px with the R2 rules (stale second,
+    merged bars, fit against the timeline): OUT/track_topdown_r2.json.
+    Returns (track, path or None)."""
+    if not td or not td.get("detections_px") or not td.get("frame_size"):
+        return td, None
+    if td.get("processing") == track_topdown.PROCESSING and not (_fit_failed(td) and mm and timeline):
         return td, None
     anchors = run_dir / "anchors.json"
     H = calibrate.fit_homography(*calibrate.load_anchors(anchors)).H if anchors.is_file() else None
@@ -666,21 +693,28 @@ def _sha(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-def time_cost(probe, match, timeline) -> str:
+def time_cost(probe, match, timeline, mm=None, td=None) -> str:
     dur = (match or {}).get("info", {}).get("gameDuration")
     if dur is None and timeline:
         frames = timeline["info"]["frames"]
         dur = frames[-1]["timestamp"] / 1000 if frames else None
     speed = ((probe or {}).get("speed") or {}).get("max_honoured")
+    cap = (mm or {}).get("capture") or {}
     rec = (probe or {}).get("recording") or {}
-    acc = (rec.get("accelerated") or {}).get("game_s_per_wall_s")
     rt = (rec.get("realtime") or {}).get("game_s_per_wall_s")
     if dur is None:
         return "not reached: no game length (match.json and timeline.json missing)"
     parts = [f"game length {dur / 60:.1f} min"]
-    parts.append(f"minimap pass {dur / speed / 60:.1f} min at {speed}x" if speed
-                 else "minimap pass: not reached (no honoured speed)")
-    rate = acc if acc and not realtime_only(probe) else rt
+    if speed:
+        parts.append(f"minimap pass {dur / speed / 60:.1f} min at {speed}x")
+    elif cap.get("frames") and cap.get("wall_s") and cap.get("speed"):
+        measured = cap["frames"] / cap["wall_s"]
+        parts.append(f"minimap pass {dur / measured / 60:.1f} min at {cap['speed']}x "
+                     f"(measured {measured:.2f} game-s per wall-s, track_minimap.json capture)")
+    else:
+        parts.append("minimap pass: not reached (no honoured speed)")
+    acc, _ = recording_rate(probe, td)
+    rate = acc if acc and not realtime_only(probe, td) else rt
     if rate:
         parts.append(f"top-down full game {dur / rate / 60:.1f} min at {rate} game-s per wall-s "
                      f"(the spike's 5-min window {300 / rate / 60:.1f} min)")
@@ -772,9 +806,9 @@ def halfc(run_dir: Path, out: Path, findings_path: Path | None, thresholds: Path
         r_verdict = rules.verdict(rules.NOT_REACHED, "no minimap track or no timeline")
     a_v = rules.positions_minimap(a_in, th["positions_minimap"])
     b_v = rules.positions_topdown(b_in, th["positions_topdown"])
-    rt_only = realtime_only(probe)
+    rt_only = realtime_only(probe, td)
     route = rules.route(a_v["verdict"], b_v["verdict"], rt_only)
-    cost = time_cost(probe, match, timeline)
+    cost = time_cost(probe, match, timeline, mm, td)
 
     plots = {"minimap": score_plots(run_dir, out, "minimap"),
              "topdown": score_plots(run_dir, out, "topdown"),

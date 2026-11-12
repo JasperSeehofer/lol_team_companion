@@ -254,6 +254,53 @@ def test_refresh_topdown_rebuilds_a_pre_r2_track(tmp_path):
     assert halfc.refresh_topdown(run_dir, out, td, None, None) == (td, None)   # already R2
 
 
+def test_refresh_topdown_refits_an_r2_track_whose_fit_found_no_pairs(tmp_path):
+    """An R2 track fitted on the PC against a minimap track that was replaced
+    afterwards (fit "no bar matched", no calibration) is refitted against the
+    minimap track in the run; a fitted R2 track and a failed one without a
+    minimap track are left alone."""
+    from scout import track_topdown
+
+    frames = mf.write_topdown_series(tmp_path / "frames")
+    first = track_topdown.run_offline(frames, tmp_path / "rec", mf.CHAMPIONS, None, None, 1)
+    failed = {**first, "calibration": None,
+              "fit": {"source": "timeline", "identity": "minimap", "n_pairs": 0,
+                      "reason": "no bar matched a champion within the gates"}}
+    run_dir, out = tmp_path / "run", tmp_path / "out"
+    run_dir.mkdir()
+    out.mkdir()
+    assert halfc.refresh_topdown(run_dir, out, failed, mf.td_timeline(), None) == (failed, None)
+    td, path = halfc.refresh_topdown(run_dir, out, failed, mf.td_timeline(), mf.td_minimap_track())
+    assert path == out / "track_topdown_r2.json" and path.is_file()
+    assert td["fit"]["n_pairs"] > 0 and td["calibration"] is not None
+    b = halfc.topdown_input(td, {"median_error": 1.0})
+    assert b["median_from"] == "fit leave-one-frame-out" and b["median_error"] < 40
+    assert halfc.refresh_topdown(run_dir, out, td, mf.td_timeline(), mf.td_minimap_track()) == (td, None)
+
+
+def test_recording_rate_falls_back_to_the_topdown_recording():
+    """A probe whose recordings counted 0 frames (2026-10-22: the client's
+    subfolder was not searched, finding G), or no probe at all (the 2026-10-28
+    validation run), does not make recording 'real time only' when the top-down
+    pass recorded 601 frames at 2 fps in 33 s; the time cost reads the minimap
+    pass from the track's own capture record."""
+    zero = {"recording": {"accelerated": {"frames_written": 0, "game_s_per_wall_s": None},
+                          "realtime": {"frames_written": 0, "game_s_per_wall_s": None}}}
+    td = {"recording": {"frames_written": 601, "wall_s": 33.3, "fps": 2.0}}
+    assert halfc.realtime_only(zero) is True                     # nothing else to go on: conservative
+    assert halfc.realtime_only(None) is None
+    assert halfc.recording_rate(zero, td) == (9.02, "track_topdown.json recording")
+    assert halfc.realtime_only(zero, td) is False and halfc.realtime_only(None, td) is False
+    fast = {"recording": {"accelerated": {"frames_written": 40, "game_s_per_wall_s": 1.2}}}
+    assert halfc.realtime_only(fast, td) is True                 # the probe's own rate wins when it has one
+    mm = {"capture": {"frames": 1946, "wall_s": 248.5, "speed": 8.0}}
+    match = {"info": {"gameDuration": 1950}}
+    cost = halfc.time_cost(None, match, None, mm, td)
+    assert "minimap pass 4.2 min at 8.0x (measured 7.83 game-s per wall-s" in cost
+    assert "top-down full game 3.6 min at 9.02 game-s per wall-s" in cost
+    assert rules.route("PARTIAL", "GO", halfc.realtime_only(zero, td))["route"] == "B-first"
+
+
 def test_handcheck_reads_jaspers_words(run, tmp_path):
     rows = list(csv.DictReader(open(run / "handcheck.csv", encoding="utf-8")))
     words = ["agreed", "disagree", "exact detection", "Yes", "hmm, not sure"]
