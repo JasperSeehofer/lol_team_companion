@@ -1,20 +1,11 @@
 # CI e2e summary
 
-- run: 43309188443
-- sha: 6f93871daf6392df83ed46324edd5189c69187db
+- run: 43309084773
+- sha: b36d862e9147ddae0df38e751ba4f5c1db4bddf8
 
 ## Playwright
 
-expected 202, unexpected 0, flaky 1, skipped 0
-
-### [flaky] account.spec.ts:15 download my data returns the account as a JSON file
-attempt 1: failed (21274 ms)
-```
-TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
-=========================== logs ===========================
-waiting for navigation until "load"
-============================================================
-```
+expected 203, unexpected 0, flaky 0, skipped 0
 
 ## Server log (slow request, inflight, panicked, ERROR)
 
