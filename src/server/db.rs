@@ -6098,6 +6098,10 @@ struct DbTimelineEvent {
     pub multi_kill_length: Option<i32>,
     pub is_teamfight: bool,
     pub involved_participants: Option<String>,
+    pub participant_id: Option<i32>,
+    pub item_id: Option<i32>,
+    pub position_x: Option<i32>,
+    pub position_y: Option<i32>,
 }
 
 /// The category of a cached timeline row, or `None` for a row that is not
@@ -6120,6 +6124,8 @@ pub(crate) fn classify_db_event(
         "BUILDING_KILL" => EventCategory::Tower,
         "CHAMPION_KILL" => EventCategory::Kill,
         "WARD_PLACED" => EventCategory::Ward,
+        // M149: stored for recall inference, never drawn.
+        "ITEM_PURCHASED" => EventCategory::Purchase,
         _ => EventCategory::Kill,
     })
 }
@@ -6180,6 +6186,12 @@ pub async fn get_cached_match_detail(
                 multi_kill_length: r.multi_kill_length,
                 is_teamfight: r.is_teamfight,
                 involved_participants: involved,
+                participant_id: r.participant_id,
+                item_id: r.item_id,
+                position: match (r.position_x, r.position_y) {
+                    (Some(x), Some(y)) => Some(crate::models::match_data::MapPosition { x, y }),
+                    _ => None,
+                },
             })
         })
         .collect();
@@ -6217,34 +6229,29 @@ pub async fn user_champion_in_match(
     Ok(row.map(|r| r.champion))
 }
 
-pub async fn store_match_detail(
-    db: &Surreal<Db>,
-    match_id: &str,
-    participants: &[crate::models::match_data::MatchParticipant],
-    timeline_events: &[crate::models::match_data::TimelineEvent],
-    game_duration: i32,
-    game_mode: &str,
-) -> Result<(), DbError> {
-    /// One cached timeline event, bound into the transaction's `FOR` loop.
-    #[derive(Debug, serde::Serialize, SurrealValue)]
-    struct EventRow {
-        ts: i64,
-        etype: String,
-        tid: Option<i32>,
-        kid: Option<i32>,
-        vid: Option<i32>,
-        mtype: Option<String>,
-        mstype: Option<String>,
-        btype: Option<String>,
-        fb: bool,
-        mkl: Option<i32>,
-        tf: bool,
-        involved: String,
-    }
+/// One cached timeline event, bound into a transaction's `FOR` loop.
+#[derive(Debug, serde::Serialize, SurrealValue)]
+struct EventRow {
+    ts: i64,
+    etype: String,
+    tid: Option<i32>,
+    kid: Option<i32>,
+    vid: Option<i32>,
+    mtype: Option<String>,
+    mstype: Option<String>,
+    btype: Option<String>,
+    fb: bool,
+    mkl: Option<i32>,
+    tf: bool,
+    involved: String,
+    pid: Option<i32>,
+    item: Option<i32>,
+    px: Option<i32>,
+    py: Option<i32>,
+}
 
-    let participants_json =
-        serde_json::to_string(participants).map_err(|e| DbError::Other(e.to_string()))?;
-    let events: Vec<EventRow> = timeline_events
+fn event_rows(timeline_events: &[crate::models::match_data::TimelineEvent]) -> Vec<EventRow> {
+    timeline_events
         .iter()
         .map(|e| EventRow {
             ts: e.timestamp_ms,
@@ -6260,25 +6267,167 @@ pub async fn store_match_detail(
             tf: e.is_teamfight,
             involved: serde_json::to_string(&e.involved_participants)
                 .unwrap_or_else(|_| "[]".to_string()),
+            pid: e.participant_id,
+            item: e.item_id,
+            px: e.position.map(|p| p.x),
+            py: e.position.map(|p| p.y),
         })
-        .collect();
+        .collect()
+}
+
+/// The `CREATE` of one `$e` from [`event_rows`], for a `FOR` loop.
+const CREATE_TIMELINE_EVENT: &str = "CREATE match_timeline_event SET match_id = $match_id, timestamp_ms = $e.ts, event_type = $e.etype, team_id = $e.tid, killer_participant_id = $e.kid, victim_participant_id = $e.vid, monster_type = $e.mtype, monster_sub_type = $e.mstype, building_type = $e.btype, is_first_blood = $e.fb, multi_kill_length = $e.mkl, is_teamfight = $e.tf, involved_participants = $e.involved, participant_id = $e.pid, item_id = $e.item, position_x = $e.px, position_y = $e.py;";
+
+/// Cache a game opened on the match page: its detail row (marked with the
+/// importer version [`TIMELINE_VERSION`](crate::models::match_data::TIMELINE_VERSION))
+/// and its timeline events, in one transaction.
+pub async fn store_match_detail(
+    db: &Surreal<Db>,
+    match_id: &str,
+    participants: &[crate::models::match_data::MatchParticipant],
+    timeline_events: &[crate::models::match_data::TimelineEvent],
+    game_duration: i32,
+    game_mode: &str,
+) -> Result<(), DbError> {
+    let participants_json =
+        serde_json::to_string(participants).map_err(|e| DbError::Other(e.to_string()))?;
+    let events = event_rows(timeline_events);
 
     // The detail row and its events are cached together: a half-written
     // cache would be served as complete on the next visit.
+    let query = format!(
+        "BEGIN TRANSACTION; \
+         CREATE match_detail SET match_id = $match_id, participants_json = $pjson, game_duration = $dur, game_mode = $mode, timeline_version = $ver; \
+         FOR $e IN $events {{ {CREATE_TIMELINE_EVENT} }}; \
+         COMMIT TRANSACTION;"
+    );
     let response = db
-        .query(
-            "BEGIN TRANSACTION; \
-             CREATE match_detail SET match_id = $match_id, participants_json = $pjson, game_duration = $dur, game_mode = $mode; \
-             FOR $e IN $events { CREATE match_timeline_event SET match_id = $match_id, timestamp_ms = $e.ts, event_type = $e.etype, team_id = $e.tid, killer_participant_id = $e.kid, victim_participant_id = $e.vid, monster_type = $e.mtype, monster_sub_type = $e.mstype, building_type = $e.btype, is_first_blood = $e.fb, multi_kill_length = $e.mkl, is_teamfight = $e.tf, involved_participants = $e.involved; }; \
-             COMMIT TRANSACTION;",
-        )
+        .query(query)
         .bind(("match_id", match_id.to_string()))
         .bind(("pjson", participants_json))
         .bind(("dur", game_duration))
         .bind(("mode", game_mode.to_string()))
+        .bind(("ver", crate::models::match_data::TIMELINE_VERSION))
         .bind(("events", events))
         .await?;
     check_tx(response)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Re-import of cached games with the current importer (M149)
+// ---------------------------------------------------------------------------
+
+/// The `WHERE` of a cached game the current importer has not written and
+/// that was not found missing at Riot by this version's re-import; never a
+/// seed demo game (`SEED1_...`, not on Riot). Binds `$ver` and `$demo`.
+const NEEDS_REIMPORT: &str = "(timeline_version = NONE OR timeline_version < $ver) \
+     AND string::starts_with(match_id, $demo) = false";
+
+/// Up to `limit` cached games to re-import (`/admin/reimport`): written by
+/// an older importer and not marked as gone at Riot. Match ids come from
+/// the database only.
+pub async fn matches_needing_reimport(db: &Surreal<Db>, limit: usize) -> DbResult<Vec<String>> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct Row {
+        match_id: String,
+    }
+    let query = format!(
+        "SELECT match_id FROM match_detail WHERE {NEEDS_REIMPORT} \
+         AND (timeline_reimport_failed = NONE OR timeline_reimport_failed < $ver) \
+         ORDER BY match_id LIMIT $limit"
+    );
+    let mut r = db
+        .query(query)
+        .bind(("ver", crate::models::match_data::TIMELINE_VERSION))
+        .bind((
+            "demo",
+            crate::models::match_data::DEMO_MATCH_PREFIX.to_string(),
+        ))
+        .bind(("limit", limit.max(1) as i64))
+        .await?;
+    let rows: Vec<Row> = r.take(0).unwrap_or_default();
+    Ok(rows.into_iter().map(|r| r.match_id).collect())
+}
+
+/// (waiting, unavailable): cached games still to re-import, and games this
+/// version's re-import found missing at Riot (not tried again).
+pub async fn reimport_counts(db: &Surreal<Db>) -> DbResult<(u32, u32)> {
+    #[derive(Debug, Deserialize, SurrealValue)]
+    struct N {
+        n: i64,
+    }
+    let query = format!(
+        "SELECT count() AS n FROM match_detail WHERE {NEEDS_REIMPORT} \
+             AND (timeline_reimport_failed = NONE OR timeline_reimport_failed < $ver) GROUP ALL; \
+         SELECT count() AS n FROM match_detail WHERE {NEEDS_REIMPORT} \
+             AND timeline_reimport_failed != NONE AND timeline_reimport_failed >= $ver GROUP ALL;"
+    );
+    let mut r = db
+        .query(query)
+        .bind(("ver", crate::models::match_data::TIMELINE_VERSION))
+        .bind((
+            "demo",
+            crate::models::match_data::DEMO_MATCH_PREFIX.to_string(),
+        ))
+        .await?;
+    let waiting: Vec<N> = r.take(0).unwrap_or_default();
+    let gone: Vec<N> = r.take(1).unwrap_or_default();
+    let n = |v: &[N]| v.first().map(|x| x.n.max(0) as u32).unwrap_or(0);
+    Ok((n(&waiting), n(&gone)))
+}
+
+/// Replace a cached game's scoreboard and timeline with a fresh import, in
+/// one transaction: the old events are deleted, the new ones written and
+/// the detail row marked with the current importer version. Running it
+/// twice with the same events leaves the same rows. `fetched_at` stays, so
+/// a re-import does not extend how long the game is kept (retention counts
+/// from the first fetch). `DbError::NotFound` when the game is no longer
+/// cached (purged meanwhile); nothing is written then.
+pub async fn replace_match_timeline(
+    db: &Surreal<Db>,
+    match_id: &str,
+    participants: &[crate::models::match_data::MatchParticipant],
+    timeline_events: &[crate::models::match_data::TimelineEvent],
+    game_duration: i32,
+    game_mode: &str,
+) -> DbResult<()> {
+    let participants_json =
+        serde_json::to_string(participants).map_err(|e| DbError::Other(e.to_string()))?;
+    let events = event_rows(timeline_events);
+    let query = format!(
+        "BEGIN TRANSACTION; \
+         IF array::len(SELECT id FROM match_detail WHERE match_id = $match_id) = 0 {{ THROW 'MATCH_GONE' }}; \
+         DELETE match_timeline_event WHERE match_id = $match_id; \
+         UPDATE match_detail SET participants_json = $pjson, game_duration = $dur, game_mode = $mode, \
+             timeline_version = $ver, timeline_reimport_failed = NONE WHERE match_id = $match_id; \
+         FOR $e IN $events {{ {CREATE_TIMELINE_EVENT} }}; \
+         COMMIT TRANSACTION;"
+    );
+    let response = db
+        .query(query)
+        .bind(("match_id", match_id.to_string()))
+        .bind(("pjson", participants_json))
+        .bind(("dur", game_duration))
+        .bind(("mode", game_mode.to_string()))
+        .bind(("ver", crate::models::match_data::TIMELINE_VERSION))
+        .bind(("events", events))
+        .await?;
+    match check_tx(response) {
+        Ok(_) => Ok(()),
+        Err(e) if thrown_tag(&e).as_deref() == Some("MATCH_GONE") => Err(DbError::NotFound),
+        Err(e) => Err(e),
+    }
+}
+
+/// Mark a cached game as gone at Riot for the current importer version, so
+/// the re-import does not ask for it again. Its stored timeline stays.
+pub async fn mark_reimport_failed(db: &Surreal<Db>, match_id: &str) -> DbResult<()> {
+    db.query("UPDATE match_detail SET timeline_reimport_failed = $ver WHERE match_id = $match_id")
+        .bind(("match_id", match_id.to_string()))
+        .bind(("ver", crate::models::match_data::TIMELINE_VERSION))
+        .await?
+        .check()?;
     Ok(())
 }
 

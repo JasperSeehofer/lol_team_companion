@@ -20,6 +20,7 @@ const ADMIN_PAGES = [
   "/admin/proposals",
   "/admin/ledger",
   "/admin/texts",
+  "/admin/reimport",
 ];
 
 test("admin pages are 404 for a signed-in non-admin", async ({ authedPage }) => {
