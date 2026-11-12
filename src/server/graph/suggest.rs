@@ -33,14 +33,18 @@
 //!
 //! Order: strength (highest first), then Win conditions before Notes, then
 //! rule id, key and claim. One suggestion per key, and at most one per
-//! unordered champion pair (the strongest). At most [`MAX_SUGGESTIONS`].
+//! unordered champion pair (the strongest). Then, for variety, the first
+//! suggestion of each rule comes before any repeat of a rule
+//! ([`vary_rules`]; a lineup where one rule fires on many pairs would
+//! otherwise fill the shown chips with one fact). At most
+//! [`MAX_SUGGESTIONS`].
 
 use std::collections::HashSet;
 
 use super::rules::{Rule, FIT_RULE_IDS, RULES};
 use super::traits::TraitTable;
 use crate::models::graph::{CompProfile, Engage, ReasonSource, RelationKind};
-use crate::models::suggestion::{Suggestion, SuggestionTarget, MAX_CLAIM_CHARS};
+use crate::models::suggestion::{vary_rules, Suggestion, SuggestionTarget, MAX_CLAIM_CHARS};
 
 /// Picks a side needs before anything is suggested ("both drafts are in").
 pub const FULL_SIDE: usize = 5;
@@ -306,9 +310,6 @@ pub fn suggest(table: &TraitTable, ours: &[String], theirs: &[String]) -> Vec<Su
     let mut pairs: HashSet<(usize, usize)> = HashSet::new();
     let mut out = Vec::new();
     for c in cands {
-        if out.len() >= MAX_SUGGESTIONS {
-            break;
-        }
         if keys.contains(&c.s.key) {
             continue;
         }
@@ -320,6 +321,8 @@ pub fn suggest(table: &TraitTable, ours: &[String], theirs: &[String]) -> Vec<Su
         keys.insert(c.s.key.clone());
         out.push(c.s);
     }
+    let mut out = vary_rules(out);
+    out.truncate(MAX_SUGGESTIONS);
     out
 }
 
@@ -451,8 +454,21 @@ mod tests {
                 assert!(s.key.ends_with(":ours") || s.key.ends_with(":theirs"));
             }
         }
-        // Sorted by strength.
-        assert!(got.windows(2).all(|w| w[0].strength >= w[1].strength));
+        // Each rule's first suggestion sorted by strength, before any repeat.
+        let mut seen: Vec<&str> = Vec::new();
+        let firsts: Vec<&Suggestion> = got
+            .iter()
+            .filter(|s| {
+                let first = !seen.contains(&s.rule_id.as_str());
+                seen.push(&s.rule_id);
+                first
+            })
+            .collect();
+        assert!(firsts.windows(2).all(|w| w[0].strength >= w[1].strength));
+        assert_eq!(
+            &got[..firsts.len()],
+            firsts.into_iter().cloned().collect::<Vec<_>>().as_slice()
+        );
     }
 
     #[test]
@@ -509,6 +525,29 @@ mod tests {
         assert!(find("fit.needs_frontline:theirs").is_some());
         // Wave clear "fair" on every pick is not slow.
         assert!(find("fit.needs_wave_clear:ours").is_none());
+    }
+
+    /// The e2e lineup (four ultimate combos on our side): the three shown
+    /// suggestions carry three different rules, the same every time.
+    #[test]
+    fn wombo_lineup_shows_three_rules() {
+        let table = csv_table();
+        let ours = v(&["Malphite", "Amumu", "Orianna", "Jinx", "Leona"]);
+        let theirs = v(&["Gnar", "Nidalee", "Xerath", "Ezreal", "Janna"]);
+        let got = suggest(&table, &ours, &theirs);
+        assert_eq!(got, suggest(&table, &ours, &theirs));
+        for s in &got {
+            println!("{} | {} | {}", s.strength, s.key, s.claim);
+        }
+        let shown = crate::models::suggestion::visible(&got, &[], "", "");
+        assert_eq!(shown.len(), 3);
+        let rules: HashSet<&str> = shown.iter().map(|s| s.rule_id.as_str()).collect();
+        assert_eq!(rules.len(), 3, "{shown:?}");
+        assert_eq!(shown.as_slice(), &got[..3]);
+        // Dismissing the first still leaves three different rules.
+        let shown = crate::models::suggestion::visible(&got, &[got[0].key.clone()], "", "");
+        let rules: HashSet<&str> = shown.iter().map(|s| s.rule_id.as_str()).collect();
+        assert_eq!(rules.len(), 3, "{shown:?}");
     }
 
     /// A counter both ways on one pair keeps only the stronger; a synergy is

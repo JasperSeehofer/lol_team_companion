@@ -4,7 +4,8 @@
 //!
 //! The server builds the full ordered list (`server::graph::suggest`); the
 //! page shows the first [`MAX_SHOWN`] that are neither dismissed on the plan
-//! nor already written in it ([`visible`]). Everything here is pure and
+//! nor already written in it, each rule once before any repeats
+//! ([`visible`], [`vary_rules`]). Everything here is pure and
 //! compiles for both targets.
 
 use serde::{Deserialize, Serialize};
@@ -127,20 +128,45 @@ pub fn append_claim(field: &str, claim: &str) -> String {
     }
 }
 
-/// The suggestions to show: the first [`MAX_SHOWN`] of `all` (already in
-/// the server's order) that are neither dismissed nor written in the plan.
+/// Reorder a ranked list for variety: the first suggestion of each rule id
+/// (in the given order), then the repeats (in the given order). Stable and
+/// deterministic, so a lineup where one rule fires on many pairs does not
+/// fill the shown chips with the same fact.
+pub fn vary_rules(ranked: Vec<Suggestion>) -> Vec<Suggestion> {
+    let mut seen: Vec<String> = Vec::new();
+    let mut firsts = Vec::with_capacity(ranked.len());
+    let mut repeats = Vec::new();
+    for s in ranked {
+        if seen.iter().any(|r| r == &s.rule_id) {
+            repeats.push(s);
+        } else {
+            seen.push(s.rule_id.clone());
+            firsts.push(s);
+        }
+    }
+    firsts.extend(repeats);
+    firsts
+}
+
+/// The suggestions to show: of `all` (in the server's order), those neither
+/// dismissed nor written in the plan, reordered by [`vary_rules`] (so a
+/// dismissal does not bring a repeated rule forward while another rule is
+/// left), the first [`MAX_SHOWN`].
 pub fn visible(
     all: &[Suggestion],
     dismissed: &[String],
     win: &str,
     notes: &str,
 ) -> Vec<Suggestion> {
-    all.iter()
+    let left: Vec<Suggestion> = all
+        .iter()
         .filter(|s| !dismissed.iter().any(|d| d == &s.key))
         .filter(|s| !claim_written(&s.claim, win, notes))
-        .take(MAX_SHOWN)
         .cloned()
-        .collect()
+        .collect();
+    let mut out = vary_rules(left);
+    out.truncate(MAX_SHOWN);
+    out
 }
 
 #[cfg(test)]
@@ -260,5 +286,40 @@ mod tests {
         assert_eq!(claims, vec!["Three", "Four", "Five"]);
         assert_eq!(visible(&all, &[], "", "").len(), MAX_SHOWN);
         assert!(visible(&[], &[], "", "").is_empty());
+    }
+
+    #[test]
+    fn vary_rules_puts_each_rule_first_once() {
+        let all = vec![
+            s("syn.wombo:A:B", "W1"),
+            s("syn.wombo:A:C", "W2"),
+            s("syn.wombo:B:C", "W3"),
+            s("syn.cc_chain:A:D", "C1"),
+            s("ctr.peel_dive:E:F", "P1"),
+            s("syn.cc_chain:B:D", "C2"),
+        ];
+        let order: Vec<String> = vary_rules(all.clone())
+            .into_iter()
+            .map(|s| s.claim)
+            .collect();
+        assert_eq!(order, vec!["W1", "C1", "P1", "W2", "W3", "C2"]);
+        let shown: Vec<String> = visible(&all, &[], "", "")
+            .into_iter()
+            .map(|s| s.claim)
+            .collect();
+        assert_eq!(shown, vec!["W1", "C1", "P1"]);
+        // Dismissing the first wombo: the next wombo stays behind the other
+        // rules, which still fill the chips with distinct rules.
+        let shown: Vec<String> = visible(&all, &["syn.wombo:A:B".into()], "", "")
+            .into_iter()
+            .map(|s| s.claim)
+            .collect();
+        assert_eq!(shown, vec!["W2", "C1", "P1"]);
+        // Dismissing the only peel: a repeat fills the third chip.
+        let shown: Vec<String> = visible(&all, &["ctr.peel_dive:E:F".into()], "", "")
+            .into_iter()
+            .map(|s| s.claim)
+            .collect();
+        assert_eq!(shown, vec!["W1", "C1", "W2"]);
     }
 }

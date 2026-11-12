@@ -21,7 +21,10 @@
  *   suggestions on six different pairs, and strength-3 claims come only
  *   from synergies (counters weigh at most 2, composition claims 2), so the
  *   three shown are pair claims whose reasons name two of our picks, and
- *   they land in Win conditions (synergies target Win conditions).
+ *   they land in Win conditions (synergies target Win conditions). Each
+ *   rule is shown once before any repeat, so the three carry three rules
+ *   (`syn.engage_burst`, `syn.engage_wombo`, `syn.wombo`), not three
+ *   `syn.wombo` pairs.
  * - Theirs: Gnar (top), Nidalee (jungle), Xerath (mid), Ezreal (bot),
  *   Janna (support): no hard engage and little front line (composition
  *   claims), poke into our engage, Janna's strong disengage undoing our
