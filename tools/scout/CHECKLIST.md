@@ -2,7 +2,7 @@
 
 Run everything from the repository root in PowerShell, WireGuard tunnel to brain up. Every command
 is one line and uses the session driver: it remembers the current run in `tools\scout\runs\.current`,
-so nothing is typed again after the sign-out in step 8. Each step is marked **PC-only** (you do it) or
+so nothing is typed again after a restart. Each step is marked **PC-only** (you do it) or
 **pre-done on brain** (the agent did it). If a step fails and its "If it fails" line does not help,
 note it in the run's `run.log`, skip the step and go on. Run data never goes to GitHub (the repo is public).
 
@@ -26,7 +26,7 @@ note it in the run's `run.log`, skip the step and go on. Run data never goes to 
 7. **PC-only. Minimap track (game length / 8, hands off).** `.\tools\scout\.venv\Scripts\python -m scout.session minimap`
    If it fails: if the first PNG in `frames_minimap` is not exactly the minimap, read its left, top, width,
    height in `probe_minimap_only.png` with Paint and add `--minimap-box L,T,W,H`.
-8. **PC-only. Top-down track (about 8 min).** Sign out of Windows and back in, reopen the replay (step 5), then
+8. **PC-only. Top-down track (about 8 min).** Keep the replay open (reopen it if it closed, step 5; no Windows sign-out needed), then
    `.\tools\scout\.venv\Scripts\python -m scout.session topdown`
    If it fails: add `--keystroke-unlock` (press Ctrl+Shift+Y and zoom out when asked).
 9. **PC-only. Timeline.** Your development key only, never product 834192's production key. Three lines:

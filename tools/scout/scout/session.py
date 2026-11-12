@@ -12,7 +12,7 @@
   python -m scout.session send [--dry-run]   scp the run dir to brain's inbox (never GitHub)
 
 The current run is kept in tools/scout/runs/.current, so nothing has to be
-typed again after a Windows sign-out. Every verb wraps the existing module with
+typed again after a restart. Every verb wraps the existing module with
 its file names unchanged; options after the verb that the driver does not know
 are passed on to that module (e.g. `session minimap --minimap-box 1600,820,300,300`).
 tools/scout/runs/ is git-ignored: run data never goes to GitHub.

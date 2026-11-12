@@ -16,17 +16,18 @@ If a step fails and its "If it fails" line does not help, note it in the run's `
 4. **Timeline first** (the minimap and top-down steps read it). Your development key only, never the
    production key: `$env:RIOT_API_KEY = Read-Host "Riot key"`, then `spy timeline`, then `Remove-Item Env:RIOT_API_KEY`.
    Output: `match.json`, `timeline.json`. If it fails: 403 = expired key; 404 = wrong id.
-5. **Open the replay** of that game in borderless full screen on the main monitor; do not run the probe
-   (its recording would use up this sign-in's one recording).
+5. **Open the replay** of that game in borderless full screen on the main monitor; the probe is not
+   needed here.
 6. **Minimap pass (game length ÷ 8, hands off).** `spy minimap` (speed 8, base circle icons by default;
    add the same `--minimap-box L,T,W,H` as last time if you used one; if `tools\scout\models\yolov12.pt`
    exists, move it out of that folder first, so the template detector runs as before). Output: `track_minimap.json`,
    `frames_minimap\`, `run.log` (HDR warning, icon sources). If it fails: if `run.log` shows icons from
    Data Dragon only (`icon template` lines), CommunityDragon was unreachable; note it and go on.
-7. **Sign out of Windows and back in** (one recording per sign-in), reopen the replay (step 5).
+7. **Keep the replay open** (reopen the replay if it closed, step 5). No sign-out: several recordings per
+   sign-in work (finding G, corrected 2026-11-12).
 8. **Top-down window (about 2 min).** `spy topdown` (camera 50000 scaled for 16:9, window 600–900 s).
-   Output: `track_topdown.json`, `frames_topdown\`. If it fails: 0 frames = a recording already ran in this
-   sign-in; repeat step 7. Whole map not in view: add `--keystroke-unlock`.
+   Output: `track_topdown.json`, `frames_topdown\`. If it fails: 0 frames = look up the folder named in
+   `run.log` ("client recording state at stop"). Whole map not in view: add `--keystroke-unlock`.
 9. **Score.** `spy score`. Output: `score.json`, `handcheck.csv` (wards and recalls of the NEW outputs).
    If it fails: the message names the missing file; redo that step.
 10. **Re-mark the hand check.** `spy handcheck`; per row jump the replay to `game_time_mmss` and write
