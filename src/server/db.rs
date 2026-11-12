@@ -272,9 +272,10 @@ pub async fn is_team_coach(db: &Surreal<Db>, user_id: &str, team_id: &str) -> Db
     Ok(row.is_some())
 }
 
-/// Who may create, list and disable the team's invite links (M148): a member
-/// of the team who leads it or is one of its coaches. Placing players,
-/// answering join requests and editing the team stay with the leader.
+/// Who may create, list and disable the team's invite links (M148) and, since
+/// M160 item 3, place players and answer join requests: a member of the team
+/// who leads it or is one of its coaches. Editing the team, kicking,
+/// hand-over and deletion stay with the leader.
 pub async fn is_team_leader_or_coach(
     db: &Surreal<Db>,
     user_id: &str,

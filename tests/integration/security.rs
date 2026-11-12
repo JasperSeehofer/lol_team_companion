@@ -960,6 +960,107 @@ async fn membership_and_leadership_checks() {
 }
 
 // ---------------------------------------------------------------------------
+// M160 item 3: coach rights at the DB level
+// ---------------------------------------------------------------------------
+
+/// The gate the server functions `set_member_place`, `get_pending_requests`
+/// and `handle_join_request` run (`require_leader_or_coach` +
+/// `db::is_team_leader_or_coach`), the join-request scope, and the roster
+/// writes staying team-scoped. The leader/coach distinction inside placing
+/// is the pure rule `models::team::may_set_place`, unit-tested in the models.
+#[tokio::test]
+async fn coach_rights_are_scoped_to_their_team_and_never_cover_the_leader() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let coach = db::create_user(&db, "coach".into(), "coach@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    let member = db::create_user(
+        &db,
+        "member".into(),
+        "member@example.com".into(),
+        "h".into(),
+    )
+    .await
+    .unwrap();
+    db::join_team(&db, &coach, &t.team1).await.unwrap();
+    db::join_team(&db, &member, &t.team1).await.unwrap();
+    db::set_member_place(&db, &t.team1, &coach, db::RosterPlace::Coach)
+        .await
+        .unwrap();
+
+    // Who counts as leader-or-coach: the leader and the team's coaches,
+    // nobody else on the team, and nobody from another team.
+    assert!(db::is_team_leader_or_coach(&db, &t.a, &t.team1)
+        .await
+        .unwrap());
+    assert!(db::is_team_leader_or_coach(&db, &coach, &t.team1)
+        .await
+        .unwrap());
+    assert!(!db::is_team_leader_or_coach(&db, &member, &t.team1)
+        .await
+        .unwrap());
+    assert!(!db::is_team_leader_or_coach(&db, &coach, &t.team2)
+        .await
+        .unwrap());
+    assert!(!db::is_team_leader_or_coach(&db, &t.b, &t.team1)
+        .await
+        .unwrap());
+    // The coach is not the leader (the target the coach may never move).
+    assert!(!db::is_team_leader(&db, &coach, &t.team1).await.unwrap());
+    assert!(db::is_team_coach(&db, &coach, &t.team1).await.unwrap());
+    assert!(!db::is_team_coach(&db, &coach, &t.team2).await.unwrap());
+
+    // A join request is listed for and answered through its own team only:
+    // another team's id is "not found" (the leader/coach of team 2 has no
+    // say on team 1's request).
+    let wanderer = db::create_user(&db, "wanda".into(), "wanda@example.com".into(), "h".into())
+        .await
+        .unwrap();
+    db::create_join_request(&db, &wanderer, &t.team1)
+        .await
+        .unwrap();
+    let req = db::list_pending_join_requests(&db, &t.team1).await.unwrap()[0]
+        .id
+        .clone();
+    assert!(db::list_pending_join_requests(&db, &t.team2)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_not_found(
+        db::respond_to_join_request(&db, &req, true, &t.team2).await,
+        "team 2 answers team 1's join request",
+    );
+    assert_eq!(db::get_user_team_id(&db, &wanderer).await.unwrap(), None);
+    db::respond_to_join_request(&db, &req, true, &t.team1)
+        .await
+        .unwrap();
+    assert_eq!(
+        db::get_user_team_id(&db, &wanderer).await.unwrap(),
+        Some(t.team1.clone())
+    );
+
+    // Roster writes stay team-scoped: a member of team 1 cannot be placed
+    // through team 2's id.
+    assert_not_found(
+        db::set_member_place(&db, &t.team2, &member, db::RosterPlace::Substitute).await,
+        "placing a member through another team's id",
+    );
+    assert_not_found(
+        db::assign_to_slot(&db, &t.team2, &member, "mid").await,
+        "assigning to a slot through another team's id",
+    );
+    // Inside the team the DB layer moves any member; which actor may do it
+    // is the server fn's `may_set_place` check.
+    db::set_member_place(&db, &t.team1, &member, db::RosterPlace::Substitute)
+        .await
+        .unwrap();
+    db::assign_to_slot(&db, &t.team1, &member, "mid")
+        .await
+        .unwrap();
+}
+
+// ---------------------------------------------------------------------------
 // Series and fearless lookups
 // ---------------------------------------------------------------------------
 

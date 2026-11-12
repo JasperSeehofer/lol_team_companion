@@ -157,16 +157,36 @@ pub const TEAM_INVITE_MAX_USES: i64 = 20;
 /// Longest a team code may stay valid, in days.
 pub const TEAM_INVITE_MAX_DAYS: i64 = 30;
 
-/// Place a member (leader only): `top` ... `support` starts them in that
-/// position (the starter there moves to the bench), `substitute` benches
-/// them, `coach` makes them a coach, `member` leaves them unplaced.
+/// Place a member: `top` ... `support` starts them in that position (the
+/// starter there moves to the bench), `substitute` benches them, `coach`
+/// makes them a coach, `member` leaves them unplaced. The leader may place
+/// anyone; a coach may place only plain members and substitutes — never the
+/// leader, never another coach, never onto "coach" (M160 item 3, the pure
+/// rule `models::team::may_set_place`).
 #[server]
 pub async fn set_member_place(member_user_id: String, place: String) -> Result<(), ServerFnError> {
     use crate::server::authz;
     use crate::server::db::{self, RosterPlace};
 
     let ctx = authz::authed().await?;
-    let team_id = ctx.require_leader().await?;
+    let team_id = ctx.require_leader_or_coach().await?;
+    let actor_is_leader = db::is_team_leader(&ctx.db, &ctx.user.id, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let target_is_leader = db::is_team_leader(&ctx.db, &member_user_id, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let target_is_coach = db::is_team_coach(&ctx.db, &member_user_id, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    if !crate::models::team::may_set_place(
+        actor_is_leader,
+        target_is_leader,
+        target_is_coach,
+        place == "coach",
+    ) {
+        return Err(ServerFnError::new(authz::LEADER_ONLY));
+    }
     let result = match place.as_str() {
         "substitute" => {
             db::set_member_place(&ctx.db, &team_id, &member_user_id, RosterPlace::Substitute).await
@@ -238,6 +258,9 @@ pub async fn leave_team() -> Result<(), ServerFnError> {
         .map_err(authz::server_err)
 }
 
+/// The pending join requests of the caller's team. The leader and the
+/// team's coaches see them (M160 item 3); everyone else gets an empty list,
+/// so the page can create the resource for every member.
 #[server]
 pub async fn get_pending_requests() -> Result<Vec<JoinRequest>, ServerFnError> {
     use crate::server::authz;
@@ -247,24 +270,27 @@ pub async fn get_pending_requests() -> Result<Vec<JoinRequest>, ServerFnError> {
     let Some(team_id) = ctx.team().await? else {
         return Ok(Vec::new());
     };
-    if !db::is_team_leader(&ctx.db, &ctx.user.id, &team_id)
+    if !db::is_team_leader_or_coach(&ctx.db, &ctx.user.id, &team_id)
         .await
         .map_err(authz::server_err)?
     {
-        return Ok(Vec::new()); // non-leaders see an empty list
+        return Ok(Vec::new()); // plain members see an empty list
     }
     db::list_pending_join_requests(&ctx.db, &team_id)
         .await
         .map_err(authz::server_err)
 }
 
+/// Accept or decline a join request of the caller's team (M160 item 3: the
+/// leader or a coach; the team is the caller's own, never one from the
+/// client, and the request must belong to it).
 #[server]
 pub async fn handle_join_request(request_id: String, accept: bool) -> Result<(), ServerFnError> {
     use crate::server::authz;
     use crate::server::db;
 
     let ctx = authz::authed().await?;
-    let team_id = ctx.require_leader().await?;
+    let team_id = ctx.require_leader_or_coach().await?;
     db::respond_to_join_request(&ctx.db, &request_id, accept, &team_id)
         .await
         .map_err(authz::server_err)
@@ -544,8 +570,12 @@ fn intern(s: String) -> &'static str {
     leaked
 }
 
-/// The leader's actions on one member, as menu items.
-fn member_actions(m: &TeamMember, is_self: bool) -> Vec<MenuItem> {
+/// The roster actions on one member, as menu items. The leader and the
+/// coaches get the place items (M160 item 3); "Make coach", "Make team
+/// leader" and "Remove from team" are the leader's alone
+/// (`actor_is_leader`), and a coach never sees them on the leader's or a
+/// coach's row (the menu is not shown there at all).
+fn member_actions(m: &TeamMember, is_self: bool, actor_is_leader: bool) -> Vec<MenuItem> {
     let mut items: Vec<MenuItem> = Role::ALL
         .iter()
         .filter(|r| !(m.roster_type == "starter" && Role::parse(&m.role) == Some(**r)))
@@ -554,13 +584,13 @@ fn member_actions(m: &TeamMember, is_self: bool) -> Vec<MenuItem> {
     if m.roster_type != "substitute" {
         items.push(MenuItem::new("substitute", "Move to the bench"));
     }
-    if m.roster_type != "coach" {
+    if m.roster_type != "coach" && actor_is_leader {
         items.push(MenuItem::new("coach", "Make coach"));
     }
     if m.roster_type != "member" {
         items.push(MenuItem::new("member", "Take off the roster"));
     }
-    if !is_self {
+    if !is_self && actor_is_leader {
         items.push(MenuItem::new("lead", "Make team leader"));
         items.push(MenuItem::new("kick", "Remove from team").danger());
     }
@@ -641,12 +671,15 @@ fn TeamView(
 ) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let is_leader = team.created_by == me;
-    // The leader and the team's coaches manage invite links (M148); the
-    // server checks the same (`require_leader_or_coach`).
-    let can_invite = is_leader
-        || members
-            .iter()
-            .any(|m| m.user_id == me && m.roster_type == "coach");
+    // A coach of the team (M160 item 3).
+    let is_coach = members
+        .iter()
+        .any(|m| m.user_id == me && m.roster_type == "coach");
+    // The leader and the team's coaches manage invite links (M148), place
+    // players and answer join requests (M160 item 3); the server checks the
+    // same (`require_leader_or_coach`). Team info, kick, hand-over and
+    // deletion stay with the leader.
+    let can_manage = is_leader || is_coach;
     let leader_name = members
         .iter()
         .find(|m| m.user_id == team.created_by)
@@ -742,6 +775,7 @@ fn TeamView(
     });
 
     let me_row = StoredValue::new(me.clone());
+    let created_by_row = StoredValue::new(team.created_by.clone());
     let row = move |m: Option<TeamMember>, position: Option<Role>| -> AnyView {
         match m {
             None => view! {
@@ -753,7 +787,13 @@ fn TeamView(
             .into_any(),
             Some(m) => {
                 let is_self = m.user_id == me_row.get_value();
-                let items = member_actions(&m, is_self);
+                // A coach gets the menu on plain members' and substitutes'
+                // rows only — never on the leader's row, never on a coach's
+                // row (the server refuses those moves, `may_set_place`).
+                let target_is_leader = m.user_id == created_by_row.get_value();
+                let show_actions =
+                    can_manage && (is_leader || (!target_is_leader && m.roster_type != "coach"));
+                let items = member_actions(&m, is_self, is_leader);
                 let uid = m.user_id.clone();
                 let uname = m.username.clone();
                 let card_href = format!("/team/player/{}", m.user_id);
@@ -772,7 +812,7 @@ fn TeamView(
                                 </span>
                             </span>
                         </span>
-                        {is_leader.then(|| view! {
+                        {show_actions.then(|| view! {
                             <Menu
                                 id=menu_id
                                 label=format!("Roster actions for {uname}")
@@ -846,11 +886,17 @@ fn TeamView(
                 }}
             }
         />
-        {can_invite.then(|| view! { <AutoPlacedNotices reload=reload placed=res.auto_placed /> })}
+        {can_manage.then(|| view! { <AutoPlacedNotices reload=reload placed=res.auto_placed /> })}
         <div class="grid gap-x-12 gap-y-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
             <div class="flex min-w-0 flex-col gap-12">
                 <section aria-labelledby="roster-h" data-roster>
-                    <SectionHeader title="Roster" id="roster-h" meta=if is_leader { "Use a player's actions to start, bench or make them coach." } else { "The leader places players." } />
+                    <SectionHeader title="Roster" id="roster-h" meta=if is_leader {
+                        "Use a player's actions to start, bench or make them coach."
+                    } else if is_coach {
+                        "Use a player's actions to start or bench them. The leader makes coaches and removes players."
+                    } else {
+                        "The leader and the team's coaches place players."
+                    } />
                     <h3 id="roster-starters" class="mb-2 font-display text-heading font-semibold text-primary">"Starting five"</h3>
                     <ul aria-labelledby="roster-starters" class="border-b border-rule" data-roster-group="starters">{starters_view}</ul>
                     {group_list("Substitutes", "substitutes", groups.substitutes.clone(), "No one on the bench. Substitutes play when needed and see everything the team does.")}
@@ -861,9 +907,9 @@ fn TeamView(
                 <PoolGaps gaps=res.gaps />
             </div>
             <div class="flex min-w-0 flex-col gap-12">
-                {can_invite.then(|| view! { <InvitePlayers team_name=team.name.clone() is_leader=is_leader invites=res.invites /> })}
-                <HowPlayersJoin team_name=team_name.clone() is_leader=is_leader requests=res.requests />
-                {is_leader.then(|| view! { <JoinRequests reload=reload requests=res.requests /> })}
+                {can_manage.then(|| view! { <InvitePlayers team_name=team.name.clone() is_leader=is_leader invites=res.invites /> })}
+                <HowPlayersJoin team_name=team_name.clone() can_manage=can_manage requests=res.requests />
+                {can_manage.then(|| view! { <JoinRequests reload=reload requests=res.requests /> })}
                 <TeamNotes notes=res.notes />
             </div>
         </div>
@@ -953,7 +999,8 @@ fn EditTeam(
 #[component]
 fn InvitePlayers(
     team_name: String,
-    /// The viewer leads the team (a coach does not place the new player).
+    /// The viewer leads the team (a coach sees the same panel with the
+    /// coach wording; both can place the new player, M160 item 3).
     is_leader: bool,
     invites: Resource<Result<(String, Vec<Invite>), ServerFnError>>,
 ) -> impl IntoView {
@@ -1019,12 +1066,12 @@ fn InvitePlayers(
     let placed_by = if is_leader {
         "until you place them"
     } else {
-        "until the leader places them"
+        "until you or the leader place them"
     };
     let position_hint = if is_leader {
         "Shown on the roster; you still place the player."
     } else {
-        "Shown on the roster; the leader still places the player."
+        "Shown on the roster; you or the leader still place the player."
     };
     view! {
         <section aria-labelledby="invite-h" data-team-invites>
@@ -1262,16 +1309,18 @@ fn AutoPlacedNotices(
 #[component]
 fn HowPlayersJoin(
     team_name: String,
-    is_leader: bool,
+    /// The viewer leads the team or coaches it: they see the waiting count
+    /// and answer under "Join requests" (M160 item 3).
+    can_manage: bool,
     requests: Resource<Result<Vec<JoinRequest>, ServerFnError>>,
 ) -> impl IntoView {
     view! {
         <section aria-labelledby="joining-h" data-roster-joining>
             <SectionHeader title="How players join" id="joining-h" />
             <p class="text-body text-secondary">
-                {format!("The team leader or a coach sends new players an invite link from the \u{201c}Invite a player\u{201d} panel: signing up with it puts them on {team_name} at once. Players who already have an account open this page without a team, find the team under \u{201c}Join a team\u{201d} and ask to join; the leader answers under \u{201c}Join requests\u{201d}. New members start as \u{201c}not placed yet\u{201d} until the leader puts them in the starting five, on the bench or with the coaches.")}
+                {format!("The team leader or a coach sends new players an invite link from the \u{201c}Invite a player\u{201d} panel: signing up with it puts them on {team_name} at once. Players who already have an account open this page without a team, find the team under \u{201c}Join a team\u{201d} and ask to join; the leader or a coach answers under \u{201c}Join requests\u{201d}. New members start as \u{201c}not placed yet\u{201d} until the leader or a coach puts them in the starting five, on the bench or with the coaches.")}
             </p>
-            {is_leader.then(|| view! {
+            {can_manage.then(|| view! {
                 <Suspense fallback=|| ()>
                     {move || requests.get().map(|r| {
                         let n = r.as_ref().map(|l| l.len()).unwrap_or(0);
@@ -1642,12 +1691,25 @@ mod tests {
 
     #[test]
     fn leader_actions_skip_the_current_place() {
-        let items = member_actions(&m("a", "mid", "starter"), false);
+        let items = member_actions(&m("a", "mid", "starter"), false, true);
         let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
         assert!(!ids.contains(&"mid"));
         assert!(ids.contains(&"top") && ids.contains(&"substitute") && ids.contains(&"coach"));
         assert_eq!(ids.last(), Some(&"kick"));
-        let own = member_actions(&m("a", "unassigned", "member"), true);
+        let own = member_actions(&m("a", "unassigned", "member"), true, true);
         assert!(!own.iter().any(|i| i.id == "kick" || i.id == "member"));
+    }
+
+    #[test]
+    fn coach_actions_have_no_coach_lead_or_kick() {
+        // M160 item 3: a coach places players but never makes a coach,
+        // hands over leadership or kicks (those stay with the leader).
+        let items = member_actions(&m("a", "mid", "starter"), false, false);
+        let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert!(ids.contains(&"top") && ids.contains(&"substitute") && ids.contains(&"member"));
+        assert!(!ids.contains(&"coach") && !ids.contains(&"lead") && !ids.contains(&"kick"));
+        // On the leader's or a coach's row the menu is not shown at all
+        // (the `row` closure's `show_actions`), so the server's
+        // `may_set_place` refusal is the second line of defence.
     }
 }

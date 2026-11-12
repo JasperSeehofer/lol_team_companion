@@ -341,7 +341,9 @@ pub fn reports_label(updates: usize) -> String {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct Notifications {
     pub pending_requests: Vec<JoinRequest>,
-    pub is_leader: bool,
+    /// The user leads the team or is one of its coaches: the pending join
+    /// requests and auto-placed members are theirs to answer (M160 item 3).
+    pub can_manage: bool,
     /// The user's bug reports whose status changed since they last looked.
     #[serde(default)]
     pub report_updates: usize,
@@ -380,25 +382,18 @@ pub async fn get_notifications() -> Result<Notifications, ServerFnError> {
     {
         return Ok(base);
     }
+    // The leader and the coaches answer the join requests (M160 item 3)
+    // and the automatic placements (M160 item 2b).
     let auto_placed = db::list_auto_placed(&db, &team_id)
         .await
         .map(|v| v.len())
         .unwrap_or(0);
-    if !db::is_team_leader(&db, &user.id, &team_id)
-        .await
-        .map_err(authz::server_err)?
-    {
-        return Ok(Notifications {
-            auto_placed,
-            ..base
-        });
-    }
     let pending = db::list_pending_join_requests(&db, &team_id)
         .await
         .unwrap_or_default();
     Ok(Notifications {
         pending_requests: pending,
-        is_leader: true,
+        can_manage: true,
         report_updates,
         auto_placed,
     })
@@ -792,9 +787,9 @@ pub fn Nav() -> impl IntoView {
                     <div class="flex-1" />
 
                     <div class="flex items-center gap-3">
-                        // Join requests waiting for the team leader, and (M160)
-                        // members an invite link placed as starters, for the
-                        // leader and coaches to keep or undo.
+                        // Join requests waiting for the leader or a coach
+                        // (M160 item 3), and (M160 item 2b) members an invite
+                        // link placed as starters, to keep or undo.
                         <Suspense fallback=|| ()>
                             {move || {
                                 let notifs = notifications.get().and_then(|r| r.ok()).unwrap_or_default();
