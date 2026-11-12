@@ -39,6 +39,7 @@ const SECTIONS = [
   "avatar",
   "markers",
   "marks",
+  "suggestion",
   "readout",
   "bar",
   "draft",

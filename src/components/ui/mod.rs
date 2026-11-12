@@ -10,6 +10,7 @@
 //! Annotation, TimelineScrub; ProportionBar (M7).
 //! M141: SaveStatus / SaveTracker / LoadFailed (status.rs).
 //! M152: RiftSketch (rift.rs; geometry generated into rift_geometry.rs).
+//! M150: SuggestionChip / StrengthDots (suggestion.rs), Dialog's BottomSheet.
 //!
 //! Rules for every component here: typed variants (enums, no strings),
 //! class names written out in full (Tailwind only sees literals), identical
@@ -38,6 +39,7 @@ pub mod rift;
 pub mod rift_geometry;
 pub mod skeleton;
 pub mod status;
+pub mod suggestion;
 pub mod table;
 pub mod tabs;
 pub mod text;
@@ -83,6 +85,7 @@ pub use status::{
     save_failure_reason, use_save_state, use_unsaved_guard, LoadFailed, SaveState, SaveStatus,
     SaveTracker, SAVE_FAILED_TOAST,
 };
+pub use suggestion::{evidence_glyph, StrengthDots, SuggestionChip};
 pub use table::{
     sort_rows, Align, RowLink, SortDir, SortState, SortStatus, SortTh, Table, Td, Th, Tr,
 };

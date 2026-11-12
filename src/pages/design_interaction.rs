@@ -26,6 +26,7 @@ fn info_icon() -> impl IntoView {
 pub fn DialogSection() -> impl IntoView {
     let form_open = RwSignal::new(false);
     let confirm_open = RwSignal::new(false);
+    let sheet_open = RwSignal::new(false);
     let result = RwSignal::new("Nothing confirmed yet".to_string());
     let name = RwSignal::new("Blue side plan".to_string());
     let on_confirm = Callback::new(move |_| {
@@ -40,10 +41,11 @@ pub fn DialogSection() -> impl IntoView {
     });
     let cancel = Callback::new(move |_| form_open.set(false));
     view! {
-        <GallerySection id="dialog" title="Dialog" lede="Native modal dialog: focus moves in, Tab stays inside, Escape or the scrim closes, focus returns to the button. The confirm variant names the action; for destructive actions Cancel has focus first.">
+        <GallerySection id="dialog" title="Dialog" lede="Native modal dialog: focus moves in, Tab stays inside, Escape or the scrim closes, focus returns to the button. The bottom sheet is the same modal anchored to the bottom edge, for phone cards. The confirm variant names the action; for destructive actions Cancel has focus first.">
             <div class="flex flex-wrap items-center gap-3" data-testid="dialog-demo">
                 <Button on_click=Callback::new(move |_| form_open.set(true)) attr:data-testid="open-dialog">"Rename plan"</Button>
                 <Button variant=ButtonVariant::Danger on_click=Callback::new(move |_| confirm_open.set(true)) attr:data-testid="open-confirm">"Delete plan"</Button>
+                <Button variant=ButtonVariant::Secondary on_click=Callback::new(move |_| sheet_open.set(true)) attr:data-testid="open-bottom-sheet">"Open bottom sheet"</Button>
                 <output class="text-label text-secondary" data-testid="dialog-result" aria-live="polite">{move || result.get()}</output>
             </div>
             <Dialog
@@ -60,6 +62,18 @@ pub fn DialogSection() -> impl IntoView {
                 <Field id="gallery-dialog-name" label="Plan name">
                     <TextField value=name />
                 </Field>
+            </Dialog>
+            <Dialog
+                id="gallery-bottom-sheet"
+                open=sheet_open
+                title="Malphite engages, Syndra bursts"
+                size=DialogSize::BottomSheet
+            >
+                <div class="flex flex-col gap-2">
+                    <p class="note text-reading text-secondary">"Malphite starts fights that Syndra's burst finishes."</p>
+                    <p class="text-caption text-muted">"Bottom sheet: phones only in the app. Anchored to the bottom edge, a hairline top, no shadow; it rises 32 px in 220 ms."</p>
+                    <Button variant=ButtonVariant::Secondary size=ButtonSize::Touch full_width=true on_click=Callback::new(move |_| sheet_open.set(false))>"Close"</Button>
+                </div>
             </Dialog>
             <ConfirmDialog
                 id="gallery-confirm"

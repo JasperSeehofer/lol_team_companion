@@ -3,13 +3,15 @@
 
 use leptos::prelude::*;
 
+use crate::components::ui::Force;
 use crate::components::ui::{
     Annotation, AvatarShape, AvatarSize, AvatarState, BarInk, BarSegment, BarSize, CanvasFrame,
     ChampionAvatar, Delta, DraftSide, FrameGrid, GameResult, GlyphSize, LegendBlock, LegendEntry,
     LineStyle, LineWeight, Moment, NotePlacement, ProportionBar, ReadoutSize, ResultGlyph, Role,
-    RoleLabel, RoleLabelStyle, ScaleBar, Sentiment, SideMarker, SideText, StatReadout, Swatch,
-    SwatchInk, TimelineScrub, Trend, UserAvatar,
+    RoleLabel, RoleLabelStyle, ScaleBar, Sentiment, SideMarker, SideText, StatReadout,
+    StrengthDots, SuggestionChip, Swatch, SwatchInk, TimelineScrub, Trend, UserAvatar,
 };
+use crate::models::graph::ReasonSource;
 use crate::pages::design::{GallerySection, Sample};
 
 #[component]
@@ -96,6 +98,28 @@ pub fn MarkersSection() -> impl IntoView {
                         <ResultGlyph result=GameResult::Win word=true />
                         <ResultGlyph result=GameResult::Loss word=true />
                     </div>
+                </div>
+            </div>
+        </GallerySection>
+    }
+}
+
+#[component]
+pub fn SuggestionSection() -> impl IntoView {
+    let open = RwSignal::new(false);
+    view! {
+        <GallerySection id="suggestion" title="Suggestion chip" lede="A game-plan suggestion as a paper tag in ink: a pin-dot, the claim and a mono evidence glyph, set a fraction of a degree off true. Never a pill and never chalk at rest; only the focus outline is chalk. A 44 px target below md. Strength is three dots with a name, never a number.">
+            <div class="flex flex-col gap-8">
+                <ul role="list" class="flex flex-wrap gap-2 py-2">
+                    <li><Sample label="Default"><SuggestionChip claim="Malphite engages, Syndra bursts" source=ReasonSource::Rule index=0 /></Sample></li>
+                    <li><Sample label="Hover (forced)"><SuggestionChip claim="Their comp has no hard engage" source=ReasonSource::Rule index=1 force=Force::Hover /></Sample></li>
+                    <li><Sample label="Expanded"><SuggestionChip claim="Two scaling carries, no front line" source=ReasonSource::Rule index=2 expanded=Signal::derive(move || open.get()) on_open=Callback::new(move |_| open.update(|o| *o = !*o)) /></Sample></li>
+                    <li><Sample label="Pressed (forced)"><SuggestionChip claim="Leona engage lands before Orianna's ball" source=ReasonSource::TeamNote index=0 force=Force::Active /></Sample></li>
+                </ul>
+                <div class="flex flex-wrap items-center gap-6 text-caption text-muted">
+                    <Sample label="Strength 1"><StrengthDots value=1 /></Sample>
+                    <Sample label="Strength 2"><StrengthDots value=2 /></Sample>
+                    <Sample label="Strength 3"><StrengthDots value=3 /></Sample>
                 </div>
             </div>
         </GallerySection>

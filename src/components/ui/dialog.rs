@@ -18,20 +18,27 @@ pub enum DialogSize {
     Lg,
     /// The whole viewport: the phone menu.
     Sheet,
+    /// Anchored to the bottom edge, full width, at most 85% of the
+    /// viewport high: a phone card (M150's suggestion card).
+    BottomSheet,
 }
 
 impl DialogSize {
     pub fn class(self) -> &'static str {
         match self {
-            DialogSize::Sm => "m-auto max-h-[calc(100dvh-2rem)] w-[min(24rem,calc(100vw-2rem))]",
-            DialogSize::Md => "m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))]",
-            DialogSize::Lg => "m-auto max-h-[calc(100dvh-2rem)] w-[min(44rem,calc(100vw-2rem))]",
-            DialogSize::Sheet => "m-0 h-dvh max-h-dvh w-screen max-w-none border-0",
+            DialogSize::Sm => "m-auto max-h-[calc(100dvh-2rem)] w-[min(24rem,calc(100vw-2rem))] border border-outline shadow-overlay",
+            DialogSize::Md => "m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))] border border-outline shadow-overlay",
+            DialogSize::Lg => "m-auto max-h-[calc(100dvh-2rem)] w-[min(44rem,calc(100vw-2rem))] border border-outline shadow-overlay",
+            DialogSize::Sheet => "m-0 h-dvh max-h-dvh w-screen max-w-none border-0 shadow-overlay",
+            // No shadow (the opaque scrim separates it), a hairline top
+            // edge, a 32 px rise on entry; closing is instant.
+            DialogSize::BottomSheet => "mx-0 mb-0 mt-auto max-h-[85dvh] w-screen max-w-none border-t border-outline pb-[env(safe-area-inset-bottom)] transition-transform duration-[220ms] ease-out starting:open:translate-y-8 motion-reduce:transition-none",
         }
     }
 }
 
-const DIALOG: &str = "overflow-visible border border-outline bg-ink-1 p-0 text-primary shadow-overlay backdrop:bg-scrim open:flex open:flex-col";
+const DIALOG: &str =
+    "overflow-visible bg-ink-1 p-0 text-primary backdrop:bg-scrim open:flex open:flex-col";
 
 /// A modal dialog. Open and close it through `open`; Escape, the close
 /// button and a click on the scrim set it back to `false`.
@@ -43,7 +50,9 @@ const DIALOG: &str = "overflow-visible border border-outline bg-ink-1 p-0 text-p
 /// description) are set. On close, focus returns to the element that was
 /// focused before it opened. The scrim is opaque (no blur) and page scroll
 /// is locked while open (`input.css`). Server and browser render the same
-/// closed `<dialog>`.
+/// closed `<dialog>`. `BottomSheet` is the same modal anchored to the
+/// bottom edge for phones; it rises 32 px in 220 ms (instant under reduced
+/// motion), and Escape, the scrim and the close button all close it.
 #[component]
 pub fn Dialog(
     /// Prefix for the DOM ids of the title and description; unique on the page.
