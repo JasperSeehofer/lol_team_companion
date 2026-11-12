@@ -1,0 +1,135 @@
+{
+  "id": "m149-r1-team-companion-feedback-batch-1-r2",
+  "title": "M149 · Team Companion feedback batch 1, round 2: phone timeline targets, desktop area picker, recalls and re-import",
+  "date": "2026-11-12",
+  "mission": "M149",
+  "status": "open",
+  "summary": "Round 2 of the first feedback batch is on mission/M149-team-companion-feedback-batch-1-r2, with main merged in; tip 6f93871 is green in CI run 43309188443 (202 e2e passed, 1 known flaky, 0 slow requests). On a phone, the match timeline now has an 'Events near the playhead' row of 44 px buttons. A disabled main button reads at 5.52:1 instead of 4.15:1. On a computer, Give Feedback can capture the screen and let you select an area; the picture goes through the existing upload checks, and Download my data now includes your screenshots. Games opened from now on keep kill and objective positions and every item purchase. Your team's recalls are inferred from purchases and labelled 'Recall (inferred)', because Riot reports no recall event. Admins can re-import stored games five at a time on /admin/reimport; a re-import does not extend the 12-month retention. The map view (A3) waits for the Rift Board, as you ruled on 18 October. Not done: visual-regression baselines (R3), and a manual check of the area picker on a real desktop (question 4). The privacy page is unchanged; five sentences are flagged for your legal read. Report: REPORT-R1.md.",
+  "questions": [
+    {
+      "text": "Land mission/M149-team-companion-feedback-batch-1-r2 once the fresh verifier's VERIFY-R1 says PASS? Deploy stays a separate step (82-release.sh behind its own cards). After deploy, filling old games with recalls and positions is an admin act on /admin/reimport.",
+      "kind": "merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands it after VERIFY-R1 PASS. Deploy and the re-import of stored games are separate steps."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open; your answers below feed an R2 on top of it."
+        }
+      ],
+      "recommend": "Yes, merge. Every in-scope item shipped with tests and CI is green on the merged state. The open points (legal wording, the desktop check) do not block the code: the privacy page is unchanged, and the area picker only adds to the existing upload."
+    },
+    {
+      "text": "(react) The privacy page was not changed. Five sentences in datenschutz.rs may need your legal read: (1) STORED, a game's timeline now also holds map positions of kills and objectives, every player's item purchases and who placed each ward; (2) Riot API triggers, an admin re-import is a new one; (3) retention, still accurate, could add that a re-import does not extend the 12 months; (4) Download my data now includes screenshots (up to 32 MB); (5) optional, recalls are inferred, not reported by Riot.",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "I'll word it",
+          "consequence": "Nothing changes until you send the wording; the next round applies it as written."
+        },
+        {
+          "label": "Agent drafts, I approve",
+          "consequence": "The next round drafts the five changes in a separate commit for your approval before land or release."
+        },
+        {
+          "label": "Leave as is",
+          "consequence": "The page stays as it is; the flag is closed."
+        }
+      ],
+      "recommend": "Agent drafts, I approve. The facts are clear and the drafts are short, but the page is under legal review, so you approve every word."
+    },
+    {
+      "text": "(react) Recalls are inferred: purchases within 25 s are one shop visit; a visit after 90 s counts as a recall unless the buyer died shortly before (20 s + 2 s per game minute, at most 90 s). There is no fountain check, because positions come only once a minute. Labelled 'Recall (inferred)' with a caption.",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep it",
+          "consequence": "Nothing changes."
+        },
+        {
+          "label": "Add fountain check",
+          "consequence": "A later round also requires the nearest minute frame near the fountain. Fewer false recalls, but some real ones are dropped."
+        },
+        {
+          "label": "Hide recalls",
+          "consequence": "The next round stops drawing recalls; purchases stay stored for later."
+        }
+      ],
+      "recommend": "Keep it. It is labelled as inferred, and a minute-frame fountain check would drop real recalls."
+    },
+    {
+      "text": "(react) Please try the area picker on your desktop: Chrome or Firefox, open Give Feedback, choose 'Select an area', pick a screen, drag an area (Enter confirms, Esc cancels). CI only checked it with a stubbed capture; no headed browser was available to the agents. How did it go?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Works",
+          "consequence": "B is closed as checked by hand."
+        },
+        {
+          "label": "Broken (I'll file a report)",
+          "consequence": "Your report becomes the first item of the next round; land can wait if you say so."
+        },
+        {
+          "label": "Later",
+          "consequence": "B stays marked as not checked by hand."
+        }
+      ],
+      "recommend": "Works, if it does on your machine. It is the one part CI cannot prove."
+    },
+    {
+      "text": "(react) The backfill of stored games is a button on /admin/reimport (five games a batch, rate limited, needs the Riot key). Is that enough, or do you also want a CLI command like promote and reset-password?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Button is enough",
+          "consequence": "Nothing changes; after deploy an admin presses it until the page says every game is current."
+        },
+        {
+          "label": "Add a CLI twin",
+          "consequence": "A later round adds `lol_team_companion reimport` (server stopped, same rules and budget)."
+        }
+      ],
+      "recommend": "Button is enough. The number of stored games is small, and the button keeps the Riot budget and the rate limit in one place."
+    }
+  ],
+  "links": [
+    {
+      "label": "Match detail 390 (react)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/frames/after/match-detail-390.png"
+    },
+    {
+      "label": "Match detail timeline 390 (react)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/frames/after/match-detail-timeline-390.png"
+    },
+    {
+      "label": "Match detail 1280 (react)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/frames/after/match-detail-1280.png"
+    },
+    {
+      "label": "Feedback dialog 1280 (react)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/frames/after/feedback-dialog-1280.png"
+    },
+    {
+      "label": "Area picker 1280, stubbed capture (react)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/frames/after/feedback-picker-1280.png"
+    },
+    {
+      "label": "My games sync 390 (react)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/frames/after/me-sync-390.png"
+    },
+    {
+      "label": "Admin re-import 1280 (react)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/frames/after/admin-reimport-1280.png"
+    },
+    {
+      "label": "Report (context)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/REPORT-R1.md"
+    },
+    {
+      "label": "Atelier closing critique (context)",
+      "href": "/app/previews/m149-r1-team-companion-feedback-batch-1-r2/atelier-critique-r2.md"
+    }
+  ]
+}
