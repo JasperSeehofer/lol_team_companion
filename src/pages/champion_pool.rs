@@ -531,11 +531,9 @@ fn RoleLedger(
                     }
                     let stats_result = stats.get();
                     match stats_result {
-                        Some(Err(_)) => {
-                            return view! {
+                        Some(Err(_)) => view! {
                                 <LoadFailed what="Stats" on_retry=Callback::new(move |_| stats.refetch()) />
-                            }.into_any();
-                        }
+                            }.into_any(),
                         _ => {
                             let stats_list = stats_result.and_then(|r| r.ok()).unwrap_or_default();
                             view! {
@@ -1100,10 +1098,10 @@ fn ChampionNotes(
                                             "lesson" => "No lessons yet: what you learned in a game, written after it.",
                                             _ => "No play notes yet: power spikes, combos, synergies and positioning.",
                                         };
-                                        return view! { <p class="text-label text-secondary">{msg}</p> }.into_any();
-                                    }
-                                    view! {
-                                    <ul class="flex flex-col">
+                                        view! { <p class="text-label text-secondary">{msg}</p> }.into_any()
+                                    } else {
+                                        view! {
+                                            <ul class="flex flex-col">
                                         {list.into_iter().map(|n| {
                                             let n_edit = n.clone();
                                             let id = n.id.clone().unwrap_or_default();
@@ -1126,6 +1124,7 @@ fn ChampionNotes(
                                         }).collect_view()}
                                     </ul>
                                 }.into_any()
+                                    }
                             }
                         })}
                         </Transition>
