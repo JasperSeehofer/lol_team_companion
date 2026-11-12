@@ -591,9 +591,10 @@ fn NewOpponentDialog(open: RwSignal<bool>, on_created: Callback<String>) -> impl
                 }
                 Err(e) => {
                     saving.set(false);
-                    toast
-                        .push
-                        .run(Toast::error(format!("Could not add the opponent: {e}")));
+                    toast.push.run(Toast::error(format!(
+                        "Could not add the opponent: {}",
+                        crate::models::utils::error_text(&e)
+                    )));
                 }
             }
         });
@@ -655,7 +656,10 @@ fn OpponentDetail(
                     on_changed.run(());
                     toast.push.run(Toast::success("Dossier saved"));
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not save: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -667,9 +671,10 @@ fn OpponentDetail(
                     on_deleted.run(());
                     toast.push.run(Toast::success("Opponent deleted"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not delete: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not delete: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -812,7 +817,10 @@ fn EmptyRole(
                         .push
                         .run(Toast::success(format!("{label} player added")));
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not add: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not add: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -893,9 +901,10 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                     on_changed.run(());
                     toast.push.run(Toast::success("Player removed"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not remove: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not remove: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });

@@ -445,9 +445,10 @@ fn NewItemForm(members: Vec<String>) -> impl IntoView {
                     page.data.refetch();
                     toast.push.run(Toast::success("Action item added"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not add the item: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not add the item: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
             saving.set(false);
         });
@@ -525,9 +526,10 @@ fn ItemRow(item: ActionItem, members: Vec<String>, server_today: String) -> impl
                 }
                 Err(e) => {
                     done.set(item_sv.with_value(|i| i.status == "done"));
-                    toast
-                        .push
-                        .run(Toast::error(format!("Could not update the item: {e}")));
+                    toast.push.run(Toast::error(format!(
+                        "Could not update the item: {}",
+                        crate::models::utils::error_text(&e)
+                    )));
                 }
             }
         });
@@ -557,9 +559,10 @@ fn ItemRow(item: ActionItem, members: Vec<String>, server_today: String) -> impl
                                     page.data.refetch();
                                     toast.push.run(Toast::success("Item restored"));
                                 }
-                                Err(e) => toast
-                                    .push
-                                    .run(Toast::error(format!("Could not restore it: {e}"))),
+                                Err(e) => toast.push.run(Toast::error(format!(
+                                    "Could not restore it: {}",
+                                    crate::models::utils::error_text(&e)
+                                ))),
                             }
                         });
                     });
@@ -567,9 +570,10 @@ fn ItemRow(item: ActionItem, members: Vec<String>, server_today: String) -> impl
                         .push
                         .run(Toast::info("Action item deleted").with_action("Undo", undo));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not delete: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not delete: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -721,7 +725,10 @@ fn ItemEditor(item: ActionItem, members: Vec<String>) -> impl IntoView {
                     page.data.refetch();
                     toast.push.run(Toast::success("Item saved"));
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not save: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });

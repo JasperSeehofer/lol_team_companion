@@ -466,7 +466,10 @@ fn RoleLedger(
                         role_word.to_lowercase()
                     )));
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not add: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not add: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -861,9 +864,10 @@ fn ChampionDetail(
                             .with_action("Undo", undo),
                     );
                 }
-                Err(err) => toast
-                    .push
-                    .run(Toast::error(format!("Could not remove: {err}"))),
+                Err(err) => toast.push.run(Toast::error(format!(
+                    "Could not remove: {}",
+                    crate::models::utils::error_text(&err)
+                ))),
             }
         });
     });
@@ -1023,7 +1027,10 @@ fn ChampionNotes(
                     notes.refetch();
                     toast.push.run(Toast::success("Note saved"));
                 }
-                Err(e) => f_error.set(Some(format!("Could not save: {e}"))),
+                Err(e) => f_error.set(Some(format!(
+                    "Could not save: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -1039,9 +1046,10 @@ fn ChampionNotes(
                     notes.refetch();
                     toast.push.run(Toast::success("Note deleted"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not delete: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not delete: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });

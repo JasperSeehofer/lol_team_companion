@@ -959,7 +959,7 @@ fn EarlierWorkList(
                             busy.set(None);
                             toast
                                 .push
-                                .run(Toast::error(format!("Could not link it: {e}")));
+                                .run(Toast::error(format!("Could not link it: {}", crate::models::utils::error_text(&e))));
                         }
                     }
                 });

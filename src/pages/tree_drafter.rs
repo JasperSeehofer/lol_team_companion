@@ -375,9 +375,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     trees.refetch();
                     toast.push.run(Toast::success("Tree created"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not create the tree: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not create the tree: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -396,9 +397,10 @@ pub fn TreeDrafterPage() -> impl IntoView {
                     trees.refetch();
                     toast.push.run(Toast::success("Tree deleted"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not delete the tree: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not delete the tree: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -603,9 +605,10 @@ fn TreeEditor(
                     ned.load(Some(&node));
                     toast.push.run(Toast::success("Branch added"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not add the branch: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not add the branch: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -628,9 +631,10 @@ fn TreeEditor(
                     nodes.refetch();
                     toast.push.run(Toast::success("Branch deleted"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not delete: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not delete: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });

@@ -893,9 +893,10 @@ pub fn PostGamePage() -> impl IntoView {
                     saved.set(Some(sent));
                     created_items.set((n > 0).then_some(n));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not save the review: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not save the review: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -926,9 +927,10 @@ pub fn PostGamePage() -> impl IntoView {
                     reviews.refetch();
                     toast.push.run(Toast::success("Review deleted"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not delete: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not delete: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -1430,7 +1432,7 @@ fn OutcomeSection(ed: ReviewEd) -> impl IntoView {
                     status.set(Some(format!("Found {word} with one of the draft's picks in your recent games.")));
                 }
                 Ok(None) => status.set(Some("No recent game of yours matches the draft's picks (or no Riot account is linked). Set the result yourself.".into())),
-                Err(e) => status.set(Some(format!("The lookup failed: {e}. Set the result yourself."))),
+                Err(e) => status.set(Some(format!("The lookup failed: {}. Set the result yourself.", crate::models::utils::error_text(&e)))),
             }
             fetching.set(false);
         });

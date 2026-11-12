@@ -783,9 +783,10 @@ pub fn DraftGraphPanel(
                         .push
                         .run(Toast::info("Team note removed").with_action("Undo", undo));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not remove the note: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not remove the note: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -890,7 +891,7 @@ pub fn DraftGraphPanel(
                 }.into_any(),
                 Some(Err(e)) => view! {
                     <Callout tone=CalloutTone::Danger title="The ranking could not be loaded">
-                        {e}
+                        {crate::models::utils::error_text(&e)}
                     </Callout>
                 }.into_any(),
                 Some(Ok(g)) if g.target.is_none() => view! {

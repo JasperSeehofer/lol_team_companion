@@ -1007,9 +1007,10 @@ pub fn GamePlanPage() -> impl IntoView {
                     plans.refetch();
                     toast.push.run(Toast::success("Game plan deleted"));
                 }
-                Err(e) => toast
-                    .push
-                    .run(Toast::error(format!("Could not delete: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not delete: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -1458,9 +1459,10 @@ fn ChecklistSection(ed: PlanEd) -> impl IntoView {
             let json = serde_json::to_string(&checked.get_untracked()).unwrap_or_default();
             leptos::task::spawn_local(async move {
                 if let Err(e) = update_checklist(iid, json).await {
-                    toast
-                        .push
-                        .run(Toast::error(format!("Could not save the tick: {e}")));
+                    toast.push.run(Toast::error(format!(
+                        "Could not save the tick: {}",
+                        crate::models::utils::error_text(&e)
+                    )));
                 }
             });
         }
@@ -1494,7 +1496,10 @@ fn ChecklistSection(ed: PlanEd) -> impl IntoView {
                     instance.set(Some(id));
                     toast.push.run(Toast::success("Checklist saved"));
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not save: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -1510,7 +1515,10 @@ fn ChecklistSection(ed: PlanEd) -> impl IntoView {
                     templates.refetch();
                     toast.push.run(Toast::success("Saved as a template"));
                 }
-                Err(e) => toast.push.run(Toast::error(format!("Could not save: {e}"))),
+                Err(e) => toast.push.run(Toast::error(format!(
+                    "Could not save: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
@@ -1718,9 +1726,10 @@ fn ReviewSection(ed: PlanEd) -> impl IntoView {
                 }
                 Err(e) => {
                     busy.set(false);
-                    toast
-                        .push
-                        .run(Toast::error(format!("Could not start the review: {e}")));
+                    toast.push.run(Toast::error(format!(
+                        "Could not start the review: {}",
+                        crate::models::utils::error_text(&e)
+                    )));
                 }
             }
         });

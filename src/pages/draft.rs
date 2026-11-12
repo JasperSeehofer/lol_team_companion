@@ -2420,7 +2420,10 @@ fn PlanSection(
                     series_open.set(false);
                     toast.push.run(Toast::success("Series created"));
                 }
-                Err(e) => s_error.set(Some(format!("Could not create the series: {e}"))),
+                Err(e) => s_error.set(Some(format!(
+                    "Could not create the series: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
             }
         });
     });
