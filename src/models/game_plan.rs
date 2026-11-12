@@ -27,6 +27,15 @@ pub struct GamePlan {
     /// The linked draft was deleted (the link is gone; the page says so).
     #[serde(default)]
     pub draft_deleted: bool,
+    /// M159: the scheduled match this plan was made for (if any).
+    #[serde(default)]
+    pub scheduled_match_id: Option<String>,
+    /// M159: the game of the match's series (1 to 5).
+    #[serde(default)]
+    pub game_number: Option<i32>,
+    /// M159: the match this plan was made for was deleted.
+    #[serde(default)]
+    pub scheduled_match_deleted: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -51,6 +60,18 @@ pub struct PostGameLearning {
     /// When the review was written (RFC 3339), filled on reads.
     #[serde(default)]
     pub created_at: Option<String>,
+    /// M159: the scheduled match this review is of (if any).
+    #[serde(default)]
+    pub scheduled_match_id: Option<String>,
+    /// M159: the series the reviewed game belongs to (if any).
+    #[serde(default)]
+    pub series_id: Option<String>,
+    /// M159: the game of the series (1 to 5).
+    #[serde(default)]
+    pub game_number: Option<i32>,
+    /// M159: the match this review was of was deleted.
+    #[serde(default)]
+    pub scheduled_match_deleted: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -156,6 +177,9 @@ mod tests {
     #[test]
     fn game_plan_all_options_none_round_trips() {
         let plan = GamePlan {
+            scheduled_match_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             id: None,
             team_id: "team:t1".into(),
@@ -183,6 +207,9 @@ mod tests {
     #[test]
     fn game_plan_all_options_some_round_trips() {
         let plan = GamePlan {
+            scheduled_match_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             id: Some("game_plan:1".into()),
             team_id: "team:t1".into(),
@@ -280,6 +307,10 @@ mod tests {
     #[test]
     fn post_game_learning_round_trips_json() {
         let pgl = PostGameLearning {
+            scheduled_match_id: None,
+            series_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             created_at: None,
             id: Some("post_game_learning:1".into()),
@@ -303,6 +334,10 @@ mod tests {
     #[test]
     fn post_game_learning_with_win_loss_rating_round_trips() {
         let pgl = PostGameLearning {
+            scheduled_match_id: None,
+            series_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             created_at: None,
             id: Some("post_game_learning:2".into()),

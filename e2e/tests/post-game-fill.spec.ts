@@ -35,15 +35,18 @@ test.describe("post-game: filled from match", () => {
   test("choosing a match fills the result, marks it and can be undone", async ({ page }) => {
     // The demo game's scoreboard is stored by the seed, so side and picks are known.
     await navigateTo(page, "/post-game");
-    const select = page.locator("#review-match");
-    await expect(select.locator(`option[value="${DEMO}"]`)).toHaveCount(1);
+    // M159: the game is a radio row of the picker (the seed's five members
+    // played it together), never a raw-id <select>.
+    const game = page.getByTestId("review-game-picker").locator(`input[type=radio][value="${DEMO}"]`);
+    const custom = page.getByTestId("review-game-picker").getByRole("radio", { name: "Not in the list (scrim / custom)" });
+    await expect(game).toHaveCount(1);
     const outcome = page.locator('[data-segmented="review-outcome"]');
     await expect(outcome.getByRole("radio", { name: "Not set" })).toHaveAttribute("aria-checked", "true");
 
     // A change event before hydration is lost: choose again until it fills.
     await expect(async () => {
-      await select.selectOption("");
-      await select.selectOption(DEMO);
+      await custom.check();
+      await game.check();
       await expect(outcome.getByRole("radio", { name: "Win" })).toHaveAttribute("aria-checked", "true", { timeout: 2000 });
     }).toPass({ timeout: 15000 });
     await expect(page.getByTestId("review-filled-note")).toContainText("Filled from match: Result");
@@ -76,7 +79,7 @@ test.describe("post-game: filled from match", () => {
       await loss.click();
       await expect(loss).toHaveAttribute("aria-checked", "true", { timeout: 1000 });
     }).toPass({ timeout: 15000 });
-    await page.locator("#review-match").selectOption(DEMO);
+    await page.getByTestId("review-game-picker").locator(`input[type=radio][value="${DEMO}"]`).check();
     await expect(page.getByTestId("review-match-facts")).toBeVisible();
     await expect(outcome.getByRole("radio", { name: "Loss" })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByTestId("review-outcome-from-match")).toHaveCount(0);

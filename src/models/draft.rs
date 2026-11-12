@@ -26,6 +26,12 @@ pub struct Draft {
     pub series_id: Option<String>,
     /// Game number within the series
     pub game_number: Option<i32>,
+    /// M159: the scheduled match this draft was made for (if any)
+    #[serde(default)]
+    pub scheduled_match_id: Option<String>,
+    /// M159: the match this draft was made for was deleted
+    #[serde(default)]
+    pub scheduled_match_deleted: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -148,10 +154,21 @@ mod tests {
             watch_out: None,
             series_id: None,
             game_number: None,
+            scheduled_match_id: Some("scheduled_match:m1".into()),
+            scheduled_match_deleted: false,
         };
         let json = serde_json::to_string(&d).unwrap();
         let back: Draft = serde_json::from_str(&json).unwrap();
         assert_eq!(d, back);
+        // Drafts sent before M159 carry no stamp and still load.
+        let mut old: serde_json::Value = serde_json::from_str(&json).unwrap();
+        old.as_object_mut().unwrap().remove("scheduled_match_id");
+        old.as_object_mut()
+            .unwrap()
+            .remove("scheduled_match_deleted");
+        let old: Draft = serde_json::from_value(old).unwrap();
+        assert_eq!(old.scheduled_match_id, None);
+        assert!(!old.scheduled_match_deleted);
     }
 
     #[test]
