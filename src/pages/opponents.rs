@@ -3,12 +3,12 @@
 //! surveyed; the detail holds the players by role, scouting notes and the
 //! Riot intel refresh. Images come only from `/img/...`.
 
-use crate::components::ui::{ctrl_enter_submits, enter_submits};
+use crate::components::ui::{ctrl_enter_submits, enter_submits, use_save_state};
 use crate::components::ui::{
     AvatarSize, Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone,
     Density, Dialog, EmptySize, EmptyState, Field, HeadingLevel, LoadFailed, NoTeamState,
-    PageHeader, PageShell, Role, RoleLabel, SectionHeader, Skeleton, SkeletonGroup, SkeletonShape,
-    TextField, Toast, ToastContext,
+    PageHeader, PageShell, Role, RoleLabel, SaveStatus, SectionHeader, Skeleton, SkeletonGroup,
+    SkeletonShape, TextField, Toast, ToastContext,
 };
 use crate::models::opponent::{is_stale, Opponent, OpponentPlayer};
 use crate::models::utils::format_timestamp;
@@ -116,7 +116,15 @@ pub async fn save_player(
     riot_summoner_name: String,
     notes: String,
 ) -> Result<(), ServerFnError> {
+    use crate::server::db::DbError;
     use crate::server::{authz, db};
+
+    // Validate notes length on the server (client also enforces 1000 via maxlength)
+    if notes.len() > 1000 {
+        return Err(ServerFnError::ServerError(
+            DbError::Invalid("Notes are at most 1000 characters.".into()).to_string(),
+        ));
+    }
 
     let ctx = authz::authed().await?;
     let team_id = ctx.require_team().await?;
@@ -843,10 +851,14 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
     let riot_id = RwSignal::new(player.riot_summoner_name.clone().unwrap_or_default());
     let pname = StoredValue::new(player.name.clone());
     let prole = StoredValue::new(player.role.clone());
-    let pnotes = StoredValue::new(player.notes.clone().unwrap_or_default());
+    let pnotes = RwSignal::new(player.notes.clone().unwrap_or_default());
     let fetching = RwSignal::new(false);
     let error = RwSignal::new(None::<String>);
     let confirm = RwSignal::new(false);
+    // Notes field state
+    let notes_expanded = RwSignal::new(false);
+    let notes_field = RwSignal::new(player.notes.clone().unwrap_or_default());
+    let save = use_save_state();
     let intel = player.compute_intel();
     let mastery: std::collections::HashMap<String, i32> = player
         .mastery_data()
@@ -863,6 +875,74 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
         .riot_summoner_name
         .as_deref()
         .is_some_and(|r| !r.trim().is_empty());
+    let role_clone = player.role.clone();
+    // Reactive signal for whether there's a note
+    let has_note = Signal::derive(move || {
+        let n = notes_field.get();
+        !n.trim().is_empty()
+    });
+
+    // Preview text for the collapsed note (truncated to one line)
+    let note_preview = Signal::derive(move || {
+        let n = notes_field.get();
+        if n.trim().is_empty() {
+            String::new()
+        } else {
+            // Truncate at a reasonable length for one line, preserving words if possible
+            let trimmed = n.trim();
+            if trimmed.len() > 60 {
+                if let Some((pos, _)) = trimmed.char_indices().nth(60) {
+                    let mut s = &trimmed[..pos];
+                    // Try to cut at the last space
+                    if let Some(space_pos) = s.rfind(' ') {
+                        s = &s[..space_pos];
+                    }
+                    format!("{s}…")
+                } else {
+                    trimmed.to_string()
+                }
+            } else {
+                trimmed.to_string()
+            }
+        }
+    });
+
+    let save_notes = Callback::new(move |_| {
+        let id = pid.get_value();
+        let name = pname.get_value();
+        let role = prole.get_value();
+        let riot = riot_id.get_untracked();
+        let notes = notes_field.get_untracked();
+        leptos::task::spawn_local(async move {
+            save.saving();
+            match save_player(id.clone(), name, role, riot, notes.clone()).await {
+                Ok(()) => {
+                    save.saved();
+                    // Update the stored value and collapse
+                    pnotes.set(notes);
+                    notes_expanded.set(false);
+                    on_changed.run(());
+                }
+                Err(e) => {
+                    let reason = crate::components::ui::save_failure_reason(&e);
+                    if save.failed(reason.clone()) {
+                        toast
+                            .push
+                            .run(Toast::error(format!("Could not save: {reason}")));
+                    }
+                }
+            }
+        });
+    });
+
+    let toggle_notes = Callback::new(move |_| {
+        let was_expanded = notes_expanded.get_untracked();
+        notes_expanded.set(!was_expanded);
+        if !was_expanded {
+            // When expanding, initialize the field from the stored notes
+            notes_field.set(pnotes.get());
+        }
+    });
 
     let refresh = Callback::new(move |_: ()| {
         let rid = riot_id.get_untracked().trim().to_string();
@@ -880,7 +960,7 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                 pname.get_value(),
                 prole.get_value(),
                 rid.clone(),
-                pnotes.get_value(),
+                pnotes.get(),
             )
             .await;
             match fetch_player_intel_fn(id, rid).await {
@@ -963,6 +1043,52 @@ fn PlayerRow(player: OpponentPlayer, on_changed: Callback<()>) -> impl IntoView 
                 </Field>
                 <Button on_click=Callback::new(move |_| refresh.run(())) loading=Signal::derive(move || fetching.get())>"Refresh"</Button>
                 <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| confirm.set(true))>"Remove"</Button>
+            </div>
+            <div class="flex flex-col gap-2">
+                {move || {
+                    let expanded = notes_expanded.get();
+                    if expanded {
+                        view! {
+                            <Field id=format!("opp-note-{}", role_clone) label="Notes on this player">
+                                <TextField
+                                    value=notes_field
+                                    rows=2
+                                    maxlength=1000
+                                    on_blur=save_notes
+                                    on_keydown=ctrl_enter_submits(save_notes)
+                                />
+                            </Field>
+                            <SaveStatus state=save.state />
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <Button
+                                variant=ButtonVariant::Quiet
+                                size=ButtonSize::Sm
+                                on_click=toggle_notes
+                                attr:aria-expanded=move || notes_expanded.get()
+                                attr:aria-controls=format!("opp-note-{}", role_clone)
+                            >
+                                {move || if has_note.get() {
+                                    "Edit note"
+                                } else {
+                                    "Add note"
+                                }}
+                            </Button>
+                            {move || {
+                                let preview = note_preview.get();
+                                let has_preview = !preview.is_empty();
+                                has_preview.then(|| view! {
+                                    <span class="text-secondary text-label truncate">
+                                        {preview}
+                                    </span>
+                                })
+                            }}
+                        }
+                        .into_any()
+                    }
+                }}
             </div>
             <ConfirmDialog
                 id="remove-player"
