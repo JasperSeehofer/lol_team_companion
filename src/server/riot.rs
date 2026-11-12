@@ -1015,7 +1015,11 @@ mod tests {
         ));
         // An item undo is a shop action, never a recall (M141).
         assert!(classify_event("ITEM_UNDO", None, None).is_none());
-        assert!(classify_event("ITEM_PURCHASED", None, None).is_none());
+        // Purchases are kept (M149) to infer recalls; no rail draws them.
+        assert!(matches!(
+            classify_event("ITEM_PURCHASED", None, None),
+            Some(EventCategory::Purchase)
+        ));
         assert!(classify_event("GAME_END", None, None).is_none());
     }
 
