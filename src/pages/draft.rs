@@ -24,9 +24,7 @@ use crate::components::ui::{
     TextField, Th, Toast, ToastContext, Tr, TOURNAMENT_ORDER,
 };
 use crate::components::ui::{SortDir, SortState, SortStatus, SortTh};
-use crate::models::champion::{
-    note_type_label, Champion, ChampionNote, ChampionPoolEntry, ChampionStatSummary,
-};
+use crate::models::champion::{note_type_label, Champion, ChampionNote, ChampionPoolEntry};
 use crate::models::draft::{guess_role_from_tags, BanPriority, Draft, DraftAction};
 use crate::models::opponent::Opponent;
 use crate::models::series::Series;
@@ -372,35 +370,6 @@ pub async fn get_team_pools() -> Result<
             .await
             .unwrap_or_default();
         result.push((member.username.clone(), member.role.clone(), pool));
-    }
-
-    Ok(result)
-}
-
-/// Get per-champion match stats for all team starters.
-/// Returns Vec<(username, Vec<ChampionStatSummary>)>.
-#[server]
-pub async fn get_team_champion_stats(
-) -> Result<Vec<(String, Vec<ChampionStatSummary>)>, ServerFnError> {
-    use crate::server::authz;
-    use crate::server::db;
-
-    let authz::Ctx { db, user } = authz::authed().await?;
-
-    let (_, members) = match db::get_user_team_with_members(&db, &user.id)
-        .await
-        .map_err(authz::server_err)?
-    {
-        Some(t) => t,
-        None => return Ok(Vec::new()),
-    };
-
-    let mut result = Vec::new();
-    for member in members.iter().filter(|m| m.roster_type == "starter") {
-        let stats = db::get_champion_stats_for_user(&db, &member.user_id)
-            .await
-            .unwrap_or_default();
-        result.push((member.username.clone(), stats));
     }
 
     Ok(result)

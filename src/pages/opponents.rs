@@ -144,61 +144,6 @@ pub async fn remove_player(id: String) -> Result<(), ServerFnError> {
         .map_err(authz::server_err)
 }
 
-#[server]
-pub async fn fetch_champions(
-    player_id: String,
-    summoner_name: String,
-) -> Result<Vec<String>, ServerFnError> {
-    use crate::server::{authz, db, rate_limit::Bucket, riot};
-
-    let ctx = authz::authed().await?;
-    let team_id = ctx.require_team().await?;
-    // Check ownership before spending Riot API quota.
-    db::ensure_team_opponent_player(&ctx.db, &team_id, &player_id)
-        .await
-        .map_err(authz::server_err)?;
-
-    let riot_client = authz::riot()?;
-    if !riot_client.is_configured() {
-        return Err(ServerFnError::new("No Riot API key configured"));
-    }
-
-    // Parse summoner name: "Name#Tag" format
-    let parts: Vec<&str> = summoner_name.split('#').collect();
-    if parts.len() != 2 {
-        return Err(ServerFnError::new(
-            "Summoner name must be in Name#Tag format",
-        ));
-    }
-    authz::rate_limit(Bucket::Riot).await?;
-    // Account lookup + match list + 20 matches.
-    riot_client
-        .ensure_headroom(2 + 20)
-        .map_err(authz::server_err)?;
-
-    // Opponents are looked up on the team's server.
-    let team_region = db::get_team_region(&ctx.db, &team_id)
-        .await
-        .map_err(authz::server_err)?;
-    let platform = riot::platform_for(&[team_region.as_deref()]);
-    let puuid = riot_client
-        .get_puuid(parts[0], parts[1], platform)
-        .await
-        .map_err(authz::server_err)?;
-
-    let champions = riot_client
-        .fetch_player_champions(&puuid, 20, platform)
-        .await
-        .map_err(authz::server_err)?;
-
-    // Update the player record with champions
-    db::update_opponent_player_champions(&ctx.db, &team_id, &player_id, champions.clone())
-        .await
-        .map_err(authz::server_err)?;
-
-    Ok(champions)
-}
-
 /// Create an opponent with an initial set of players in a single server call.
 ///
 /// Returns (opponent_id, player_ids) so the UI can immediately trigger per-player intel fetches

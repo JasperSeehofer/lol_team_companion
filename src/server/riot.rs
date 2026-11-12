@@ -230,50 +230,6 @@ impl RiotClient {
         Ok(result)
     }
 
-    pub async fn fetch_player_champions(
-        &self,
-        puuid: &str,
-        count: usize,
-        platform: PlatformRoute,
-    ) -> Result<Vec<String>, RiotError> {
-        let api = self.api()?;
-        self.take().await?;
-        let match_ids = api
-            .match_v5()
-            .get_match_ids_by_puuid(
-                platform.to_regional(),
-                puuid,
-                Some(count as i32),
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
-            .await?;
-
-        let mut champions = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-
-        for mid in match_ids {
-            self.take().await?;
-            let Some(m) = api
-                .match_v5()
-                .get_match(platform.to_regional(), &mid)
-                .await?
-            else {
-                continue;
-            };
-            if let Some(p) = m.info.participants.iter().find(|p| p.puuid == puuid) {
-                if seen.insert(p.champion_name.clone()) {
-                    champions.push(p.champion_name.clone());
-                }
-            }
-        }
-
-        Ok(champions)
-    }
-
     pub async fn fetch_player_intel(
         &self,
         puuid: &str,
@@ -569,7 +525,7 @@ pub struct MatchData {
 
 /// Combined intel fetch: champion names, per-match role data, and mastery data in a single call.
 ///
-/// - `recent_champions`: unique champion names played (same dedup as `fetch_player_champions`)
+/// - `recent_champions`: unique champion names played (deduplicated)
 /// - `champion_with_role`: (champion_name, team_position) per match — NOT deduplicated, used for role distribution
 /// - `mastery_data`: (champion_name, mastery_level, mastery_points) from champion mastery endpoint
 pub struct PlayerIntelData {
