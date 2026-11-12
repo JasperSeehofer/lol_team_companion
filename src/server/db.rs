@@ -6508,9 +6508,13 @@ pub async fn matches_needing_reimport(db: &Surreal<Db>, limit: usize) -> DbResul
     struct Row {
         match_id: String,
     }
+    // Filter in a subquery, then order and limit: with `ORDER BY match_id
+    // LIMIT` on the table itself SurrealDB 3 walks the unique `match_id`
+    // index and applies the limit before the `WHERE`, so current games that
+    // sort first used up the page and an old game was never selected.
     let query = format!(
-        "SELECT match_id FROM match_detail WHERE {NEEDS_REIMPORT} \
-         AND (timeline_reimport_failed = NONE OR timeline_reimport_failed < $ver) \
+        "SELECT match_id FROM (SELECT match_id FROM match_detail WHERE {NEEDS_REIMPORT} \
+         AND (timeline_reimport_failed = NONE OR timeline_reimport_failed < $ver)) \
          ORDER BY match_id LIMIT $limit"
     );
     let mut r = db
@@ -8230,6 +8234,49 @@ mod tests {
             result.is_err(),
             "create_bug_report must reject whitespace-only description"
         );
+    }
+
+    /// M149 A2: the re-import pages in match-id order after filtering. The
+    /// unique index on `match_id` let SurrealDB 3 apply `ORDER BY match_id
+    /// LIMIT n` to the index scan before the `WHERE`, so a current game
+    /// sorting first (EUW1_NEW < EUW1_OLD_A) used up the limit.
+    #[tokio::test]
+    async fn reimport_limit_applies_after_the_filter() {
+        let db = crate::server::test_helpers::test_db().await;
+        for id in ["EUW1_OLD_A", "EUW1_OLD_B", "SEED1_1000000009"] {
+            db.query(
+                "CREATE match_detail SET match_id = $id, participants_json = '[]', game_duration = 1800;",
+            )
+            .bind(("id", id.to_string()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        }
+        super::store_match_detail(&db, "EUW1_NEW", &[], &[], 1800, "CLASSIC")
+            .await
+            .unwrap();
+        db.query("UPDATE match_detail SET timeline_version = 1 WHERE match_id = 'EUW1_OLD_B'")
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        assert_eq!(
+            super::matches_needing_reimport(&db, 10).await.unwrap(),
+            vec!["EUW1_OLD_A".to_string(), "EUW1_OLD_B".to_string()]
+        );
+        assert_eq!(
+            super::matches_needing_reimport(&db, 1).await.unwrap(),
+            vec!["EUW1_OLD_A".to_string()]
+        );
+        super::mark_reimport_failed(&db, "EUW1_OLD_A")
+            .await
+            .unwrap();
+        assert_eq!(
+            super::matches_needing_reimport(&db, 1).await.unwrap(),
+            vec!["EUW1_OLD_B".to_string()]
+        );
+        assert_eq!(super::reimport_counts(&db).await.unwrap(), (1, 1));
     }
 }
 
