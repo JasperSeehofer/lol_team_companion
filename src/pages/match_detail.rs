@@ -496,17 +496,17 @@ static RAILS: [Rail; 3] = [
 const RECALL_CAPTION: &str = "Wards: yours only. Recalls: your team. Recalls are inferred from item purchases at the fountain; Riot reports no recall event.";
 
 /// The vision rail's caption for a game imported before purchases were kept.
-const REIMPORT_CAPTION: &str =
-    "Wards: yours only. Re-import this game to see recalls and positions.";
+/// Members cannot re-import (admins only), so it says why, not what to do.
+const NO_PURCHASES_CAPTION: &str = "Wards: yours only. This game was stored without item purchases, so recalls and positions are not drawn.";
 
 /// The vision rail of a game imported before item purchases were kept
 /// (M149): wards only, no recall toggle (no empty markers), and the line
-/// that says how to get them.
+/// that says why they are missing.
 static VISION_WITHOUT_PURCHASES: Rail = Rail {
     key: "vision",
     name: "Vision",
     kinds: &[EventCategory::Ward],
-    caption: Some(REIMPORT_CAPTION),
+    caption: Some(NO_PURCHASES_CAPTION),
 };
 
 /// The rails for a game: the vision rail depends on whether its stored
@@ -1248,8 +1248,10 @@ mod tests {
         assert!(old
             .iter()
             .all(|r| !r.kinds.contains(&EventCategory::Recall)));
-        assert_eq!(old[2].caption, Some(REIMPORT_CAPTION));
-        assert!(REIMPORT_CAPTION.contains("Re-import this game to see recalls and positions."));
+        assert_eq!(old[2].caption, Some(NO_PURCHASES_CAPTION));
+        assert!(NO_PURCHASES_CAPTION
+            .contains("stored without item purchases, so recalls and positions are not drawn."));
+        assert!(!NO_PURCHASES_CAPTION.contains("Re-import"));
         let new = rails_for(true);
         assert!(new[2].kinds.contains(&EventCategory::Recall));
         assert!(RECALL_CAPTION.contains(

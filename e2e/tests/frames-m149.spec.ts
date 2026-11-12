@@ -147,7 +147,7 @@ test.describe("M149 frames", () => {
     // game has no purchases, so the vision rail says to re-import it).
     const row = page.getByRole("group", { name: "Events near the playhead" });
     await expect(row).toBeVisible();
-    await expect(page.getByText("Re-import this game to see recalls and positions.").first()).toBeVisible();
+    await expect(page.getByText("This game was stored without item purchases, so recalls and positions are not drawn.").first()).toBeVisible();
     await page.locator("[data-rail]").first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await shot(page, "match-detail-timeline-390", false, true);
