@@ -407,7 +407,7 @@ pub fn WelcomePanel(
         Callback::new(move |_| mark_then(guidance::WELCOME, true, move || on_change.run(())));
     let first = match &welcome.team_name {
         Some(t) => format!("You are on {t}. The checklist below shows what your team has done and what comes next."),
-        None => "Start with your team: create it, or find it on the roster page and ask to join. The checklist below takes you through the rest.".to_string(),
+        None => "Start with your team: create it, or find it on the team page and ask to join. The checklist below takes you through the rest.".to_string(),
     };
     view! {
         <section class="mb-10 border-y border-rule bg-ink-1 px-5 py-6 sm:px-8" aria-labelledby="welcome-h" data-welcome>

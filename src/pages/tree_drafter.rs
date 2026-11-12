@@ -34,7 +34,7 @@ pub async fn get_champions_for_tree() -> Result<Vec<Champion>, ServerFnError> {
 }
 
 /// Whether the current user belongs to a team. Drives the empty state of the
-/// tree list (no team: point to the roster page; team but no trees: point to
+/// tree list (no team: point to the team page; team but no trees: point to
 /// the create form).
 #[server]
 pub async fn user_has_team() -> Result<bool, ServerFnError> {

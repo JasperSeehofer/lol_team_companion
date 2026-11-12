@@ -1,22 +1,16 @@
-//! The roster page. Members see their team's roster and how players join;
-//! people without a team create one or ask to join one. Leader tools
-//! (placing, benching, removing players, answering requests) live on the
-//! team page.
+//! The no-team state of the team page (create one, or ask to join one) and
+//! the server functions behind it. The roster itself lives on
+//! `/team/dashboard`; `/team/roster` redirects there in axum (`main.rs`).
 
 use crate::components::ui::enter_submits;
 use crate::components::ui::{
-    AvatarSize, Button, ButtonSize, ButtonVariant, EmptySize, EmptyState, Field, HeadingLevel,
-    InputKind, PageHeader, PageShell, PageWidth, Role, RoleLabel, SectionHeader, Select,
-    SelectOption, Skeleton, SkeletonGroup, SkeletonShape, Table, Td, TextField, Th, Toast,
-    ToastContext, Tr, UserAvatar,
+    Button, ButtonSize, ButtonVariant, EmptySize, EmptyState, Field, HeadingLevel, InputKind,
+    PageHeader, SectionHeader, Select, SelectOption, Skeleton, SkeletonGroup, TextField, Toast,
+    ToastContext,
 };
 use crate::models::team::Team;
-use crate::models::user::TeamMember;
-use crate::pages::team::dashboard::{
-    get_pending_requests, get_team_dashboard, group_roster, TEAM_REGIONS,
-};
+use crate::pages::team::dashboard::TEAM_REGIONS;
 use leptos::prelude::*;
-use leptos_router::components::A;
 
 #[server]
 pub async fn create_team(name: String, region: String) -> Result<(), ServerFnError> {
@@ -66,110 +60,8 @@ pub async fn request_to_join(team_id: String) -> Result<(), ServerFnError> {
         .map_err(authz::server_err)
 }
 
-#[component]
-pub fn RosterPage() -> impl IntoView {
-    let auth_user = Resource::new(|| (), |_| crate::pages::profile::get_current_user());
-    Effect::new(move || {
-        if let Some(Ok(None)) = auth_user.get() {
-            crate::pages::navigate::redirect_to_login();
-        }
-    });
-    let team = Resource::new(|| (), |_| get_team_dashboard());
-    // Created before any Suspense, so server and browser agree on them.
-    let _requests = Resource::new(|| (), |_| get_pending_requests());
-    let teams = Resource::new(|| (), |_| list_teams());
-    view! {
-        <PageShell width=PageWidth::Standard attr:data-feedback-label="Roster">
-            <Suspense fallback=|| view! {
-                <SkeletonGroup label="Loading the roster">
-                    <Skeleton width="w-56 max-w-full" size="h-10" />
-                    <Skeleton shape=SkeletonShape::Block size="h-48" />
-                </SkeletonGroup>
-            }>
-                {move || Suspend::new(async move {
-                    match team.await {
-                        Ok(Some((t, members, me))) => view! { <MemberRoster team=t members=members me=me /> }.into_any(),
-                        Ok(None) => view! { <NoTeamRoster teams=teams /> }.into_any(),
-                        Err(_) => view! {
-                            <PageHeader title="Roster" />
-                            <EmptyState title="The roster did not load" message="The server did not answer. Reload the page in a moment." />
-                        }.into_any(),
-                    }
-                })}
-            </Suspense>
-        </PageShell>
-    }
-}
-
-/// A member's view: the roster by place.
-#[component]
-fn MemberRoster(team: Team, members: Vec<TeamMember>, me: String) -> impl IntoView {
-    let is_leader = team.created_by == me;
-    let groups = group_roster(&members);
-    let place_word = |m: &TeamMember| -> &'static str {
-        match m.roster_type.as_str() {
-            "starter" => "Starting five",
-            "substitute" => "Substitute",
-            "coach" => "Coach",
-            _ => "Not placed yet",
-        }
-    };
-    let mut ordered: Vec<TeamMember> = groups.starters.iter().flatten().cloned().collect();
-    ordered.extend(groups.substitutes.iter().cloned());
-    ordered.extend(groups.coaches.iter().cloned());
-    ordered.extend(groups.unplaced.iter().cloned());
-    let count = ordered.len();
-    let team_name = team.name.clone();
-    view! {
-        <PageHeader
-            title="Roster"
-            eyebrow="Team"
-            meta=move || view! {
-                <span>{team_name.clone()}</span>
-                <span aria-hidden="true" class="text-muted">"/"</span>
-                <span>{if count == 1 { "1 member".to_string() } else { format!("{count} members") }}</span>
-            }
-            actions=move || view! { <Button href="/team/dashboard">"Team page"</Button> }
-        />
-        <section aria-labelledby="members-h" data-roster-members>
-            <SectionHeader title="Members" id="members-h" meta=if is_leader { "Place, bench or remove players on the team page." } else { "The leader places players on the team page." } />
-            <Table caption="Team members" caption_hidden=true>
-                <thead>
-                    <tr>
-                        <Th>"Player"</Th>
-                        <Th>"Position"</Th>
-                        <Th>"Place"</Th>
-                        <Th>"Riot account"</Th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {ordered.into_iter().map(|m| {
-                        let role = Role::parse(&m.role);
-                        let href = format!("/team/player/{}", m.user_id);
-                        let place = place_word(&m);
-                        let is_me = m.user_id == me;
-                        view! {
-                            <Tr>
-                                <Td>
-                                    <span class="flex items-center gap-2">
-                                        <UserAvatar name=m.username.clone() size=AvatarSize::Xs />
-                                        <A href=href attr:class="font-medium text-primary underline decoration-transparent underline-offset-4 hover:decoration-outline">{m.username.clone()}</A>
-                                        {is_me.then(|| view! { <span class="text-caption text-muted">"you"</span> })}
-                                    </span>
-                                </Td>
-                                <Td>{match role { Some(r) => view! { <RoleLabel role=r /> }.into_any(), None => view! { <span class="text-muted">"None"</span> }.into_any() }}</Td>
-                                <Td>{place}</Td>
-                                <Td muted=true>{m.riot_summoner_name.clone().unwrap_or_else(|| "Not linked".to_string())}</Td>
-                            </Tr>
-                        }
-                    }).collect_view()}
-                </tbody>
-            </Table>
-        </section>
-    }
-}
-
-/// No team yet: create one, or ask to join one.
+/// No team yet: create one, or ask to join one. Rendered by the team page
+/// (`/team/dashboard`) when the account has no team.
 #[component]
 pub fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
@@ -222,7 +114,7 @@ pub fn NoTeamRoster(teams: Resource<Result<Vec<Team>, ServerFnError>>) -> impl I
         .collect();
 
     view! {
-        <PageHeader title="Roster" eyebrow="Team" meta=move || view! { <span>"You are not on a team yet. Create one, or ask to join one."</span> } />
+        <PageHeader title="Team" meta=move || view! { <span>"You are not on a team yet. Create one, or ask to join one."</span> } />
         <div class="grid gap-x-12 gap-y-12 lg:grid-cols-2">
             <section aria-labelledby="create-h" data-create-team>
                 <SectionHeader title="Create a team" id="create-h" />

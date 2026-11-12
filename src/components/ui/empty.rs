@@ -93,19 +93,19 @@ pub fn NoTeamState(
     /// What this page needs and what will appear once there is a team.
     #[prop(optional)]
     message: Option<&'static str>,
-    /// The single action's label; default "Go to the roster".
+    /// The single action's label; default "Go to the team page".
     #[prop(optional)]
     cta_label: Option<&'static str>,
-    /// Where it goes; default `/team/roster`.
+    /// Where it goes; default `/team/dashboard`.
     #[prop(optional)]
     cta_href: Option<&'static str>,
 ) -> impl IntoView {
     view! {
         <EmptyState
             title=title.unwrap_or("No team yet")
-            message=message.unwrap_or("Team pages need a team. Create one or ask to join one on the roster page; your drafts, plans and reviews will appear here.")
-            cta_label=cta_label.unwrap_or("Go to the roster")
-            cta_href=cta_href.unwrap_or("/team/roster")
+            message=message.unwrap_or("Team pages need a team. Create one or ask to join one on the team page; your drafts, plans and reviews will appear here.")
+            cta_label=cta_label.unwrap_or("Go to the team page")
+            cta_href=cta_href.unwrap_or("/team/dashboard")
             attr:data-no-team="true"
         />
     }

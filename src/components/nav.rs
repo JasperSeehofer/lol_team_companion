@@ -558,7 +558,7 @@ fn PhoneMenu(
                 0 => String::new(),
                 n => format!("{n} open"),
             },
-            "/team/roster" => count_label(c.members, "member", "members"),
+            "/team/dashboard" => count_label(c.members, "member", "members"),
             "/personal-learnings" => count_label(c.learnings, "note", "notes"),
             _ => String::new(),
         };
@@ -1147,7 +1147,6 @@ mod tests {
             "/action-items",
             "/stats",
             "/team/dashboard",
-            "/team/roster",
         ];
         let menu: Vec<&str> = m
             .groups

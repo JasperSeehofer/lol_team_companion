@@ -628,9 +628,9 @@ fn NoTeamHome(username: String, guide: HomeGuide, on_change: Callback<()>) -> im
                 <EmptyState
                     title="Match Day needs a team"
                     level=HeadingLevel::H2
-                    message="Match Day walks your team through the next scrim or match: the opponent brief, draft plans, the game plan, open action items and the review. Create a team, use your team's invite link, or ask to join one on the roster page."
+                    message="Match Day walks your team through the next scrim or match: the opponent brief, draft plans, the game plan, open action items and the review. Create a team, use your team's invite link, or ask to join one on the team page."
                     cta_label="Create or join your team"
-                    cta_href="/team/roster"
+                    cta_href="/team/dashboard"
                 />
             })}
             <section class="mt-12" aria-labelledby="home-yours">

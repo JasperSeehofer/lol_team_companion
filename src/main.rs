@@ -433,9 +433,12 @@ async fn main() {
         // Interface icons (positions, objectives, structures): a fixed
         // allow-list, pinned CommunityDragon copies with committed fallbacks.
         .route("/img/ui/{kind}/{name}", get(ui_icons::ui_icon))
-        // Parked pages and the old solo dashboard redirect here, in axum: a
-        // Leptos `<Redirect>` rendered on the server left its 302 status
-        // behind for later static-file responses on the same worker thread.
+        // Parked pages, the old solo dashboard and the roster page (folded
+        // into the team page, M160) redirect here, in axum: a Leptos
+        // `<Redirect>` rendered on the server left its 302 status behind for
+        // later static-file responses on the same worker thread. A 307 keeps
+        // the #fragment, so /team/roster#joining-h still lands on the
+        // "How players join" section of /team/dashboard.
         .route("/solo", get(|| async { Redirect::temporary("/me") }))
         .route(
             "/analytics",
@@ -444,6 +447,10 @@ async fn main() {
         .route(
             "/team-builder",
             get(|| async { Redirect::temporary("/draft") }),
+        )
+        .route(
+            "/team/roster",
+            get(|| async { Redirect::temporary("/team/dashboard") }),
         )
         .leptos_routes_with_context(
             &app_state,

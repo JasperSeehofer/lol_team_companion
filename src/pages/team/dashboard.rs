@@ -587,6 +587,10 @@ pub fn TeamDashboard() -> impl IntoView {
         }
     });
     let team = Resource::new(|| (), |_| get_team_dashboard());
+    // The team list of the no-team state, created here as well: every
+    // resource of the page comes into being before its first Suspense, so
+    // the server and the browser register them in the same order.
+    let teams = Resource::new(|| (), |_| list_teams());
     // Every resource of the page is created here, before any Suspense, so
     // the server and the browser register them in the same order.
     let res = TeamResources {
@@ -614,8 +618,7 @@ pub fn TeamDashboard() -> impl IntoView {
                     match team.await {
                         Ok(Some((t, members, me))) => view! { <TeamView team=t members=members me=me reload=reload res /> }.into_any(),
                         Ok(None) => view! {
-                            <PageHeader title="Team" />
-                            <NoTeamRoster teams=Resource::new(|| (), |_| list_teams()) />
+                            <NoTeamRoster teams=teams />
                         }.into_any(),
                         Err(_) => view! {
                             <PageHeader title="Team" />
@@ -636,7 +639,6 @@ fn TeamView(
     reload: Callback<()>,
     res: TeamResources,
 ) -> impl IntoView {
-    let _requests = res.requests;
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let is_leader = team.created_by == me;
     // The leader and the team's coaches manage invite links (M148); the
@@ -658,7 +660,7 @@ fn TeamView(
     let lead_open = RwSignal::new(false);
     let member_count = members.len();
     let region = team.region.clone();
-    let _team_name = team.name.clone();
+    let team_name = team.name.clone();
 
     let on_action = Callback::new(move |(user_id, name, action): (String, String, String)| {
         if action == "kick" {
@@ -731,7 +733,7 @@ fn TeamView(
                 {
                     #[cfg(feature = "hydrate")]
                     if let Some(w) = web_sys::window() {
-                        let _ = w.location().set_href("/team/roster");
+                        let _ = w.location().set_href("/team/dashboard");
                     }
                 }
                 Err(e) => toast.push.run(Toast::error(e.to_string())),
@@ -860,6 +862,7 @@ fn TeamView(
             </div>
             <div class="flex min-w-0 flex-col gap-12">
                 {can_invite.then(|| view! { <InvitePlayers team_name=team.name.clone() is_leader=is_leader invites=res.invites /> })}
+                <HowPlayersJoin team_name=team_name.clone() is_leader=is_leader requests=res.requests />
                 {is_leader.then(|| view! { <JoinRequests reload=reload requests=res.requests /> })}
                 <TeamNotes notes=res.notes />
             </div>
@@ -1252,6 +1255,44 @@ fn AutoPlacedNotices(
     }
 }
 
+/// "How players join", after the invite panel (M160: moved here from the
+/// old roster page, which now redirects to this one): the invite link, the
+/// join form a teamless account finds on this page, and where the leader
+/// answers the requests.
+#[component]
+fn HowPlayersJoin(
+    team_name: String,
+    is_leader: bool,
+    requests: Resource<Result<Vec<JoinRequest>, ServerFnError>>,
+) -> impl IntoView {
+    view! {
+        <section aria-labelledby="joining-h" data-roster-joining>
+            <SectionHeader title="How players join" id="joining-h" />
+            <p class="text-body text-secondary">
+                {format!("The team leader or a coach sends new players an invite link from the \u{201c}Invite a player\u{201d} panel: signing up with it puts them on {team_name} at once. Players who already have an account open this page without a team, find the team under \u{201c}Join a team\u{201d} and ask to join; the leader answers under \u{201c}Join requests\u{201d}. New members start as \u{201c}not placed yet\u{201d} until the leader puts them in the starting five, on the bench or with the coaches.")}
+            </p>
+            {is_leader.then(|| view! {
+                <Suspense fallback=|| ()>
+                    {move || requests.get().map(|r| {
+                        let n = r.as_ref().map(|l| l.len()).unwrap_or(0);
+                        view! {
+                            <p class="mt-3 text-body text-primary" data-pending-requests=n>
+                                {match n {
+                                    0 => "No requests waiting right now.".to_string(),
+                                    1 => "1 request is waiting.".to_string(),
+                                    n => format!("{n} requests are waiting."),
+                                }}
+                                " "
+                                <a href="#requests-h" attr:class="underline decoration-outline underline-offset-4 hover:decoration-accent">"Answer under \u{201c}Join requests\u{201d}"</a>
+                            </p>
+                        }
+                    })}
+                </Suspense>
+            })}
+        </section>
+    }
+}
+
 #[component]
 fn JoinRequests(
     reload: Callback<()>,
@@ -1281,7 +1322,7 @@ fn JoinRequests(
                 {move || requests.get().map(|r| {
                     let list = r.unwrap_or_default();
                     if list.is_empty() {
-                        view! { <p class="text-body text-secondary">"No requests waiting. Players ask to join from the roster page; their requests appear here."</p> }.into_any()
+                        view! { <p class="text-body text-secondary">"No requests waiting. Players ask to join from the team page; their requests appear here."</p> }.into_any()
                     } else {
                         view! {
                             <ul class="border-b border-rule">
