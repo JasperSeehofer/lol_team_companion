@@ -167,6 +167,23 @@ pub async fn ensure_team_record(
     ensure_owned(db, table, id, "team", "team", team_id).await
 }
 
+/// M159: a draft's opponent is free text, or an `opponent:` dossier id
+/// carried by a match-thread link; an id must be one of the team's dossiers
+/// (`NotFound` otherwise). Free-text names are not records and pass.
+pub async fn ensure_opponent_ref(
+    db: &Surreal<Db>,
+    team_id: &str,
+    opponent: Option<&str>,
+) -> DbResult<()> {
+    match opponent
+        .map(str::trim)
+        .filter(|o| o.starts_with("opponent:"))
+    {
+        Some(o) => ensure_team_record(db, "opponent", o, team_id).await,
+        None => Ok(()),
+    }
+}
+
 /// `table:id` must exist and belong to `user_id` (via its `user` field).
 pub async fn ensure_user_record(
     db: &Surreal<Db>,
@@ -175,6 +192,40 @@ pub async fn ensure_user_record(
     user_id: &str,
 ) -> DbResult<()> {
     ensure_owned(db, table, id, "user", "user", user_id).await
+}
+
+/// M159: the highest game number of a series (a Bo5).
+pub const MAX_GAME_NUMBER: i32 = 5;
+
+/// M159: a game number on a draft, plan or review is 1 to 5 when set.
+pub fn check_game_number(game_number: Option<i32>) -> DbResult<()> {
+    match game_number {
+        Some(n) if !(1..=MAX_GAME_NUMBER).contains(&n) => Err(DbError::Invalid(
+            "The game number must be between 1 and 5.".into(),
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// M159: the links that stamp a draft, plan or review to the match (and
+/// series and game) it was made for. Each link must be a record of
+/// `team_id`; a foreign or unknown id is `NotFound`, the same as a missing
+/// one. Blank ids count as no link.
+async fn check_stamps(
+    db: &Surreal<Db>,
+    team_id: &str,
+    scheduled_match: Option<&str>,
+    series: Option<&str>,
+    game_number: Option<i32>,
+) -> DbResult<()> {
+    check_game_number(game_number)?;
+    if let Some(id) = scheduled_match.filter(|s| !s.trim().is_empty()) {
+        ensure_team_record(db, "scheduled_match", id.trim(), team_id).await?;
+    }
+    if let Some(id) = series.filter(|s| !s.trim().is_empty()) {
+        ensure_team_record(db, "series", id.trim(), team_id).await?;
+    }
+    Ok(())
 }
 
 /// The stored password hash of a user (to confirm a destructive action).
@@ -1906,6 +1957,10 @@ struct DbDraft {
     watch_out: Option<String>,
     series_id: Option<RecordId>,
     game_number: Option<i32>,
+    #[serde(default)]
+    scheduled_match: Option<RecordId>,
+    #[serde(default)]
+    scheduled_match_deleted: Option<bool>,
 }
 
 impl From<DbDraft> for Draft {
@@ -1926,6 +1981,8 @@ impl From<DbDraft> for Draft {
             watch_out: d.watch_out,
             series_id: opt_link(d.series_id),
             game_number: d.game_number,
+            scheduled_match_id: opt_link(d.scheduled_match),
+            scheduled_match_deleted: d.scheduled_match_deleted.unwrap_or(false),
         }
     }
 }
@@ -1978,12 +2035,21 @@ pub async fn save_draft(
     watch_out: Option<String>,
     series_id: Option<String>,
     game_number: Option<i32>,
+    scheduled_match: Option<String>,
 ) -> DbResult<String> {
+    check_stamps(
+        db,
+        team_id,
+        scheduled_match.as_deref(),
+        series_id.as_deref(),
+        game_number,
+    )
+    .await?;
     // The draft and its picks/bans are one transaction.
     let response = db
         .query(
             "BEGIN TRANSACTION; \
-             LET $d = (CREATE ONLY draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number = $game_number); \
+             LET $d = (CREATE ONLY draft SET name = $name, team = type::record('team', $team_key), created_by = type::record('user', $user_key), opponent = $opponent, notes = $notes, comments = $comments, rating = $rating, our_side = $our_side, tags = $tags, win_conditions = $win_conditions, watch_out = $watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number = $game_number, scheduled_match = IF $match_key = NONE { NONE } ELSE { type::record('scheduled_match', $match_key) }); \
              FOR $a IN $actions { CREATE draft_action SET draft = $d.id, phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role, role_guessed = $a.role_guessed; }; \
              RETURN { id: $d.id }; \
              COMMIT TRANSACTION;",
@@ -2001,6 +2067,7 @@ pub async fn save_draft(
         .bind(("watch_out", watch_out))
         .bind(("series_key", opt_key(series_id, "series")))
         .bind(("game_number", game_number))
+        .bind(("match_key", opt_key(scheduled_match, "scheduled_match")))
         .bind(("actions", action_rows(actions)))
         .await?;
     let mut response = check_tx(response)?;
@@ -2038,6 +2105,10 @@ pub async fn list_drafts(db: &Surreal<Db>, team_id: &str) -> DbResult<Vec<Draft>
         .collect())
 }
 
+/// Update a draft of `team_id` and replace its picks and bans. A
+/// `scheduled_match` of `None` keeps the draft's match stamp (the draft
+/// page does not carry it); a new one replaces it and clears the
+/// "match was deleted" marker.
 #[allow(clippy::too_many_arguments)]
 pub async fn update_draft(
     db: &Surreal<Db>,
@@ -2055,13 +2126,23 @@ pub async fn update_draft(
     watch_out: Option<String>,
     series_id: Option<String>,
     game_number: Option<i32>,
+    scheduled_match: Option<String>,
 ) -> DbResult<()> {
     ensure_team_record(db, "draft", draft_id, team_id).await?;
+    ensure_opponent_ref(db, team_id, opponent.as_deref()).await?;
+    check_stamps(
+        db,
+        team_id,
+        scheduled_match.as_deref(),
+        series_id.as_deref(),
+        game_number,
+    )
+    .await?;
     // Fields and the replaced picks/bans change together or not at all.
     let response = db
         .query(
             "BEGIN TRANSACTION; \
-             UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number=$game_number; \
+             UPDATE type::record('draft', $draft_key) SET name=$name, opponent=$opponent, notes=$notes, comments=$comments, rating=$rating, our_side=$our_side, tags=$tags, win_conditions=$win_conditions, watch_out=$watch_out, series_id = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number=$game_number, scheduled_match = IF $match_key = NONE { scheduled_match } ELSE { type::record('scheduled_match', $match_key) }, scheduled_match_deleted = IF $match_key = NONE { scheduled_match_deleted } ELSE { NONE }; \
              DELETE draft_action WHERE draft = type::record('draft', $draft_key); \
              FOR $a IN $actions { CREATE draft_action SET draft = type::record('draft', $draft_key), phase = $a.phase, side = $a.side, champion = $a.champion, `order` = $a.ord, comment = $a.comment, role = $a.role, role_guessed = $a.role_guessed; }; \
              COMMIT TRANSACTION;",
@@ -2078,6 +2159,7 @@ pub async fn update_draft(
         .bind(("watch_out", watch_out))
         .bind(("series_key", opt_key(series_id, "series")))
         .bind(("game_number", game_number))
+        .bind(("match_key", opt_key(scheduled_match, "scheduled_match")))
         .bind(("actions", action_rows(actions)))
         .await?;
     check_tx(response)?;
@@ -2695,14 +2777,24 @@ pub async fn get_team_region(db: &Surreal<Db>, team_id: &str) -> DbResult<Option
 // Game plans / post-game
 // ---------------------------------------------------------------------------
 
+/// Create a game plan in `plan.team_id` (the server function sets it to
+/// the caller's team). Its match stamp must be a match of that team.
 pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> DbResult<String> {
+    check_stamps(
+        db,
+        &plan.team_id,
+        plan.scheduled_match_id.as_deref(),
+        None,
+        plan.game_number,
+    )
+    .await?;
     let team_key = plan
         .team_id
         .strip_prefix("team:")
         .unwrap_or(&plan.team_id)
         .to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, created_by = type::record('user', $user_key)")
+    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, created_by = type::record('user', $user_key), scheduled_match = IF $match_key = NONE { NONE } ELSE { type::record('scheduled_match', $match_key) }, game_number = $game_number")
         .bind(("name", plan.name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
@@ -2720,6 +2812,8 @@ pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> 
         .bind(("support_strategy", plan.support_strategy))
         .bind(("notes", plan.notes))
         .bind(("win_condition_tag", plan.win_condition_tag))
+        .bind(("match_key", opt_key(plan.scheduled_match_id, "scheduled_match")))
+        .bind(("game_number", plan.game_number))
         .await?
         .check()?;
     let row: Option<IdRecord> = response.take(0)?;
@@ -2730,11 +2824,22 @@ pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> 
 }
 
 /// Update a game plan of `team_id`. The plan's own `team_id` field is ignored.
+/// A `scheduled_match_id` or `game_number` of `None` keeps the stored one
+/// (the page does not always carry them); a new match also clears the
+/// "match was deleted" marker.
 pub async fn update_game_plan(db: &Surreal<Db>, team_id: &str, plan: GamePlan) -> DbResult<()> {
     let plan_id = plan.id.as_deref().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "game_plan", plan_id, team_id).await?;
+    check_stamps(
+        db,
+        team_id,
+        plan.scheduled_match_id.as_deref(),
+        None,
+        plan.game_number,
+    )
+    .await?;
     let plan_key = record_key(plan_id, "game_plan");
-    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag")
+    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, scheduled_match = IF $match_key = NONE { scheduled_match } ELSE { type::record('scheduled_match', $match_key) }, game_number = IF $game_number = NONE { game_number } ELSE { $game_number }, scheduled_match_deleted = IF $match_key = NONE { scheduled_match_deleted } ELSE { NONE }")
         .bind(("plan_key", plan_key))
         .bind(("name", plan.name))
         .bind(("draft_key", opt_key(plan.draft_id, "draft")))
@@ -2751,6 +2856,8 @@ pub async fn update_game_plan(db: &Surreal<Db>, team_id: &str, plan: GamePlan) -
         .bind(("support_strategy", plan.support_strategy))
         .bind(("notes", plan.notes))
         .bind(("win_condition_tag", plan.win_condition_tag))
+        .bind(("match_key", opt_key(plan.scheduled_match_id, "scheduled_match")))
+        .bind(("game_number", plan.game_number))
         .await?
         .check()?;
     Ok(())
@@ -2777,12 +2884,21 @@ struct DbGamePlan {
     win_condition_tag: Option<String>,
     #[serde(default)]
     draft_deleted: Option<bool>,
+    #[serde(default)]
+    scheduled_match: Option<RecordId>,
+    #[serde(default)]
+    game_number: Option<i32>,
+    #[serde(default)]
+    scheduled_match_deleted: Option<bool>,
 }
 
 impl From<DbGamePlan> for GamePlan {
     fn from(p: DbGamePlan) -> Self {
         GamePlan {
             draft_deleted: p.draft_deleted.unwrap_or(false),
+            scheduled_match_id: opt_link(p.scheduled_match),
+            game_number: p.game_number,
+            scheduled_match_deleted: p.scheduled_match_deleted.unwrap_or(false),
             id: Some(p.id.to_sql()),
             team_id: p.team.to_sql(),
             draft_id: opt_link(p.draft),
@@ -2870,6 +2986,14 @@ pub async fn save_post_game_learning(
     db: &Surreal<Db>,
     learning: PostGameLearning,
 ) -> DbResult<String> {
+    check_stamps(
+        db,
+        &learning.team_id,
+        learning.scheduled_match_id.as_deref(),
+        learning.series_id.as_deref(),
+        learning.game_number,
+    )
+    .await?;
     let team_key = learning
         .team_id
         .strip_prefix("team:")
@@ -2880,7 +3004,7 @@ pub async fn save_post_game_learning(
         .strip_prefix("user:")
         .unwrap_or(&learning.created_by)
         .to_string();
-    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key), win_loss = $win_loss, rating = $rating")
+    let mut response = db.query("CREATE post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key), win_loss = $win_loss, rating = $rating, scheduled_match = IF $match_key = NONE { NONE } ELSE { type::record('scheduled_match', $match_key) }, series = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number = $game_number")
         .bind(("team_key", team_key))
         .bind(("match_riot_id", learning.match_riot_id))
         .bind(("plan_key", opt_key(learning.game_plan_id, "game_plan")))
@@ -2892,6 +3016,9 @@ pub async fn save_post_game_learning(
         .bind(("created_by_key", created_by_key))
         .bind(("win_loss", learning.win_loss))
         .bind(("rating", learning.rating))
+        .bind(("match_key", opt_key(learning.scheduled_match_id, "scheduled_match")))
+        .bind(("series_key", opt_key(learning.series_id, "series")))
+        .bind(("game_number", learning.game_number))
         .await?;
     let row: Option<IdRecord> = response.take(0)?;
     match row {
@@ -2953,13 +3080,21 @@ pub async fn create_review_with_action_items(
     db: &Surreal<Db>,
     review: PostGameLearning,
 ) -> DbResult<(String, usize)> {
+    check_stamps(
+        db,
+        &review.team_id,
+        review.scheduled_match_id.as_deref(),
+        review.series_id.as_deref(),
+        review.game_number,
+    )
+    .await?;
     let items =
         new_action_item_texts(db, &review.team_id, None, &review_item_lines(&review)).await?;
     let count = items.len();
     let response = db
         .query(
             "BEGIN TRANSACTION; \
-             LET $r = (CREATE ONLY post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key), win_loss = $win_loss, rating = $rating); \
+             LET $r = (CREATE ONLY post_game_learning SET team = type::record('team', $team_key), match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, created_by = type::record('user', $created_by_key), win_loss = $win_loss, rating = $rating, scheduled_match = IF $match_key = NONE { NONE } ELSE { type::record('scheduled_match', $match_key) }, series = IF $series_key = NONE { NONE } ELSE { type::record('series', $series_key) }, game_number = $game_number); \
              FOR $t IN $items { CREATE action_item SET team = type::record('team', $team_key), text = $t, source_review = $r.id; }; \
              RETURN { id: $r.id }; \
              COMMIT TRANSACTION;",
@@ -2975,6 +3110,9 @@ pub async fn create_review_with_action_items(
         .bind(("created_by_key", record_key(&review.created_by, "user")))
         .bind(("win_loss", review.win_loss))
         .bind(("rating", review.rating))
+        .bind(("match_key", opt_key(review.scheduled_match_id, "scheduled_match")))
+        .bind(("series_key", opt_key(review.series_id, "series")))
+        .bind(("game_number", review.game_number))
         .bind(("items", items))
         .await?;
     let mut response = check_tx(response)?;
@@ -2987,7 +3125,8 @@ pub async fn create_review_with_action_items(
 
 /// Update a review of `team_id` and add action items for its new
 /// improvements, in one transaction. Returns how many items were created.
-/// The review's own `team_id` and `created_by` are ignored.
+/// The review's own `team_id` and `created_by` are ignored. A match stamp,
+/// series or game number of `None` keeps the stored one (M159).
 pub async fn update_review_with_action_items(
     db: &Surreal<Db>,
     team_id: &str,
@@ -2995,12 +3134,20 @@ pub async fn update_review_with_action_items(
 ) -> DbResult<usize> {
     let id = review.id.clone().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "post_game_learning", &id, team_id).await?;
+    check_stamps(
+        db,
+        team_id,
+        review.scheduled_match_id.as_deref(),
+        review.series_id.as_deref(),
+        review.game_number,
+    )
+    .await?;
     let items = new_action_item_texts(db, team_id, Some(&id), &review_item_lines(&review)).await?;
     let count = items.len();
     let response = db
         .query(
             "BEGIN TRANSACTION; \
-             UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating; \
+             UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating, scheduled_match = IF $match_key = NONE { scheduled_match } ELSE { type::record('scheduled_match', $match_key) }, series = IF $series_key = NONE { series } ELSE { type::record('series', $series_key) }, game_number = IF $game_number = NONE { game_number } ELSE { $game_number }, scheduled_match_deleted = IF $match_key = NONE { scheduled_match_deleted } ELSE { NONE }; \
              FOR $t IN $items { CREATE action_item SET team = type::record('team', $team_key), text = $t, source_review = type::record('post_game_learning', $key); }; \
              COMMIT TRANSACTION;",
         )
@@ -3015,6 +3162,9 @@ pub async fn update_review_with_action_items(
         .bind(("open_notes", review.open_notes))
         .bind(("win_loss", review.win_loss))
         .bind(("rating", review.rating))
+        .bind(("match_key", opt_key(review.scheduled_match_id, "scheduled_match")))
+        .bind(("series_key", opt_key(review.series_id, "series")))
+        .bind(("game_number", review.game_number))
         .bind(("items", items))
         .await?;
     check_tx(response)?;
@@ -3022,7 +3172,8 @@ pub async fn update_review_with_action_items(
 }
 
 /// Update a review of `team_id`. The review's own `team_id` and `created_by`
-/// fields are ignored (they cannot be changed).
+/// fields are ignored (they cannot be changed). A match stamp, series or
+/// game number of `None` keeps the stored one (M159).
 pub async fn update_post_game_learning(
     db: &Surreal<Db>,
     team_id: &str,
@@ -3030,8 +3181,16 @@ pub async fn update_post_game_learning(
 ) -> DbResult<()> {
     let id = learning.id.as_deref().ok_or(DbError::NotFound)?;
     ensure_team_record(db, "post_game_learning", id, team_id).await?;
+    check_stamps(
+        db,
+        team_id,
+        learning.scheduled_match_id.as_deref(),
+        learning.series_id.as_deref(),
+        learning.game_number,
+    )
+    .await?;
     let key = record_key(id, "post_game_learning");
-    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating")
+    db.query("UPDATE type::record('post_game_learning', $key) SET match_riot_id = $match_riot_id, game_plan_id = IF $plan_key = NONE { NONE } ELSE { type::record('game_plan', $plan_key) }, draft_id = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, what_went_well = $what_went_well, improvements = $improvements, action_items = $action_items, open_notes = $open_notes, win_loss = $win_loss, rating = $rating, scheduled_match = IF $match_key = NONE { scheduled_match } ELSE { type::record('scheduled_match', $match_key) }, series = IF $series_key = NONE { series } ELSE { type::record('series', $series_key) }, game_number = IF $game_number = NONE { game_number } ELSE { $game_number }, scheduled_match_deleted = IF $match_key = NONE { scheduled_match_deleted } ELSE { NONE }")
         .bind(("key", key))
         .bind(("match_riot_id", learning.match_riot_id))
         .bind(("plan_key", opt_key(learning.game_plan_id, "game_plan")))
@@ -3042,6 +3201,9 @@ pub async fn update_post_game_learning(
         .bind(("open_notes", learning.open_notes))
         .bind(("win_loss", learning.win_loss))
         .bind(("rating", learning.rating))
+        .bind(("match_key", opt_key(learning.scheduled_match_id, "scheduled_match")))
+        .bind(("series_key", opt_key(learning.series_id, "series")))
+        .bind(("game_number", learning.game_number))
         .await?
         .check()?;
     Ok(())
@@ -3067,12 +3229,24 @@ struct DbPostGameLearning {
     draft_deleted: Option<bool>,
     #[serde(default)]
     created_at: Option<Datetime>,
+    #[serde(default)]
+    scheduled_match: Option<RecordId>,
+    #[serde(default)]
+    series: Option<RecordId>,
+    #[serde(default)]
+    game_number: Option<i32>,
+    #[serde(default)]
+    scheduled_match_deleted: Option<bool>,
 }
 
 impl From<DbPostGameLearning> for PostGameLearning {
     fn from(p: DbPostGameLearning) -> Self {
         PostGameLearning {
             draft_deleted: p.draft_deleted.unwrap_or(false),
+            scheduled_match_id: opt_link(p.scheduled_match),
+            series_id: opt_link(p.series),
+            game_number: p.game_number,
+            scheduled_match_deleted: p.scheduled_match_deleted.unwrap_or(false),
             created_at: opt_dt(p.created_at),
             id: Some(p.id.to_sql()),
             team_id: p.team.to_sql(),
@@ -3954,11 +4128,13 @@ pub async fn update_series(
 
 pub async fn delete_series(db: &Surreal<Db>, team_id: &str, series_id: &str) -> DbResult<()> {
     ensure_team_record(db, "series", series_id, team_id).await?;
-    // Unlink the team's drafts and delete the series together.
+    // Unlink the team's drafts, reviews and matches and delete the series together.
     let response = db
         .query(
             "BEGIN TRANSACTION; \
              UPDATE draft SET series_id = NONE, game_number = NONE WHERE series_id = type::record('series', $series_key) AND team = type::record('team', $team_key); \
+             UPDATE post_game_learning SET series = NONE WHERE series = type::record('series', $series_key) AND team = type::record('team', $team_key); \
+             UPDATE scheduled_match SET series = NONE WHERE series = type::record('series', $series_key) AND team = type::record('team', $team_key); \
              DELETE type::record('series', $series_key); \
              COMMIT TRANSACTION;",
         )
@@ -8072,6 +8248,8 @@ struct DbScheduledMatch {
     notes: Option<String>,
     #[serde(default)]
     brief_read_by: Vec<RecordId>,
+    #[serde(default)]
+    series: Option<RecordId>,
 }
 
 impl From<DbScheduledMatch> for ScheduledMatch {
@@ -8085,6 +8263,7 @@ impl From<DbScheduledMatch> for ScheduledMatch {
             opponent_name: m.opponent_name,
             notes: m.notes,
             brief_read_by: m.brief_read_by.iter().map(|u| u.to_sql()).collect(),
+            series_id: opt_link(m.series),
         }
     }
 }
@@ -8101,12 +8280,60 @@ pub async fn next_scheduled_match(
 ) -> DbResult<Option<ScheduledMatch>> {
     let cutoff = (chrono::Utc::now() - chrono::Duration::hours(MATCH_DAY_GRACE_HOURS)).to_rfc3339();
     let mut r = db
-        .query("SELECT id, starts_at, kind, format, opponent, opponent.name AS opponent_name, notes, brief_read_by FROM scheduled_match WHERE team = type::record('team', $team_key) AND starts_at >= <datetime>$cutoff ORDER BY starts_at ASC LIMIT 1")
+        .query("SELECT id, starts_at, kind, format, opponent, opponent.name AS opponent_name, notes, brief_read_by, series FROM scheduled_match WHERE team = type::record('team', $team_key) AND starts_at >= <datetime>$cutoff ORDER BY starts_at ASC LIMIT 1")
         .bind(("team_key", record_key(team_id, "team")))
         .bind(("cutoff", cutoff))
         .await?;
     let row: Option<DbScheduledMatch> = r.take(0)?;
     Ok(row.map(ScheduledMatch::from))
+}
+
+/// M159: how many upcoming matches Match Day lists at most.
+pub const UPCOMING_MATCHES_MAX: usize = 20;
+
+/// M159: the team's upcoming scrims and matches, earliest first: every match
+/// still within its grace period (started less than twelve hours ago) or
+/// ahead, at most 366 days ahead (as `save_scheduled_match` allows), at most
+/// [`UPCOMING_MATCHES_MAX`]. The first row is `next_scheduled_match`.
+pub async fn upcoming_scheduled_matches(
+    db: &Surreal<Db>,
+    team_id: &str,
+) -> DbResult<Vec<ScheduledMatch>> {
+    let now = chrono::Utc::now();
+    let cutoff = (now - chrono::Duration::hours(MATCH_DAY_GRACE_HOURS)).to_rfc3339();
+    let until = (now + chrono::Duration::days(366)).to_rfc3339();
+    let mut r = db
+        .query("SELECT id, starts_at, kind, format, opponent, opponent.name AS opponent_name, notes, brief_read_by, series FROM scheduled_match WHERE team = type::record('team', $team_key) AND starts_at >= <datetime>$cutoff AND starts_at <= <datetime>$until ORDER BY starts_at ASC LIMIT $limit")
+        .bind(("team_key", record_key(team_id, "team")))
+        .bind(("cutoff", cutoff))
+        .bind(("until", until))
+        .bind(("limit", UPCOMING_MATCHES_MAX as i64))
+        .await?;
+    let rows: Vec<DbScheduledMatch> = r.take(0)?;
+    Ok(rows.into_iter().map(ScheduledMatch::from).collect())
+}
+
+/// M159: one scheduled match of `team_id` (any date), for the carried
+/// links (`?match_id=`). Another team's or an unknown id is `NotFound`.
+pub async fn get_scheduled_match(
+    db: &Surreal<Db>,
+    team_id: &str,
+    match_id: &str,
+) -> DbResult<ScheduledMatch> {
+    let key = record_key(match_id.trim(), "scheduled_match");
+    if key.is_empty() {
+        return Err(DbError::NotFound);
+    }
+    let mut r = db
+        .query("SELECT id, starts_at, kind, format, opponent, opponent.name AS opponent_name, notes, brief_read_by, series FROM type::record('scheduled_match', $key) WHERE team = type::record('team', $team_key)")
+        .bind(("key", key))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<DbScheduledMatch> = r.take(0)?;
+    rows.into_iter()
+        .next()
+        .map(ScheduledMatch::from)
+        .ok_or(DbError::NotFound)
 }
 
 /// Longest match note, in characters.
@@ -8189,12 +8416,26 @@ pub async fn save_scheduled_match(
     }
 }
 
+/// Delete a scheduled match of `team_id`. The drafts, plans and reviews made
+/// for it stay: their stamp is cleared and `scheduled_match_deleted` set (the
+/// pages say so), in the same transaction, the way a deleted draft is handled.
 pub async fn delete_scheduled_match(db: &Surreal<Db>, team_id: &str, id: &str) -> DbResult<()> {
     ensure_team_record(db, "scheduled_match", id, team_id).await?;
-    db.query("DELETE type::record('scheduled_match', $key)")
+    let response = db
+        .query(
+            "BEGIN TRANSACTION; \
+             LET $m = type::record('scheduled_match', $key); \
+             LET $t = type::record('team', $team_key); \
+             UPDATE draft SET scheduled_match = NONE, scheduled_match_deleted = true WHERE scheduled_match = $m AND team = $t; \
+             UPDATE game_plan SET scheduled_match = NONE, scheduled_match_deleted = true WHERE scheduled_match = $m AND team = $t; \
+             UPDATE post_game_learning SET scheduled_match = NONE, scheduled_match_deleted = true WHERE scheduled_match = $m AND team = $t; \
+             DELETE $m; \
+             COMMIT TRANSACTION;",
+        )
         .bind(("key", record_key(id, "scheduled_match")))
-        .await?
-        .check()?;
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    check_tx(response)?;
     Ok(())
 }
 
@@ -8224,69 +8465,130 @@ pub async fn set_brief_read(
     Ok(())
 }
 
-/// Drafts against an opponent, the plans linked to them, and a review of a
-/// match that started at `starts_at` (linked to those drafts or plans and
-/// written after the start).
-#[derive(Clone, Debug, Default)]
-pub struct MatchPrepFacts {
-    pub drafts: Vec<LinkRef>,
-    pub plans: Vec<LinkRef>,
-    pub review_after: Option<LinkRef>,
-}
+/// The prep work of one scheduled match (M159: only work stamped to it
+/// counts; see `models::match_day::scope_prep`).
+pub type MatchPrepFacts = crate::models::match_day::MatchPrep;
 
+/// M159: the drafts, plans and reviews stamped to `match_id` (per game for
+/// a series), plus the earlier, unstamped work against the match's
+/// opponent (drafts naming its dossier id or, for older ones, its name; the
+/// plans and reviews linked to those drafts), which Match Day offers with
+/// "Use for this match" and never counts as done. Work stamped to another
+/// match is left out. `match_id` must be a match of `team_id` (callers take
+/// it from the team's own schedule); every row is filtered by the team.
 pub async fn match_prep_facts(
     db: &Surreal<Db>,
     team_id: &str,
-    opponent_id: &str,
-    opponent_name: &str,
-    starts_at: &str,
+    match_id: &str,
+    opponent_id: Option<&str>,
+    opponent_name: Option<&str>,
 ) -> DbResult<MatchPrepFacts> {
+    use crate::models::match_day::{scope_prep, PrepWork, Stamp, WorkKind};
     #[derive(Debug, Deserialize, SurrealValue)]
-    struct NameRow {
+    struct WorkRow {
         id: RecordId,
         #[serde(default)]
         name: Option<String>,
-        #[allow(dead_code)]
+        #[serde(default)]
+        game_number: Option<i64>,
+        #[serde(default)]
+        this_match: bool,
+        #[serde(default)]
         created_at: Option<Datetime>,
     }
-    // Drafts store the opponent's id (older ones its name).
+    let opp_id = opponent_id.map(str::trim).unwrap_or_default().to_string();
+    let opp_name = opponent_name
+        .map(|n| n.trim().to_lowercase())
+        .unwrap_or_default();
     let mut r = db
         .query(
             "LET $t = type::record('team', $team_key); \
-             LET $drafts = (SELECT id, name, created_at FROM draft WHERE team = $t AND (opponent = $opp_id OR string::lowercase(opponent ?? '') = $opp_name) ORDER BY created_at DESC); \
+             LET $m = type::record('scheduled_match', $match_key); \
+             LET $drafts = (SELECT id, name, game_number, created_at, (scheduled_match = $m) AS this_match FROM draft WHERE team = $t AND (scheduled_match = $m OR (scheduled_match = NONE AND (($opp_id != '' AND opponent = $opp_id) OR ($opp_name != '' AND string::lowercase(opponent ?? '') = $opp_name)))) ORDER BY created_at DESC LIMIT 100); \
              LET $draft_ids = $drafts.id; \
-             LET $plans = (SELECT id, name, created_at FROM game_plan WHERE team = $t AND draft != NONE AND draft IN $draft_ids ORDER BY created_at DESC); \
+             LET $plans = (SELECT id, name, game_number, created_at, (scheduled_match = $m) AS this_match FROM game_plan WHERE team = $t AND (scheduled_match = $m OR (scheduled_match = NONE AND draft != NONE AND draft IN $draft_ids)) ORDER BY created_at DESC LIMIT 100); \
              LET $plan_ids = $plans.id; \
              RETURN $drafts; \
              RETURN $plans; \
-             SELECT id, created_at FROM post_game_learning WHERE team = $t AND ((draft_id != NONE AND draft_id IN $draft_ids) OR (game_plan_id != NONE AND game_plan_id IN $plan_ids)) AND created_at >= <datetime>$starts ORDER BY created_at DESC LIMIT 1;",
+             SELECT id, game_number, created_at, (scheduled_match = $m) AS this_match FROM post_game_learning WHERE team = $t AND (scheduled_match = $m OR (scheduled_match = NONE AND ((draft_id != NONE AND draft_id IN $draft_ids) OR (game_plan_id != NONE AND game_plan_id IN $plan_ids)))) ORDER BY created_at DESC LIMIT 100;",
         )
         .bind(("team_key", record_key(team_id, "team")))
-        .bind(("opp_id", opponent_id.to_string()))
-        .bind(("opp_name", opponent_name.trim().to_lowercase()))
-        .bind(("starts", starts_at.to_string()))
+        .bind(("match_key", record_key(match_id.trim(), "scheduled_match")))
+        .bind(("opp_id", opp_id))
+        .bind(("opp_name", opp_name))
         .await?;
-    let link = |r: NameRow, fallback: &str| LinkRef {
-        id: r.id.to_sql(),
-        name: r
-            .name
-            .filter(|n| !n.trim().is_empty())
-            .unwrap_or_else(|| fallback.to_string()),
+    let drafts: Vec<WorkRow> = r.take(6).unwrap_or_default();
+    let plans: Vec<WorkRow> = r.take(7).unwrap_or_default();
+    let reviews: Vec<WorkRow> = r.take(8).unwrap_or_default();
+    let work = |kind: WorkKind, row: WorkRow| {
+        let fallback = match kind {
+            WorkKind::Draft => "Untitled draft".to_string(),
+            WorkKind::Plan => "Untitled plan".to_string(),
+            WorkKind::Review => match &row.created_at {
+                Some(c) => format!(
+                    "Review of {}",
+                    crate::models::utils::format_timestamp(&dt_to_string(c))
+                ),
+                None => "Review".to_string(),
+            },
+        };
+        PrepWork {
+            kind,
+            link: LinkRef {
+                id: row.id.to_sql(),
+                name: row
+                    .name
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or(fallback),
+            },
+            // The query returns this match's work and unstamped work only.
+            stamp: if row.this_match {
+                Stamp::ThisMatch
+            } else {
+                Stamp::None
+            },
+            game: row.game_number.and_then(|g| i32::try_from(g).ok()),
+        }
     };
-    let drafts: Vec<NameRow> = r.take(5).unwrap_or_default();
-    let plans: Vec<NameRow> = r.take(6).unwrap_or_default();
-    let review: Option<NameRow> = r.take(7).unwrap_or_default();
-    Ok(MatchPrepFacts {
-        drafts: drafts
-            .into_iter()
-            .map(|d| link(d, "Untitled draft"))
-            .collect(),
-        plans: plans
-            .into_iter()
-            .map(|p| link(p, "Untitled plan"))
-            .collect(),
-        review_after: review.map(|v| link(v, "Review")),
-    })
+    let mut all = Vec::new();
+    all.extend(drafts.into_iter().map(|d| work(WorkKind::Draft, d)));
+    all.extend(plans.into_iter().map(|p| work(WorkKind::Plan, p)));
+    all.extend(reviews.into_iter().map(|v| work(WorkKind::Review, v)));
+    Ok(scope_prep(all))
+}
+
+/// M159: "Use for this match": stamps one unstamped draft, plan or review
+/// of `team_id` with the team's match `match_id`. Both must be the team's
+/// records (`check_stamps`, `ensure_team_record`): another team's or an
+/// unknown id is `NotFound`. Work already stamped to a match is left as it
+/// is (`Invalid`).
+pub async fn use_for_match(
+    db: &Surreal<Db>,
+    team_id: &str,
+    match_id: &str,
+    table: &'static str,
+    item_id: &str,
+) -> DbResult<()> {
+    if !matches!(table, "draft" | "game_plan" | "post_game_learning") {
+        return Err(DbError::NotFound);
+    }
+    check_stamps(db, team_id, Some(match_id), None, None).await?;
+    ensure_team_record(db, table, item_id.trim(), team_id).await?;
+    let mut r = db
+        .query(format!(
+            "UPDATE type::record('{table}', $key) SET scheduled_match = type::record('scheduled_match', $match_key), scheduled_match_deleted = NONE WHERE team = type::record('team', $team_key) AND scheduled_match = NONE RETURN id;"
+        ))
+        .bind(("key", record_key(item_id.trim(), table)))
+        .bind(("match_key", record_key(match_id.trim(), "scheduled_match")))
+        .bind(("team_key", record_key(team_id, "team")))
+        .await?;
+    let rows: Vec<IdRecord> = r.take(0)?;
+    if rows.is_empty() {
+        return Err(DbError::Invalid(
+            "This is already linked to a match.".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// The team's newest reviews, newest first.

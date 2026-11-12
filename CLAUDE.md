@@ -182,13 +182,15 @@ src/
 │   ├── guidance.rs      # M9: user_guidance rows, the switch, checklist/hint/nudge facts, Match Day guide
 │   ├── promote.rs       # M9: the promote command (also `lol_team_companion promote <email>`)
 │   ├── password.rs      # M137: password change, reset codes (mint, constant-time redeem, purge)
+│   ├── review_pick.rs   # M159: the synced games a team review can be of (team-scoped)
 │   ├── reset_password.rs # M137: the reset-password command (also `lol_team_companion reset-password <email>`)
 │   ├── community/       # M7: changelog parser, survey delivery rules, seed content, store.rs (queries)
 │   ├── graph/           # Draft Graph: traits.rs (defaults file champion_traits.csv, startup sync,
 │   │                    # in-memory table), rules.rs (trait rules), evidence.rs (own games), fit.rs (ranking)
 │   └── bug_report_export.rs # Exports open bug reports to markdown on start
 ├── models/              # Shared types (SSR + WASM); graph.rs = trait vocabulary, DraftState, GraphResult;
-│                        # match_day.rs (next match, prep steps), share.rs (share links, player cards),
+│                        # match_day.rs (next match, prep steps, M159 match thread), review_pick.rs (M159 review picker),
+│                        # share.rs (share links, player cards),
 │                        # guidance.rs (M9: checklist, welcome, hint, nudge and introduction rules, pure)
 ├── pages/               # Route components (+ their #[server] fns)
 │   ├── auth/{login,register,reset}.rs, team/{dashboard,roster}.rs
@@ -224,7 +226,7 @@ scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, 
 
 | Path | Component | Auth |
 |------|-----------|------|
-| `/` | HomePage: the landing page signed out, Match Day for team members, a start page (create or join a team) otherwise; both carry the guidance (welcome, getting-started checklist, one nudge). `/?guide=1` ("Guide me") shows the checklist even when hidden or complete | No |
+| `/` | HomePage: the landing page signed out, Match Day for team members, a start page (create or join a team) otherwise; both carry the guidance (welcome, getting-started checklist, one nudge). `/?guide=1` ("Guide me") shows the checklist even when hidden or complete; `/?match_id=` (M159) shows one of the team's upcoming matches instead of the next | No |
 | `/auth/login` | LoginPage | No |
 | `/auth/register?invite=CODE` | RegisterPage (without `invite` it redirects to `/closed-beta`) | No |
 | `/auth/reset` | ResetPasswordPage: email, one-time reset code from an admin, new password (rate limited per IP); success lands on `/auth/login?reset=1` | No |

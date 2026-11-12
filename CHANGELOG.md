@@ -21,6 +21,17 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 - Match detail on a phone: late in a game the timeline's markers sit too close together to tap one reliably, so phones now show "Events near the playhead" under the rails: the up to five shown events closest to the playhead as large buttons, each with its marker and clock. Pressing one selects that event and moves the playhead to it, exactly like tapping its marker; Previous event and Next event still step through every shown event. On a phone the keyboard reaches the events through this row instead of every marker on the track; on wider screens the timeline is unchanged.
 - A main button that cannot be used yet (such as "Sync my games" before a Riot account is linked) is now drawn as a plain grey button with readable text instead of a faded highlight, so its label stays easy to read.
 
+### Milestone M159: Match thread (2026-10-18)
+
+Planned for the second round of this milestone, not built yet: creating the series from a best of 3 or 5 match, RSVP for a match, and a share link for the opponent brief.
+
+#### Added
+- Drafts, game plans and reviews can now remember the scheduled match they were made for (and, for a best-of series, which game). Only your own team's matches can be chosen. Deleting a match never deletes the work made for it: the game plan and review pages then say "The match this was made for was deleted."
+- Match Day lists your team's other upcoming scrims and matches under the current one (three at first, then "Show all"). Open one to make it the current view; "Back to next match" returns. "Add a match" adds a later match while one is already next.
+- "Start a draft", "Write the game plan" and "Write the review" on Match Day now open for that match: the draft comes with the opponent chosen and a name like "vs Rooks · Sun 19:00 · G1", and saving links the draft, plan or review to the match (and game). A plan or review started from a linked draft or plan is linked too. A link naming a match that is not on your team's schedule opens an ordinary new draft, plan or review and says so. Editing a match opened from the upcoming list now reads "Edit this match".
+- Match Day's preparation steps now count only the drafts, plans and reviews made for that match, so a rematch against the same team starts fresh. For a best of 3 or 5 the review step reads game by game ("G1 done · G2 to do · G3 not played") and is done once every game played has a review. Drafts, plans and reviews against the same opponent from before appear as "Earlier work vs <opponent>", each with "Use for this match" to link it.
+- A review now says which game it is of in words: pick the game from a list of your team's synced games (the date, your champions and win or loss; games where three or more of you played together, newest first, and games near the scheduled match first when the review was opened from it), or "Not in the list (scrim / custom)" for a scrim or custom game, which saves without a synced game. A match's page and each game on Team games have "Review as a team" ("Open team review" once the team has one), which opens the review with that game chosen. Riot match ids are no longer shown on the review page.
+
 ### Identity, round 1 (2026-10-17)
 
 #### Added

@@ -45,6 +45,91 @@ pub struct ScheduledMatch {
     pub notes: Option<String>,
     /// Members (user ids) who marked the opponent brief read.
     pub brief_read_by: Vec<String>,
+    /// M159: the series a Bo3 or Bo5 is played as (if any).
+    #[serde(default)]
+    pub series_id: Option<String>,
+}
+
+/// M159: one row of Match Day's upcoming-match list.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct UpcomingMatch {
+    pub id: String,
+    /// Start time, RFC 3339 in UTC.
+    pub starts_at: String,
+    /// "scrim" | "match"
+    pub kind: String,
+    /// "bo1" | "bo3" | "bo5"
+    pub format: String,
+    pub opponent_name: Option<String>,
+    /// How many members confirmed (RSVP, M159 item 7). Not shown while
+    /// `None`.
+    #[serde(default)]
+    pub confirmed: Option<usize>,
+}
+
+impl From<&ScheduledMatch> for UpcomingMatch {
+    fn from(m: &ScheduledMatch) -> Self {
+        UpcomingMatch {
+            id: m.id.clone(),
+            starts_at: m.starts_at.clone(),
+            kind: m.kind.clone(),
+            format: m.format.clone(),
+            opponent_name: m.opponent_name.clone(),
+            confirmed: None,
+        }
+    }
+}
+
+/// M159: whether two scheduled-match ids name the same record (with or
+/// without the `scheduled_match:` prefix).
+pub fn same_match_id(a: &str, b: &str) -> bool {
+    let key = |s: &str| {
+        let s = s.trim();
+        s.strip_prefix("scheduled_match:").unwrap_or(s).to_string()
+    };
+    !a.trim().is_empty() && key(a) == key(b)
+}
+
+/// The current match of Match Day and the rest of the upcoming list (M159).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct MatchChoice {
+    /// The match the page is about: the chosen one, else the next one.
+    pub current: Option<ScheduledMatch>,
+    /// The other upcoming matches, earliest first (the current one left out).
+    pub others: Vec<ScheduledMatch>,
+    /// A `match_id` was given and is the current match, not the next one.
+    pub chosen: bool,
+    /// A `match_id` was given but is not one of the team's upcoming
+    /// matches: the page shows the next match and says so.
+    pub unknown: bool,
+}
+
+/// Pick Match Day's current match from the team's upcoming matches
+/// (earliest first) and an optional `match_id` from the address. An id that
+/// is not in `upcoming` (another team's, an old or a made-up one) falls
+/// back to `next`, the same for every such id.
+pub fn choose_match(
+    upcoming: Vec<ScheduledMatch>,
+    next: Option<ScheduledMatch>,
+    match_id: Option<&str>,
+) -> MatchChoice {
+    let wanted = match_id.map(str::trim).filter(|s| !s.is_empty());
+    let found = wanted.and_then(|w| upcoming.iter().position(|m| same_match_id(w, &m.id)));
+    let current = match found {
+        Some(i) => Some(upcoming[i].clone()),
+        None => next,
+    };
+    let chosen = found.is_some_and(|i| i != 0);
+    let others = upcoming
+        .into_iter()
+        .filter(|m| current.as_ref().is_none_or(|c| c.id != m.id))
+        .collect();
+    MatchChoice {
+        current,
+        others,
+        chosen,
+        unknown: wanted.is_some() && found.is_none(),
+    }
 }
 
 /// What the "next match" editor sends.
@@ -65,6 +150,306 @@ pub struct ScheduledMatchInput {
 pub struct LinkRef {
     pub id: String,
     pub name: String,
+}
+
+/// M159: how a match-thread link (`?match_id=`) resolved for the caller's
+/// team, as the draft, plan and review pages hold it in a resource. An
+/// explicit enum, not `Option<Option<ThreadMatch>>`: a resource is sent
+/// from the server render to the browser as JSON, where `Some(None)` and
+/// `None` are both `null`, so an unknown match hydrated as "no link" and
+/// the neutral line never showed.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum ThreadLookup {
+    /// No `match_id` in the address.
+    NoLink,
+    /// The team's match.
+    Found(ThreadMatch),
+    /// Unknown, malformed or another team's id.
+    Unknown,
+}
+
+/// M159: a scheduled match as a carried link (`?match_id=`) resolves it for
+/// the caller's team (`get_thread_match`): what the draft, plan and review
+/// pages need to prefill and stamp new work. Nothing else of the match.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ThreadMatch {
+    pub id: String,
+    /// Start time, RFC 3339 in UTC.
+    pub starts_at: String,
+    /// "scrim" | "match"
+    pub kind: String,
+    /// "bo1" | "bo3" | "bo5"
+    pub format: String,
+    pub opponent_id: Option<String>,
+    pub opponent_name: Option<String>,
+    /// The series the match is played as (item 6 creates them).
+    pub series_id: Option<String>,
+}
+
+impl From<&ScheduledMatch> for ThreadMatch {
+    fn from(m: &ScheduledMatch) -> Self {
+        ThreadMatch {
+            id: m.id.clone(),
+            starts_at: m.starts_at.clone(),
+            kind: m.kind.clone(),
+            format: m.format.clone(),
+            opponent_id: m.opponent_id.clone(),
+            opponent_name: m.opponent_name.clone(),
+            series_id: m.series_id.clone(),
+        }
+    }
+}
+
+/// M159: how many games a format has (Bo1 1, Bo3 3, Bo5 5).
+pub fn game_count(format: &str) -> i32 {
+    match format {
+        "bo3" => 3,
+        "bo5" => 5,
+        _ => 1,
+    }
+}
+
+/// M159: a `game` parameter for a match of `format`: a number from 1 to
+/// the format's game count, and only for a series (a Bo1 has no game
+/// number). Anything else is no game.
+pub fn parse_game(raw: Option<&str>, format: &str) -> Option<i32> {
+    let n = game_count(format);
+    if n <= 1 {
+        return None;
+    }
+    raw.and_then(|s| s.trim().parse::<i32>().ok())
+        .filter(|g| (1..=n).contains(g))
+}
+
+/// M159: the name a draft started from the match thread gets: "vs Rooks ·
+/// Sun 19:00 · G1". `when` is the match's start as the viewer reads it
+/// (blank leaves it out); the game is left out for a Bo1.
+pub fn thread_draft_name(
+    opponent: Option<&str>,
+    when: &str,
+    format: &str,
+    game: Option<i32>,
+) -> String {
+    let mut parts = vec![match opponent.map(str::trim).filter(|o| !o.is_empty()) {
+        Some(o) => format!("vs {o}"),
+        None => "Draft".to_string(),
+    }];
+    if !when.trim().is_empty() {
+        parts.push(when.trim().to_string());
+    }
+    if game_count(format) > 1 {
+        if let Some(g) = game {
+            parts.push(format!("G{g}"));
+        }
+    }
+    parts.join(" \u{b7} ")
+}
+
+/// M159: what a piece of prep work is.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum WorkKind {
+    Draft,
+    Plan,
+    Review,
+}
+
+impl WorkKind {
+    /// Where the work opens.
+    pub fn href(self, id: &str) -> String {
+        match self {
+            WorkKind::Draft => format!("/draft?draft_id={id}"),
+            WorkKind::Plan => format!("/game-plan?plan_id={id}"),
+            WorkKind::Review => format!("/post-game?review_id={id}"),
+        }
+    }
+
+    /// "draft" | "plan" | "review" (the server fn's argument).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkKind::Draft => "draft",
+            WorkKind::Plan => "plan",
+            WorkKind::Review => "review",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "draft" => Some(WorkKind::Draft),
+            "plan" => Some(WorkKind::Plan),
+            "review" => Some(WorkKind::Review),
+            _ => None,
+        }
+    }
+
+    /// The table the work lives in.
+    pub fn table(self) -> &'static str {
+        match self {
+            WorkKind::Draft => "draft",
+            WorkKind::Plan => "game_plan",
+            WorkKind::Review => "post_game_learning",
+        }
+    }
+}
+
+/// M159: which match a piece of work is stamped to, seen from the match
+/// shown on Match Day.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stamp {
+    /// Stamped to this match.
+    ThisMatch,
+    /// Stamped to another match (a rematch's work stays with its match).
+    OtherMatch,
+    /// Not stamped (made before M159, or its match was deleted).
+    None,
+}
+
+/// M159: one draft, plan or review the database found for a match: stamped
+/// to it, or unstamped against the same opponent.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrepWork {
+    pub kind: WorkKind,
+    pub link: LinkRef,
+    pub stamp: Stamp,
+    pub game: Option<i32>,
+}
+
+/// M159: unstamped work against the match's opponent, offered with "Use
+/// for this match"; never counted as done.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct EarlierWork {
+    pub kind: WorkKind,
+    pub id: String,
+    pub name: String,
+}
+
+/// M159: the prep work of one match, as Match Day counts it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MatchPrep {
+    /// Drafts stamped to this match, newest first.
+    pub drafts: Vec<LinkRef>,
+    /// Plans stamped to this match, newest first.
+    pub plans: Vec<LinkRef>,
+    /// The newest review stamped to this match.
+    pub review_after: Option<LinkRef>,
+    /// Games (1 to 5) with a stamped draft or review, ascending.
+    pub played_games: Vec<i32>,
+    /// Games with a stamped review, ascending.
+    pub reviewed_games: Vec<i32>,
+    /// Unstamped work against the same opponent.
+    pub earlier: Vec<EarlierWork>,
+}
+
+/// M159: split the work found for a match into what counts for it (stamped
+/// to this match) and earlier work (unstamped). Work stamped to another
+/// match never counts and is not offered: it belongs to that match (the
+/// rematch case). Stamped work without a game number counts as game 1.
+pub fn scope_prep(work: Vec<PrepWork>) -> MatchPrep {
+    let mut p = MatchPrep::default();
+    for w in work {
+        match w.stamp {
+            Stamp::OtherMatch => {}
+            Stamp::None => p.earlier.push(EarlierWork {
+                kind: w.kind,
+                id: w.link.id,
+                name: w.link.name,
+            }),
+            Stamp::ThisMatch => {
+                let game = w.game.unwrap_or(1);
+                match w.kind {
+                    WorkKind::Draft => {
+                        p.played_games.push(game);
+                        p.drafts.push(w.link);
+                    }
+                    WorkKind::Plan => p.plans.push(w.link),
+                    WorkKind::Review => {
+                        p.played_games.push(game);
+                        p.reviewed_games.push(game);
+                        if p.review_after.is_none() {
+                            p.review_after = Some(w.link);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for v in [&mut p.played_games, &mut p.reviewed_games] {
+        v.sort_unstable();
+        v.dedup();
+    }
+    p
+}
+
+/// M159: how one game of a match stands for its review.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GameReview {
+    Done,
+    ToDo,
+    NotPlayed,
+}
+
+/// M159: each game of a match of `format` and its review.
+///
+/// The rule: a game counts as played when it has a stamped draft or a
+/// stamped review; when no game does, game 1 is required (the match has
+/// at least one game). The review step is done only when every played game
+/// has a review; a game not played needs none.
+pub fn review_games(format: &str, played: &[i32], reviewed: &[i32]) -> Vec<(i32, GameReview)> {
+    let highest = played.iter().chain(reviewed).copied().max().unwrap_or(1);
+    let n = game_count(format).max(highest.min(5));
+    let none_played = played.is_empty() && reviewed.is_empty();
+    (1..=n)
+        .map(|g| {
+            let state = if reviewed.contains(&g) {
+                GameReview::Done
+            } else if played.contains(&g) || (g == 1 && none_played) {
+                GameReview::ToDo
+            } else {
+                GameReview::NotPlayed
+            };
+            (g, state)
+        })
+        .collect()
+}
+
+/// M159: every played game has a review (see `review_games`).
+pub fn reviews_complete(games: &[(i32, GameReview)]) -> bool {
+    games.iter().all(|(_, s)| *s != GameReview::ToDo)
+}
+
+/// M159: the per-game review readout of a series, in words: "G1 done · G2
+/// to do · G3 not played".
+pub fn review_readout(games: &[(i32, GameReview)]) -> String {
+    games
+        .iter()
+        .map(|(g, s)| {
+            let word = match s {
+                GameReview::Done => "done",
+                GameReview::ToDo => "to do",
+                GameReview::NotPlayed => "not played",
+            };
+            format!("G{g} {word}")
+        })
+        .collect::<Vec<_>>()
+        .join(" \u{b7} ")
+}
+
+/// M159: "Earlier work vs Rooks (3)" and its breakdown ("2 drafts, 1 plan").
+pub fn earlier_breakdown(earlier: &[EarlierWork]) -> String {
+    let count = |k: WorkKind| earlier.iter().filter(|e| e.kind == k).count();
+    let part = |n: usize, one: &str, many: &str| match n {
+        0 => None,
+        1 => Some(format!("1 {one}")),
+        n => Some(format!("{n} {many}")),
+    };
+    [
+        part(count(WorkKind::Draft), "draft", "drafts"),
+        part(count(WorkKind::Plan), "plan", "plans"),
+        part(count(WorkKind::Review), "review", "reviews"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(", ")
 }
 
 /// One scouted player in the opponent brief.
@@ -132,13 +517,21 @@ pub struct MatchDay {
     pub viewer_id: String,
     pub next: Option<ScheduledMatch>,
     pub brief: Option<OpponentBrief>,
-    /// Drafts against the next opponent.
+    /// Drafts stamped to this match (M159).
     pub drafts: Vec<LinkRef>,
-    /// Game plans linked to those drafts.
+    /// Game plans stamped to this match (M159).
     pub plans: Vec<LinkRef>,
-    /// A review of this match (linked to its drafts or plans, written after
-    /// it started).
+    /// The newest review stamped to this match (M159).
     pub review_after: Option<LinkRef>,
+    /// M159: games of this match with a stamped draft or review.
+    #[serde(default)]
+    pub played_games: Vec<i32>,
+    /// M159: games of this match with a stamped review.
+    #[serde(default)]
+    pub reviewed_games: Vec<i32>,
+    /// M159: unstamped work against the same opponent ("Earlier work").
+    #[serde(default)]
+    pub earlier: Vec<EarlierWork>,
     pub open_items: Vec<crate::models::action_item::ActionItem>,
     pub open_item_count: usize,
     pub last_review: Option<ReviewLine>,
@@ -149,6 +542,18 @@ pub struct MatchDay {
     pub opponents: Vec<LinkRef>,
     /// Server time when this was built, RFC 3339.
     pub now: String,
+    /// M159: the team's other upcoming matches, earliest first (the
+    /// current one left out; at most 19).
+    #[serde(default)]
+    pub upcoming: Vec<UpcomingMatch>,
+    /// M159: the current match was chosen from the list (`/?match_id=`)
+    /// and is not the next one.
+    #[serde(default)]
+    pub chosen: bool,
+    /// M159: the address named a match that is not on the team's schedule;
+    /// the page shows the next match instead and says so.
+    #[serde(default)]
+    pub unknown_match: bool,
 }
 
 /// Shorten a line to `max` characters on a word boundary, with an ellipsis.
@@ -167,6 +572,16 @@ pub fn shorten(s: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn thread_lookup_survives_json() {
+        // Hydration sends resources as JSON: "unknown" must not read back
+        // as "no link" (the Option<Option<_>> bug).
+        for v in [ThreadLookup::NoLink, ThreadLookup::Unknown] {
+            let json = serde_json::to_string(&v).unwrap();
+            assert_eq!(serde_json::from_str::<ThreadLookup>(&json).unwrap(), v);
+        }
+    }
+
     #[test]
     fn a_patch_is_news_for_two_weeks() {
         let now = chrono::DateTime::parse_from_rfc3339("2026-10-12T12:00:00Z")
@@ -199,5 +614,225 @@ mod tests {
             shorten("Lost tempo after twenty minutes, again", 20),
             "Lost tempo after\u{2026}"
         );
+    }
+
+    fn work(
+        kind: super::WorkKind,
+        id: &str,
+        stamp: super::Stamp,
+        game: Option<i32>,
+    ) -> super::PrepWork {
+        super::PrepWork {
+            kind,
+            link: super::LinkRef {
+                id: id.into(),
+                name: id.into(),
+            },
+            stamp,
+            game,
+        }
+    }
+
+    #[test]
+    fn a_rematch_counts_only_its_own_work() {
+        use super::{scope_prep, Stamp, WorkKind::*};
+        // The first match against Rooks had a draft, a plan and a review;
+        // the rematch has only its own draft so far.
+        let p = scope_prep(vec![
+            work(Draft, "draft:first", Stamp::OtherMatch, None),
+            work(Plan, "game_plan:first", Stamp::OtherMatch, None),
+            work(Review, "post_game_learning:first", Stamp::OtherMatch, None),
+            work(Draft, "draft:rematch", Stamp::ThisMatch, None),
+        ]);
+        assert_eq!(p.drafts.len(), 1);
+        assert_eq!(p.drafts[0].id, "draft:rematch");
+        assert!(p.plans.is_empty());
+        assert!(p.review_after.is_none());
+        assert!(p.reviewed_games.is_empty());
+        // The first match's work is neither counted nor offered again.
+        assert!(p.earlier.is_empty());
+        assert_eq!(p.played_games, vec![1]);
+    }
+
+    #[test]
+    fn a_best_of_three_is_reviewed_game_by_game() {
+        use super::{
+            review_games, review_readout, reviews_complete, scope_prep, GameReview, Stamp,
+            WorkKind::*,
+        };
+        // Nothing yet: game 1 is required, the others not played.
+        let g = review_games("bo3", &[], &[]);
+        assert_eq!(
+            g,
+            vec![
+                (1, GameReview::ToDo),
+                (2, GameReview::NotPlayed),
+                (3, GameReview::NotPlayed)
+            ]
+        );
+        assert!(!reviews_complete(&g));
+        assert_eq!(
+            review_readout(&g),
+            "G1 to do \u{b7} G2 not played \u{b7} G3 not played"
+        );
+
+        // Three games drafted, game 1 reviewed: not done.
+        let p = scope_prep(vec![
+            work(Draft, "draft:g1", Stamp::ThisMatch, Some(1)),
+            work(Draft, "draft:g2", Stamp::ThisMatch, Some(2)),
+            work(Draft, "draft:g3", Stamp::ThisMatch, Some(3)),
+            work(Review, "post_game_learning:g1", Stamp::ThisMatch, Some(1)),
+        ]);
+        assert_eq!(p.played_games, vec![1, 2, 3]);
+        assert_eq!(p.reviewed_games, vec![1]);
+        let g = review_games("bo3", &p.played_games, &p.reviewed_games);
+        assert_eq!(
+            review_readout(&g),
+            "G1 done \u{b7} G2 to do \u{b7} G3 to do"
+        );
+        assert!(!reviews_complete(&g));
+
+        // A 2-0: two games played, both reviewed; game 3 needs no review.
+        let g = review_games("bo3", &[1, 2], &[1, 2]);
+        assert!(reviews_complete(&g));
+        assert_eq!(
+            review_readout(&g),
+            "G1 done \u{b7} G2 done \u{b7} G3 not played"
+        );
+        // A review of game 2 alone makes game 2 played (game 1 then has no
+        // stamped work and is not required).
+        let g = review_games("bo3", &[], &[2]);
+        assert_eq!(g[1], (2, GameReview::Done));
+        assert!(reviews_complete(&g));
+        // A Bo1 has one game.
+        assert_eq!(review_games("bo1", &[], &[1]), vec![(1, GameReview::Done)]);
+    }
+
+    #[test]
+    fn earlier_work_is_offered_but_never_done() {
+        use super::{
+            earlier_breakdown, review_games, reviews_complete, scope_prep, Stamp, WorkKind::*,
+        };
+        let p = scope_prep(vec![
+            work(Draft, "draft:old1", Stamp::None, None),
+            work(Draft, "draft:old2", Stamp::None, Some(2)),
+            work(Plan, "game_plan:old", Stamp::None, None),
+            work(Review, "post_game_learning:old", Stamp::None, None),
+        ]);
+        assert!(p.drafts.is_empty() && p.plans.is_empty() && p.review_after.is_none());
+        assert!(p.played_games.is_empty() && p.reviewed_games.is_empty());
+        assert_eq!(p.earlier.len(), 4);
+        assert_eq!(earlier_breakdown(&p.earlier), "2 drafts, 1 plan, 1 review");
+        assert_eq!(earlier_breakdown(&p.earlier[..1]), "1 draft");
+        // The legacy review does not make the review step done.
+        assert!(!reviews_complete(&review_games(
+            "bo1",
+            &p.played_games,
+            &p.reviewed_games
+        )));
+        assert_eq!(super::WorkKind::parse("plan"), Some(Plan));
+        assert_eq!(super::WorkKind::parse("game_plan"), None);
+        assert_eq!(
+            Review.href("post_game_learning:x"),
+            "/post-game?review_id=post_game_learning:x"
+        );
+    }
+
+    #[test]
+    fn thread_links_name_the_draft_and_read_the_game() {
+        use super::{game_count, parse_game, thread_draft_name};
+        assert_eq!(
+            thread_draft_name(Some("Rooks"), "Sun 19:00", "bo3", Some(1)),
+            "vs Rooks \u{b7} Sun 19:00 \u{b7} G1"
+        );
+        // A Bo1 has no game in its name; a blank time is left out.
+        assert_eq!(
+            thread_draft_name(Some("Rooks"), "Sun 19:00", "bo1", Some(1)),
+            "vs Rooks \u{b7} Sun 19:00"
+        );
+        assert_eq!(
+            thread_draft_name(None, " ", "bo5", Some(4)),
+            "Draft \u{b7} G4"
+        );
+        assert_eq!(
+            (game_count("bo1"), game_count("bo3"), game_count("bo5")),
+            (1, 3, 5)
+        );
+        assert_eq!(parse_game(Some("2"), "bo3"), Some(2));
+        assert_eq!(parse_game(Some(" 5 "), "bo5"), Some(5));
+        // Outside the format, not a number, or a Bo1: no game.
+        assert_eq!(parse_game(Some("4"), "bo3"), None);
+        assert_eq!(parse_game(Some("0"), "bo3"), None);
+        assert_eq!(parse_game(Some("x"), "bo3"), None);
+        assert_eq!(parse_game(Some("1"), "bo1"), None);
+        assert_eq!(parse_game(None, "bo3"), None);
+    }
+
+    fn sm(id: &str, starts_at: &str) -> super::ScheduledMatch {
+        super::ScheduledMatch {
+            id: id.into(),
+            starts_at: starts_at.into(),
+            kind: "scrim".into(),
+            format: "bo3".into(),
+            opponent_id: None,
+            opponent_name: Some("Rooks".into()),
+            notes: None,
+            brief_read_by: vec![],
+            series_id: None,
+        }
+    }
+
+    #[test]
+    fn the_current_match_comes_from_the_list_or_falls_back_to_the_next() {
+        use super::choose_match;
+        let list = vec![
+            sm("scheduled_match:a", "2026-10-20T18:00:00Z"),
+            sm("scheduled_match:b", "2026-10-21T18:00:00Z"),
+            sm("scheduled_match:c", "2026-10-22T18:00:00Z"),
+        ];
+        let next = Some(list[0].clone());
+
+        // No id: the next match, the others listed.
+        let c = choose_match(list.clone(), next.clone(), None);
+        assert_eq!(
+            c.current.as_ref().map(|m| m.id.as_str()),
+            Some("scheduled_match:a")
+        );
+        assert_eq!(c.others.len(), 2);
+        assert!(!c.chosen && !c.unknown);
+
+        // A later match, with or without the prefix: it is current and the
+        // next one moves into the list.
+        for id in ["scheduled_match:b", "b", " b "] {
+            let c = choose_match(list.clone(), next.clone(), Some(id));
+            assert_eq!(
+                c.current.as_ref().map(|m| m.id.as_str()),
+                Some("scheduled_match:b")
+            );
+            let ids: Vec<&str> = c.others.iter().map(|m| m.id.as_str()).collect();
+            assert_eq!(ids, ["scheduled_match:a", "scheduled_match:c"]);
+            assert!(c.chosen && !c.unknown);
+        }
+
+        // The next match by id is not "chosen".
+        let c = choose_match(list.clone(), next.clone(), Some("scheduled_match:a"));
+        assert!(!c.chosen && !c.unknown);
+
+        // Unknown (or another team's) id: the next match and a flag.
+        let c = choose_match(list.clone(), next.clone(), Some("scheduled_match:zzz"));
+        assert_eq!(
+            c.current.as_ref().map(|m| m.id.as_str()),
+            Some("scheduled_match:a")
+        );
+        assert!(c.unknown && !c.chosen);
+        assert_eq!(c.others.len(), 2);
+
+        // A blank id is no id.
+        let c = choose_match(list.clone(), next.clone(), Some("  "));
+        assert!(!c.unknown);
+
+        // Nothing scheduled.
+        let c = choose_match(vec![], None, Some("scheduled_match:a"));
+        assert!(c.current.is_none() && c.others.is_empty() && c.unknown);
     }
 }

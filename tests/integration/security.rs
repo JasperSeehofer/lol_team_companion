@@ -61,6 +61,7 @@ async fn make_draft(db: &Surreal<Db>, team: &str, user: &str, name: &str) -> Str
         None,
         None,
         None,
+        None,
     )
     .await
     .unwrap()
@@ -68,6 +69,9 @@ async fn make_draft(db: &Surreal<Db>, team: &str, user: &str, name: &str) -> Str
 
 fn plan(team: &str, name: &str) -> GamePlan {
     GamePlan {
+        scheduled_match_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         id: None,
         team_id: team.into(),
@@ -131,6 +135,7 @@ async fn draft_is_isolated_between_teams() {
                 None,
                 None,
                 None,
+                None,
             )
             .await
         }
@@ -154,6 +159,65 @@ async fn draft_is_isolated_between_teams() {
     assert_eq!(db::list_drafts(&db, &t.team1).await.unwrap().len(), 1);
     db::delete_draft(&db, &t.team1, &draft).await.unwrap();
     assert!(db::list_drafts(&db, &t.team1).await.unwrap().is_empty());
+}
+
+/// M159: a match stamp from another team is refused like any foreign id,
+/// and the match's owner team keeps its match.
+#[tokio::test]
+async fn match_stamps_are_isolated_between_teams() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let a_match = db::save_scheduled_match(
+        &db,
+        &t.team1,
+        &t.a,
+        lol_team_companion::models::match_day::ScheduledMatchInput {
+            id: None,
+            starts_at: (chrono::Utc::now() + chrono::Duration::hours(24)).to_rfc3339(),
+            kind: "match".into(),
+            format: "bo1".into(),
+            opponent_id: None,
+            notes: None,
+        },
+    )
+    .await
+    .unwrap();
+    // B stamps a draft and a plan of B's own team with A's match.
+    let b_draft = db::save_draft(
+        &db,
+        &t.team2,
+        &t.b,
+        "B's draft".into(),
+        None,
+        None,
+        vec![],
+        vec![],
+        None,
+        "blue".into(),
+        vec![],
+        None,
+        None,
+        None,
+        None,
+        Some(a_match.clone()),
+    )
+    .await;
+    assert_not_found(b_draft, "B stamps a draft with A's match");
+    let mut p = plan(&t.team2, "B's plan");
+    p.scheduled_match_id = Some(a_match.clone());
+    assert_not_found(
+        db::save_game_plan(&db, p, &t.b).await,
+        "B stamps a plan with A's match",
+    );
+    assert_not_found(
+        db::delete_scheduled_match(&db, &t.team2, &a_match).await,
+        "B deletes A's match",
+    );
+    assert!(db::next_scheduled_match(&db, &t.team1)
+        .await
+        .unwrap()
+        .is_some());
+    assert!(db::list_drafts(&db, &t.team2).await.unwrap().is_empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -324,6 +388,10 @@ async fn review_is_isolated_between_teams() {
     let db = common::test_db().await;
     let t = tenants(&db).await;
     let review = PostGameLearning {
+        scheduled_match_id: None,
+        series_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         created_at: None,
         id: None,
@@ -446,6 +514,10 @@ async fn action_item_source_review_must_belong_to_the_team() {
     let db = common::test_db().await;
     let t = tenants(&db).await;
     let review = PostGameLearning {
+        scheduled_match_id: None,
+        series_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         created_at: None,
         id: None,
