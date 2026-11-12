@@ -2355,6 +2355,8 @@ pub async fn create_draft_tree(
     name: String,
     opponent: Option<String>,
 ) -> DbResult<String> {
+    // An `opponent:` value must be one of the team's dossiers.
+    ensure_opponent_ref(db, team_id, opponent.as_deref()).await?;
     // The tree and its root node (named after the tree) are one transaction.
     let response = db
         .query(
@@ -2411,6 +2413,8 @@ pub async fn update_draft_tree(
     opponent: Option<String>,
 ) -> DbResult<()> {
     ensure_team_record(db, "draft_tree", tree_id, team_id).await?;
+    // An `opponent:` value must be one of the team's dossiers.
+    ensure_opponent_ref(db, team_id, opponent.as_deref()).await?;
     let tree_key = record_key(tree_id, "draft_tree");
     db.query("UPDATE type::record('draft_tree', $tree_key) SET name = $name, opponent = $opponent")
         .bind(("tree_key", tree_key))

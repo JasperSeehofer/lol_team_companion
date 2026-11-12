@@ -294,6 +294,72 @@ async fn tree_and_nodes_are_isolated_between_teams() {
         .is_empty());
 }
 
+/// M160 item 9: a tree's `opponent:` value must be one of the team's own
+/// dossiers — creating or updating with another team's dossier id is
+/// NotFound and changes nothing; free text still passes.
+#[tokio::test]
+async fn tree_opponent_ref_must_be_own_dossier() {
+    let db = common::test_db().await;
+    let t = tenants(&db).await;
+    let ours = db::create_opponent(&db, &t.team1, "Riverside Rooks".into(), None)
+        .await
+        .unwrap();
+    let theirs = db::create_opponent(&db, &t.team2, "Northgate".into(), None)
+        .await
+        .unwrap();
+
+    // Creating a tree with another team's dossier id is refused.
+    assert_not_found(
+        db::create_draft_tree(&db, &t.team1, &t.a, "A tree".into(), Some(theirs.clone())).await,
+        "A creates a tree with B's dossier",
+    );
+    let tree = db::create_draft_tree(&db, &t.team1, &t.a, "A tree".into(), Some(ours.clone()))
+        .await
+        .unwrap();
+
+    // Pointing the tree at another team's dossier is refused and changes
+    // nothing.
+    assert_not_found(
+        db::update_draft_tree(&db, &t.team1, &tree, "renamed".into(), Some(theirs.clone())).await,
+        "A points a tree at B's dossier",
+    );
+    assert_not_found(
+        db::update_draft_tree(
+            &db,
+            &t.team1,
+            &tree,
+            "renamed".into(),
+            Some("opponent:does-not-exist".into()),
+        )
+        .await,
+        "A points a tree at a dossier that does not exist",
+    );
+    let trees = db::list_draft_trees(&db, &t.team1).await.unwrap();
+    assert_eq!(trees.len(), 1);
+    assert_eq!(trees[0].name, "A tree");
+    assert_eq!(trees[0].opponent.as_deref(), Some(ours.as_str()));
+
+    // Own dossier, free text and none all pass.
+    db::update_draft_tree(&db, &t.team1, &tree, "renamed".into(), Some(ours.clone()))
+        .await
+        .unwrap();
+    db::update_draft_tree(
+        &db,
+        &t.team1,
+        &tree,
+        "renamed".into(),
+        Some("Some Team".into()),
+    )
+    .await
+    .unwrap();
+    db::update_draft_tree(&db, &t.team1, &tree, "renamed".into(), None)
+        .await
+        .unwrap();
+    let trees = db::list_draft_trees(&db, &t.team1).await.unwrap();
+    assert_eq!(trees[0].name, "renamed");
+    assert_eq!(trees[0].opponent, None);
+}
+
 // ---------------------------------------------------------------------------
 // Cross-tenant: game plans and checklists
 // ---------------------------------------------------------------------------

@@ -14,11 +14,13 @@ use crate::components::ui::{
 use crate::components::ui::{
     slot_dom_id, Badge, BadgeTone, Button, ButtonSize, ButtonType, ButtonVariant, ConfirmDialog,
     ConfirmTone, Density, DraftBoard, EmptySize, EmptyState, Field, HeadingLevel, NoTeamState,
-    PageHeader, PageShell, SectionHeader, Segment, SegmentSize, SegmentedControl, Skeleton,
-    SkeletonGroup, SkeletonShape, Switch, TextField, Toast, ToastContext, TOURNAMENT_ORDER,
+    PageHeader, PageShell, SectionHeader, Segment, SegmentSize, SegmentedControl, Select,
+    SelectOption, Skeleton, SkeletonGroup, SkeletonShape, Switch, TextField, Toast, ToastContext,
+    TOURNAMENT_ORDER,
 };
 use crate::models::champion::Champion;
 use crate::models::draft::{DraftAction, DraftTree, DraftTreeNode};
+use crate::models::opponent::Opponent;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -82,6 +84,15 @@ pub async fn create_tree(name: String, opponent: Option<String>) -> Result<Strin
         .map_err(authz::server_err)?
         .ok_or_else(|| ServerFnError::new(authz::NO_TEAM))?;
 
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(ServerFnError::new("Give the tree a name."));
+    }
+    // An `opponent:` value must be one of the team's dossiers.
+    db::ensure_opponent_ref(&db, &team_id, opponent.as_deref())
+        .await
+        .map_err(authz::server_err)?;
+
     db::create_draft_tree(&db, &team_id, &user.id, name, opponent)
         .await
         .map_err(authz::server_err)
@@ -111,6 +122,15 @@ pub async fn update_tree_meta(
 
     let authz::Ctx { db, user } = authz::authed().await?;
     let team_id = authz::require_team(&db, &user).await?;
+
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(ServerFnError::new("Give the tree a name."));
+    }
+    // An `opponent:` value must be one of the team's dossiers.
+    db::ensure_opponent_ref(&db, &team_id, opponent.as_deref())
+        .await
+        .map_err(authz::server_err)?;
 
     db::update_draft_tree(&db, &team_id, &tree_id, name, opponent)
         .await
@@ -228,6 +248,41 @@ fn actions_to_slots(actions: &[DraftAction]) -> Vec<Option<String>> {
     slots
 }
 
+/// Options for a tree's opponent select: "No opponent", one per team dossier
+/// (value = dossier id, label = name), and — when the current value is free
+/// text that is not a dossier id — a legacy option keeping it selectable
+/// (same shape as the draft page's `opponent_options`).
+fn tree_opponent_options(list: &[Opponent], current: &str) -> Vec<SelectOption> {
+    let mut opts = vec![SelectOption::new("", "No opponent")];
+    let mut known = false;
+    for o in list {
+        let id = o.id.clone().unwrap_or_default();
+        known |= id == current;
+        opts.push(SelectOption::new(id, o.name.clone()));
+    }
+    if !current.is_empty() && !known {
+        opts.push(SelectOption::new(
+            current,
+            format!("{current} (not in Opponents)"),
+        ));
+    }
+    opts
+}
+
+/// What the tree shows for an opponent value: the dossier's name for an
+/// `opponent:` id, the text itself for a legacy free-text value.
+fn tree_opponent_label(value: &str, list: &[Opponent]) -> Option<String> {
+    if value.is_empty() {
+        return None;
+    }
+    Some(
+        list.iter()
+            .find(|o| o.id.as_deref() == Some(value))
+            .map(|o| o.name.clone())
+            .unwrap_or_else(|| value.to_string()),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -337,6 +392,11 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let champions_resource = Resource::new(|| (), |_| get_champions_for_tree());
     let trees = Resource::new(|| (), |_| list_trees());
     let has_team = Resource::new(|| (), |_| user_has_team());
+    // Team dossiers for the opponent selects (created before the first
+    // Suspense, leptos rule 58; loaded with the same server fn as the draft
+    // page's opponent select).
+    let dossiers = Resource::new(|| (), |_| crate::pages::opponents::get_opponents());
+    let dossier_list = Memo::new(move |_| dossiers.get().and_then(|r| r.ok()).unwrap_or_default());
     let selected_tree = RwSignal::new(None::<String>);
     let nodes = Resource::new(
         move || selected_tree.get(),
@@ -384,6 +444,12 @@ pub fn TreeDrafterPage() -> impl IntoView {
     });
 
     let confirm_delete = RwSignal::new(false);
+    // Rename / opponent edit of the selected tree (the inline form under
+    // the tree title).
+    let edit_open = RwSignal::new(false);
+    let edit_name = RwSignal::new(String::new());
+    let edit_opp = RwSignal::new(String::new());
+    let edit_error = RwSignal::new(None::<String>);
     let on_delete_tree = Callback::new(move |_| {
         let Some(id) = selected_tree.get_untracked() else {
             return;
@@ -408,6 +474,7 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let select_tree = Callback::new(move |id: String| {
         ned.load(None);
         mode.set("edit".to_string());
+        edit_open.set(false);
         selected_tree.set(Some(id));
     });
 
@@ -419,6 +486,42 @@ pub fn TreeDrafterPage() -> impl IntoView {
             .and_then(|r| r.ok())
             .and_then(|l| l.into_iter().find(|t| t.id.as_deref() == Some(id.as_str())))
     };
+
+    // Open the edit form prefilled from the selected tree.
+    let open_edit = Callback::new(move |_| {
+        if let Some(t) = tree_title() {
+            edit_name.set(t.name);
+            edit_opp.set(t.opponent.unwrap_or_default());
+        }
+        edit_error.set(None);
+        edit_open.set(true);
+    });
+    let save_edit = Callback::new(move |_: ()| {
+        let Some(id) = selected_tree.get_untracked() else {
+            return;
+        };
+        let name = edit_name.get_untracked();
+        if name.trim().is_empty() {
+            edit_error.set(Some("Give the tree a name.".into()));
+            return;
+        }
+        edit_error.set(None);
+        let opp = edit_opp.get_untracked();
+        let opp = (!opp.trim().is_empty()).then_some(opp);
+        leptos::task::spawn_local(async move {
+            match update_tree_meta(id, name.trim().to_string(), opp).await {
+                Ok(()) => {
+                    edit_open.set(false);
+                    trees.refetch();
+                    toast.push.run(Toast::success("Tree saved"));
+                }
+                Err(e) => edit_error.set(Some(format!(
+                    "Could not save the tree: {}",
+                    crate::models::utils::error_text(&e)
+                ))),
+            }
+        });
+    });
 
     view! {
         <PageShell density=Density::Compact attr:data-feedback-label="Tree drafter">
@@ -456,13 +559,16 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                         }.into_any()
                                     }
                                 }
-                                Ok(list) => view! {
+                                Ok(list) => {
+                                    let dossiers = dossier_list.get();
+                                    view! {
                                     <ul class="flex flex-col" data-testid="tree-list">
                                         {list.into_iter().map(|t| {
                                             let id = t.id.clone().unwrap_or_default();
                                             let id_sel = id.clone();
                                             let id_cur = id.clone();
-                                            let opp = t.opponent.clone();
+                                            let opp_label =
+                                                t.opponent.as_deref().and_then(|o| tree_opponent_label(o, &dossiers));
                                             view! {
                                                 <li class="border-b border-rule last:border-b-0">
                                                     <Button
@@ -473,14 +579,15 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     >
                                                         <span class="flex w-full min-w-0 items-baseline justify-between gap-2 text-left">
                                                             <span class="truncate">{t.name.clone()}</span>
-                                                            {opp.map(|o| view! { <span class="truncate text-caption font-normal text-muted">"vs " {o}</span> })}
+                                                            {opp_label.map(|label| view! { <span class="truncate text-caption font-normal text-muted">"vs " {label}</span> })}
                                                         </span>
                                                     </Button>
                                                 </li>
                                             }
                                         }).collect_view()}
                                     </ul>
-                                }.into_any(),
+                                }.into_any()
+                                }
                             })}
                         </Suspense>
                     </div>
@@ -489,9 +596,18 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         <Field id="tree-name" label="Name" required=true error=Signal::derive(move || new_error.get())>
                             <TextField value=new_name placeholder="Blue side vs Riverside" on_keydown=enter_submits(create) />
                         </Field>
-                        <Field id="tree-opponent" label="Opponent">
-                            <TextField value=new_opp placeholder="Riverside Rooks" on_keydown=enter_submits(create) />
-                        </Field>
+                        <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
+                            {move || {
+                                // The current value is read untracked so the
+                                // select keeps focus while its options render.
+                                let opts = tree_opponent_options(&dossier_list.get(), &new_opp.get_untracked());
+                                view! {
+                                    <Field id="tree-opponent" label="Opponent">
+                                        <Select value=new_opp options=opts />
+                                    </Field>
+                                }
+                            }}
+                        </Suspense>
                         <div><Button on_click=Callback::new(move |_| create.run(()))>"Create tree"</Button></div>
                     </div>
                 </section>
@@ -511,16 +627,55 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                     <p class="flex flex-wrap items-baseline gap-x-3">
                                         // The tree list is a resource: read it inside a Suspense.
                                         <Suspense fallback=|| ()>
-                                            <span class="font-display text-title font-semibold text-primary">
+                                            <span class="font-display text-title font-semibold text-primary" attr:data-testid="tree-title">
                                                 {move || tree_title().map(|t| t.name).unwrap_or_default()}
                                             </span>
-                                            {move || tree_title().and_then(|t| t.opponent).map(|o| view! { <span class="text-body text-secondary">"vs " {o}</span> })}
+                                            {move || {
+                                                let dossiers = dossier_list.get();
+                                                tree_title()
+                                                    .and_then(|t| t.opponent)
+                                                    .and_then(|o| tree_opponent_label(&o, &dossiers))
+                                                    .map(|label| view! { <span class="text-body text-secondary" attr:data-testid="tree-opponent-label">"vs " {label}</span> })
+                                            }}
                                         </Suspense>
                                     </p>
-                                    <Button variant=ButtonVariant::Danger size=ButtonSize::Sm on_click=Callback::new(move |_| confirm_delete.set(true))>
-                                        "Delete tree"
-                                    </Button>
+                                    <div class="flex items-center gap-2">
+                                        <Button variant=ButtonVariant::Quiet size=ButtonSize::Sm on_click=open_edit attr:data-testid="tree-edit-open">
+                                            "Edit"
+                                        </Button>
+                                        <Button variant=ButtonVariant::Danger size=ButtonSize::Sm on_click=Callback::new(move |_| confirm_delete.set(true))>
+                                            "Delete tree"
+                                        </Button>
+                                    </div>
                                 </div>
+                                {move || edit_open.get().then(|| view! {
+                                    <form
+                                        class="flex flex-col gap-3 border-b border-rule pb-3"
+                                        data-testid="tree-edit-form"
+                                        on:submit=move |ev: leptos::ev::SubmitEvent| {
+                                            ev.prevent_default();
+                                            save_edit.run(());
+                                        }
+                                    >
+                                        <Field id="tree-edit-name" label="Name" required=true error=Signal::derive(move || edit_error.get())>
+                                            <TextField value=edit_name placeholder="Blue side vs Riverside" on_keydown=enter_submits(save_edit) />
+                                        </Field>
+                                        <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
+                                            {move || {
+                                                let opts = tree_opponent_options(&dossier_list.get(), &edit_opp.get_untracked());
+                                                view! {
+                                                    <Field id="tree-edit-opponent" label="Opponent">
+                                                        <Select value=edit_opp options=opts />
+                                                    </Field>
+                                                }
+                                            }}
+                                        </Suspense>
+                                        <div class="flex gap-2">
+                                            <Button variant=ButtonVariant::Primary kind=ButtonType::Submit attr:data-testid="tree-edit-save">"Save"</Button>
+                                            <Button variant=ButtonVariant::Quiet on_click=Callback::new(move |_| edit_open.set(false))>"Cancel"</Button>
+                                        </div>
+                                    </form>
+                                })}
                                 {move || if mode.get() == "live" {
                                     view! {
                                         <LiveNavigator nodes=nodes champions=champions_resource selected_tree=selected_tree />
@@ -1240,5 +1395,58 @@ fn LiveNavigator(
                 }}
             </Suspense>
         </section>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dossier(id: &str, name: &str) -> Opponent {
+        Opponent {
+            id: Some(id.to_string()),
+            name: name.to_string(),
+            team_id: "team:t".to_string(),
+            notes: None,
+        }
+    }
+
+    #[test]
+    fn opponent_options_cover_dossiers_and_legacy_text() {
+        let list = vec![
+            dossier("opponent:a", "Riverside Rooks"),
+            dossier("opponent:b", "Northgate"),
+        ];
+        // No opponent first, then one option per dossier.
+        let opts = tree_opponent_options(&list, "");
+        assert_eq!(opts.len(), 3);
+        assert_eq!(opts[0].value, "");
+        assert_eq!(opts[0].label, "No opponent");
+        assert_eq!(opts[1].value, "opponent:a");
+        assert_eq!(opts[1].label, "Riverside Rooks");
+        assert_eq!(opts[2].value, "opponent:b");
+        assert_eq!(opts[2].label, "Northgate");
+        // A dossier id as the current value adds no legacy option.
+        assert_eq!(tree_opponent_options(&list, "opponent:a").len(), 3);
+        // Free text that is not a dossier id stays selectable.
+        let opts = tree_opponent_options(&list, "Old Opponent");
+        assert_eq!(opts.len(), 4);
+        assert_eq!(opts[3].value, "Old Opponent");
+        assert_eq!(opts[3].label, "Old Opponent (not in Opponents)");
+    }
+
+    #[test]
+    fn opponent_label_resolves_dossier_names() {
+        let list = vec![dossier("opponent:a", "Riverside Rooks")];
+        assert_eq!(
+            tree_opponent_label("opponent:a", &list).as_deref(),
+            Some("Riverside Rooks")
+        );
+        // Legacy free text is shown as written.
+        assert_eq!(
+            tree_opponent_label("Old Opponent", &list).as_deref(),
+            Some("Old Opponent")
+        );
+        assert_eq!(tree_opponent_label("", &list), None);
     }
 }
