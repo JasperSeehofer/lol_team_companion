@@ -90,6 +90,7 @@ fn plan(team: &str, name: &str) -> GamePlan {
         support_strategy: None,
         notes: None,
         win_condition_tag: None,
+        dismissed_suggestions: vec![],
     }
 }
 

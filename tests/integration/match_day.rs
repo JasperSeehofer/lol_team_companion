@@ -101,6 +101,7 @@ fn plan(team: &str, draft: Option<String>) -> GamePlan {
         support_strategy: None,
         notes: None,
         win_condition_tag: None,
+        dismissed_suggestions: vec![],
     }
 }
 

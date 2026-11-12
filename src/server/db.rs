@@ -2777,6 +2777,14 @@ pub async fn get_team_region(db: &Surreal<Db>, team_id: &str) -> DbResult<Option
 // Game plans / post-game
 // ---------------------------------------------------------------------------
 
+/// M150: a plan's dismissed suggestion keys as stored: bounded and
+/// well-formed ([`sanitize_dismissed`](crate::models::suggestion::sanitize_dismissed)),
+/// `NONE` when there are none.
+fn dismissed_for_db(keys: Vec<String>) -> Option<Vec<String>> {
+    let keys = crate::models::suggestion::sanitize_dismissed(keys);
+    (!keys.is_empty()).then_some(keys)
+}
+
 /// Create a game plan in `plan.team_id` (the server function sets it to
 /// the caller's team). Its match stamp must be a match of that team.
 pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> DbResult<String> {
@@ -2794,7 +2802,8 @@ pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> 
         .unwrap_or(&plan.team_id)
         .to_string();
     let user_key = user_id.strip_prefix("user:").unwrap_or(user_id).to_string();
-    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, created_by = type::record('user', $user_key), scheduled_match = IF $match_key = NONE { NONE } ELSE { type::record('scheduled_match', $match_key) }, game_number = $game_number")
+    let dismissed = dismissed_for_db(plan.dismissed_suggestions);
+    let mut response = db.query("CREATE game_plan SET name = $name, team = type::record('team', $team_key), draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, dismissed_suggestions = $dismissed_suggestions, created_by = type::record('user', $user_key), scheduled_match = IF $match_key = NONE { NONE } ELSE { type::record('scheduled_match', $match_key) }, game_number = $game_number")
         .bind(("name", plan.name))
         .bind(("team_key", team_key))
         .bind(("user_key", user_key))
@@ -2812,6 +2821,7 @@ pub async fn save_game_plan(db: &Surreal<Db>, plan: GamePlan, user_id: &str) -> 
         .bind(("support_strategy", plan.support_strategy))
         .bind(("notes", plan.notes))
         .bind(("win_condition_tag", plan.win_condition_tag))
+        .bind(("dismissed_suggestions", dismissed))
         .bind(("match_key", opt_key(plan.scheduled_match_id, "scheduled_match")))
         .bind(("game_number", plan.game_number))
         .await?
@@ -2839,7 +2849,8 @@ pub async fn update_game_plan(db: &Surreal<Db>, team_id: &str, plan: GamePlan) -
     )
     .await?;
     let plan_key = record_key(plan_id, "game_plan");
-    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, scheduled_match = IF $match_key = NONE { scheduled_match } ELSE { type::record('scheduled_match', $match_key) }, game_number = IF $game_number = NONE { game_number } ELSE { $game_number }, scheduled_match_deleted = IF $match_key = NONE { scheduled_match_deleted } ELSE { NONE }")
+    let dismissed = dismissed_for_db(plan.dismissed_suggestions);
+    db.query("UPDATE type::record('game_plan', $plan_key) SET name = $name, draft = IF $draft_key = NONE { NONE } ELSE { type::record('draft', $draft_key) }, draft_deleted = IF $draft_key = NONE { draft_deleted } ELSE { NONE }, our_champions = $our_champions, enemy_champions = $enemy_champions, win_conditions = $win_conditions, objective_priority = $objective_priority, teamfight_strategy = $teamfight_strategy, early_game = $early_game, top_strategy = $top_strategy, jungle_strategy = $jungle_strategy, mid_strategy = $mid_strategy, bot_strategy = $bot_strategy, support_strategy = $support_strategy, notes = $notes, win_condition_tag = $win_condition_tag, dismissed_suggestions = $dismissed_suggestions, scheduled_match = IF $match_key = NONE { scheduled_match } ELSE { type::record('scheduled_match', $match_key) }, game_number = IF $game_number = NONE { game_number } ELSE { $game_number }, scheduled_match_deleted = IF $match_key = NONE { scheduled_match_deleted } ELSE { NONE }")
         .bind(("plan_key", plan_key))
         .bind(("name", plan.name))
         .bind(("draft_key", opt_key(plan.draft_id, "draft")))
@@ -2856,6 +2867,7 @@ pub async fn update_game_plan(db: &Surreal<Db>, team_id: &str, plan: GamePlan) -
         .bind(("support_strategy", plan.support_strategy))
         .bind(("notes", plan.notes))
         .bind(("win_condition_tag", plan.win_condition_tag))
+        .bind(("dismissed_suggestions", dismissed))
         .bind(("match_key", opt_key(plan.scheduled_match_id, "scheduled_match")))
         .bind(("game_number", plan.game_number))
         .await?
@@ -2890,11 +2902,14 @@ struct DbGamePlan {
     game_number: Option<i32>,
     #[serde(default)]
     scheduled_match_deleted: Option<bool>,
+    #[serde(default)]
+    dismissed_suggestions: Option<Vec<String>>,
 }
 
 impl From<DbGamePlan> for GamePlan {
     fn from(p: DbGamePlan) -> Self {
         GamePlan {
+            dismissed_suggestions: p.dismissed_suggestions.unwrap_or_default(),
             draft_deleted: p.draft_deleted.unwrap_or(false),
             scheduled_match_id: opt_link(p.scheduled_match),
             game_number: p.game_number,

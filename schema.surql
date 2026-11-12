@@ -157,6 +157,8 @@ DEFINE FIELD IF NOT EXISTS draft_deleted ON game_plan TYPE option<bool>;
 DEFINE FIELD IF NOT EXISTS scheduled_match ON game_plan TYPE option<record<scheduled_match>>;
 DEFINE FIELD IF NOT EXISTS game_number ON game_plan TYPE option<int> ASSERT $value = NONE OR ($value >= 1 AND $value <= 5);
 DEFINE FIELD IF NOT EXISTS scheduled_match_deleted ON game_plan TYPE option<bool>;
+-- M150: suggestion keys dismissed on this plan ("rule_id:idA:idB" or "rule_id:ours|theirs"; at most 64, bounded by the DB layer).
+DEFINE FIELD IF NOT EXISTS dismissed_suggestions ON game_plan TYPE option<array<string>>;
 DEFINE FIELD IF NOT EXISTS created_at ON game_plan TYPE datetime DEFAULT time::now();
 
 -- Post-game learnings

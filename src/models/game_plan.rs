@@ -36,6 +36,10 @@ pub struct GamePlan {
     /// M159: the match this plan was made for was deleted.
     #[serde(default)]
     pub scheduled_match_deleted: bool,
+    /// M150: suggestion keys dismissed on this plan ("Not for us"); bounded
+    /// with `models::suggestion::sanitize_dismissed` before it is stored.
+    #[serde(default)]
+    pub dismissed_suggestions: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -198,6 +202,7 @@ mod tests {
             support_strategy: None,
             notes: None,
             win_condition_tag: None,
+            dismissed_suggestions: vec![],
         };
         let json = serde_json::to_string(&plan).unwrap();
         let back: GamePlan = serde_json::from_str(&json).unwrap();
@@ -228,6 +233,7 @@ mod tests {
             support_strategy: Some("Engage".into()),
             notes: Some("Important notes".into()),
             win_condition_tag: Some("teamfight".into()),
+            dismissed_suggestions: vec!["fit.needs_engage:ours".into()],
         };
         let json = serde_json::to_string(&plan).unwrap();
         let back: GamePlan = serde_json::from_str(&json).unwrap();

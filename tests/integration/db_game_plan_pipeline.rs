@@ -143,6 +143,7 @@ async fn test_get_game_plans_for_draft_found() {
         support_strategy: None,
         notes: None,
         win_condition_tag: None,
+        dismissed_suggestions: vec![],
     };
     db::save_game_plan(&db, plan, &user_id).await.unwrap();
 
@@ -252,6 +253,7 @@ async fn dashboard_counts_follow_record_links() {
         support_strategy: None,
         notes: None,
         win_condition_tag: None,
+        dismissed_suggestions: vec![],
     };
     let p1 = db::save_game_plan(&d, plan.clone(), &u).await.unwrap();
     let _p2 = db::save_game_plan(
@@ -300,4 +302,96 @@ async fn dashboard_counts_follow_record_links() {
     let linked = db::get_game_plans_for_draft(&d, &t, &d1).await.unwrap();
     assert_eq!(linked.len(), 1);
     assert_eq!(linked[0].draft_id.as_deref(), Some(d1.as_str()));
+}
+
+/// M150: the suggestions dismissed on a plan are saved, updated and read
+/// back; the DB layer bounds what a client sends (64 entries, known shapes).
+#[tokio::test]
+async fn dismissed_suggestions_round_trip_and_are_bounded() {
+    let db = common::test_db().await;
+    let (user_id, team_id) = setup(&db).await;
+    let base = GamePlan {
+        scheduled_match_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
+        draft_deleted: false,
+        id: None,
+        team_id: team_id.clone(),
+        draft_id: None,
+        name: "Dismissals".into(),
+        our_champions: vec![],
+        enemy_champions: vec![],
+        win_conditions: vec![],
+        objective_priority: vec![],
+        teamfight_strategy: String::new(),
+        early_game: None,
+        top_strategy: None,
+        jungle_strategy: None,
+        mid_strategy: None,
+        bot_strategy: None,
+        support_strategy: None,
+        notes: None,
+        win_condition_tag: None,
+        dismissed_suggestions: vec![
+            "syn.engage_burst:Malphite:Syndra".into(),
+            "fit.needs_engage:ours".into(),
+            "not a key".into(),
+            "fit.needs_engage:ours".into(),
+        ],
+    };
+    let id = db::save_game_plan(&db, base.clone(), &user_id)
+        .await
+        .unwrap();
+    let read = |db: &surrealdb::Surreal<surrealdb::engine::local::Db>| {
+        let (db, team_id, id) = (db.clone(), team_id.clone(), id.clone());
+        async move {
+            db::list_game_plans(&db, &team_id)
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|p| p.id.as_deref() == Some(id.as_str()))
+                .unwrap()
+        }
+    };
+    let got = read(&db).await;
+    assert_eq!(
+        got.dismissed_suggestions,
+        vec![
+            "syn.engage_burst:Malphite:Syndra".to_string(),
+            "fit.needs_engage:ours".to_string()
+        ]
+    );
+
+    // 100 entries and over-long keys: at most 64 kept, all well formed.
+    let mut many: Vec<String> = (0..100).map(|i| format!("syn.wombo:A{i}:B")).collect();
+    many.insert(0, format!("syn.wombo:{}:B", "A".repeat(120)));
+    db::update_game_plan(
+        &db,
+        &team_id,
+        GamePlan {
+            id: Some(id.clone()),
+            dismissed_suggestions: many,
+            ..base.clone()
+        },
+    )
+    .await
+    .unwrap();
+    let got = read(&db).await;
+    assert_eq!(got.dismissed_suggestions.len(), 64);
+    assert_eq!(got.dismissed_suggestions[0], "syn.wombo:A0:B");
+    assert!(got.dismissed_suggestions.iter().all(|k| k.len() <= 96));
+
+    // Cleared again: reads as an empty list.
+    db::update_game_plan(
+        &db,
+        &team_id,
+        GamePlan {
+            id: Some(id.clone()),
+            dismissed_suggestions: vec![],
+            ..base
+        },
+    )
+    .await
+    .unwrap();
+    assert!(read(&db).await.dismissed_suggestions.is_empty());
 }

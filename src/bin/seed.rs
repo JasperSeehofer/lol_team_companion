@@ -1115,6 +1115,7 @@ async fn populate(
             support_strategy: Some("Roam mid after first back if bot is safe.".into()),
             notes: Some("Review the first 10 minutes together after the game.".into()),
             win_condition_tag: Some(tag.into()),
+            dismissed_suggestions: vec![],
         };
         let plan_id = db::save_game_plan(db, plan, leader).await.map_err(err)?;
         plans.push((plan_id, draft_id));

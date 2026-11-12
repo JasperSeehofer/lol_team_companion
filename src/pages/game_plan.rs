@@ -100,6 +100,8 @@ pub async fn create_plan(plan_json: String) -> Result<String, ServerFnError> {
     }
     // The match stamp is re-checked in the DB layer as the team's match.
     plan.scheduled_match_deleted = false;
+    plan.dismissed_suggestions =
+        crate::models::suggestion::sanitize_dismissed(plan.dismissed_suggestions);
     plan.team_id = team_id;
     db::save_game_plan(&surreal, plan, &user.id)
         .await
@@ -113,12 +115,14 @@ pub async fn update_plan(plan_json: String) -> Result<(), ServerFnError> {
 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
     let team_id = authz::require_team(&surreal, &user).await?;
-    let plan: GamePlan = serde_json::from_str(&plan_json).map_err(authz::server_err)?;
+    let mut plan: GamePlan = serde_json::from_str(&plan_json).map_err(authz::server_err)?;
     if let Some(did) = plan.draft_id.as_deref().filter(|d| !d.is_empty()) {
         db::ensure_team_record(&surreal, "draft", did, &team_id)
             .await
             .map_err(authz::server_err)?;
     }
+    plan.dismissed_suggestions =
+        crate::models::suggestion::sanitize_dismissed(plan.dismissed_suggestions);
     db::update_game_plan(&surreal, &team_id, plan)
         .await
         .map_err(authz::server_err)
@@ -570,6 +574,8 @@ struct PlanEd {
     draft_deleted: RwSignal<bool>,
     /// M159: the scheduled match this plan was made for was deleted.
     match_deleted: RwSignal<bool>,
+    /// M150: suggestion keys dismissed on this plan ("Not for us").
+    dismissed: RwSignal<Vec<String>>,
 }
 
 impl PlanEd {
@@ -591,6 +597,7 @@ impl PlanEd {
             from_draft: RwSignal::new(false),
             draft_deleted: RwSignal::new(false),
             match_deleted: RwSignal::new(false),
+            dismissed: RwSignal::new(Vec::new()),
         }
     }
 
@@ -619,6 +626,7 @@ impl PlanEd {
         self.from_draft.set(false);
         self.draft_deleted.set(false);
         self.match_deleted.set(false);
+        self.dismissed.set(Vec::new());
     }
 
     fn load(&self, p: &GamePlan) {
@@ -651,6 +659,7 @@ impl PlanEd {
         self.from_draft.set(false);
         self.draft_deleted.set(p.draft_deleted);
         self.match_deleted.set(p.scheduled_match_deleted);
+        self.dismissed.set(p.dismissed_suggestions.clone());
     }
 
     /// Seed picks (and, for a new plan, name, tag, win conditions and role
@@ -739,6 +748,11 @@ impl PlanEd {
             support_strategy: opt(g(self.roles[4])),
             notes: opt(g(self.notes)),
             win_condition_tag: opt(g(self.tag)),
+            dismissed_suggestions: if tracked {
+                self.dismissed.get()
+            } else {
+                self.dismissed.get_untracked()
+            },
         }
     }
 }

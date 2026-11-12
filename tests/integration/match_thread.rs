@@ -150,6 +150,7 @@ fn plan(team: &str, scheduled_match: Option<String>, game: Option<i32>) -> GameP
         support_strategy: None,
         notes: None,
         win_condition_tag: None,
+        dismissed_suggestions: vec![],
     }
 }
 
