@@ -28,12 +28,16 @@ new item was started after that.
    - I ruled it a residual and listed it for R2. **Overrule this if the trial's exit rule should
      be read strictly.** If you do, item 8 counts as "Mistral failed" and item 9 would not have
      been started.
-2. **Item 9 is on the branch but not verified.** Its Sonnet verifier was running when the meter
-   stopped the round, and no verdict came back. CI has not yet run on `37d27ee`; the push below
-   starts it. The fresh verifier should read item 9 closely:
-   - the `ensure_opponent_ref` calls in `create_tree` and `update_tree_meta`;
-   - the opponent `Select`;
-   - the new cross-team test in `tests/integration/security.rs`.
+2. **Item 9 passed its Sonnet verifier, but with a possible hydration risk.** The verdict came back
+   after the cap stop. Clippy is clean on both targets, 473 unit tests pass and the design lint is
+   clean.
+   - Finding: in `src/pages/tree_drafter.rs` the `dossier_list` Memo, which wraps the `dossiers`
+     resource, is read inside Suspense closures that wait only on `trees`.
+   - On the server, the opponent select might render without its dossier options while the browser
+     hydrates with them. The tree list might also show a raw `opponent:` id for one render.
+   - CI's `tree-meta` and `hydration-no-panic` specs on the tip will show whether it is real. The
+     fix is to read `dossiers.get()` directly inside those Suspense closures.
+   - This is listed for R2. The fresh verifier should read it closely.
 3. **How item 2b reports an auto-placement.**
    - Leaders and coaches see a Callout per auto-placed member on the team page ("{name} joined as
      {Role} starter.", with Undo and Keep), plus a count in the nav notifications. A one-off toast
@@ -72,7 +76,7 @@ new item was started after that.
 | 6 | `LoadFailed` with Retry instead of hand-written or empty error states (14 sites) | done (verifier PASS, CI pending) | `7ec401c`, `7dba9df` |
 | 7 | Orphans deleted: `fetch_champions`, `get_team_champion_stats`, `RiotClient::fetch_player_champions` | done (verifier PASS, clippy clean) | `d6d7d95` |
 | 8 | Per-player notes on the dossier: collapsed by default, preview, saves on blur or Ctrl+Enter, save state, 1000-character limit | done with one a11y residual (decision 1) | `c85e90e`, `cad5521`, `47c9bb8` |
-| 9 | Tree meta: rename, and opponent picked from the team's dossiers (with legacy free text), checked server-side | **on branch, unverified** (decision 2) | `3bf47f1`, `37d27ee` |
+| 9 | Tree meta: rename, and opponent picked from the team's dossiers (with legacy free text), checked server-side (also in the db functions) | done: verifier PASS, one hydration risk (decision 2), CI pending | `3bf47f1`, `37d27ee` |
 | 10 | One lesson pipeline | **R2**, not started (spec ready: `specs/item10-spec.md`) | — |
 | 11 | CHANGELOG | **R2**, not started | — |
 
@@ -100,7 +104,7 @@ session-id fix (c3597241), when every run reused one pi session.
 | 5 dev copy | devstral-medium | 6m15s · 5b spec-gap follow-up 4m00s | PASS, PASS | 0 (+1 follow-up) | no |
 | 6 LoadFailed | devstral-medium | 12m16s · fix1 4m30s | FIX (clippy `needless_return`), then PASS | 1 | no |
 | 8 player notes | devstral-medium | 7m01s · fix1 4m15s | FIX (minor), then FIX (minor; ruled residual, decision 1) | 1 | no (see decision 1) |
-| 9 tree meta | mistral-large | 10m31s | pending (cut off by the cap) | — | — |
+| 9 tree meta | mistral-large | 10m31s | PASS (473 tests), one non-blocking hydration risk | 0 | no |
 
 Observations:
 - Devstral did well on the mechanical items: every one passed within one fix round.
@@ -163,5 +167,5 @@ These belong to R2.
 3. Item 8's `aria-expanded` residual (decision 1).
 4. Frame strips (a `frames-m160` spec, before from `main` via a helper branch), the atelier
    critique and the rubric run.
-5. Item 9's verification, if the fresh verifier does not cover it.
+5. Item 9's Suspense read of the dossiers (decision 2), if CI's tree-meta or hydration specs show it.
 6. The F05 sites above.
