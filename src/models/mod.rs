@@ -18,6 +18,7 @@ pub mod review_pick;
 pub mod sand_table;
 pub mod series;
 pub mod share;
+pub mod suggestion;
 pub mod team;
 pub mod team_note;
 pub mod user;

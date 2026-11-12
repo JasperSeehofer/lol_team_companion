@@ -8,6 +8,11 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Milestone M150: Game-plan suggestions (2026-11-12)
+
+#### Added
+- Once both sides of a game plan have five champions, the plan shows up to three suggestions about the matchup under the picks, from the same trait rules as the Draft Graph: who on your side works well together, who beats whom, and what a comp lacks (hard engage, front line, wave clear, a mix of damage). Each names the champions it is about and gives the reason in one sentence. "Add to plan" writes it as an ordinary line you can edit into Win conditions (or Notes, for what to watch out for); "Not for us" hides it on that plan for good. Nothing is added unless you choose it.
+
 ### Milestone M159: Match thread (2026-10-18)
 
 Planned for the second round of this milestone, not built yet: creating the series from a best of 3 or 5 match, RSVP for a match, and a share link for the opponent brief.

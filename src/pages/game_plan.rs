@@ -19,6 +19,7 @@ use crate::components::ui::{
 use crate::models::champion::Champion;
 use crate::models::draft::{most_common_tag, Draft};
 use crate::models::game_plan::{ChecklistInstance, ChecklistTemplate, GamePlan};
+use crate::models::suggestion::Suggestion;
 use crate::pages::navigate::{navigator, replace_url};
 use leptos::prelude::*;
 
@@ -121,6 +122,68 @@ pub async fn update_plan(plan_json: String) -> Result<(), ServerFnError> {
     db::update_game_plan(&surreal, &team_id, plan)
         .await
         .map_err(authz::server_err)
+}
+
+/// The most picks a side may send to [`plan_suggestions`].
+pub const SUGGEST_MAX_PICKS: usize = 5;
+/// The longest pick string [`plan_suggestions`] accepts.
+pub const SUGGEST_MAX_PICK_CHARS: usize = 64;
+
+/// M150: suggestions for the plan's matchup, from the trait rules only
+/// (`server::graph::suggest`). It takes the picks in the editor, not a plan
+/// id, so a plan that is not saved yet gets them too; nothing stored is
+/// read (no plan, no games, no Riot call). Team members only. Empty unless
+/// both sides have five known champions, and empty when the trait table is
+/// not loaded.
+#[server]
+pub async fn plan_suggestions(
+    ours: Vec<String>,
+    theirs: Vec<String>,
+) -> Result<Vec<Suggestion>, ServerFnError> {
+    use crate::server::db::DbError;
+    use crate::server::graph::{suggest, traits};
+    use crate::server::{authz, rate_limit::Bucket};
+
+    let ctx = authz::authed().await?;
+    ctx.require_team().await?;
+    authz::rate_limit(Bucket::Graph).await?;
+    let too_big = |side: &[String]| {
+        side.len() > SUGGEST_MAX_PICKS
+            || side
+                .iter()
+                .any(|p| p.chars().count() > SUGGEST_MAX_PICK_CHARS)
+    };
+    if too_big(&ours) || too_big(&theirs) {
+        return Err(authz::server_err(DbError::Invalid(
+            "A side has at most five picks.".into(),
+        )));
+    }
+    let Some(table) = traits::table() else {
+        return Ok(Vec::new());
+    };
+    Ok(suggest::suggest(&table, &ours, &theirs))
+}
+
+/// M150: a suggestion was added to a plan ("accept") or dismissed. Only
+/// the rule id and the action are logged, one line each, to learn which
+/// rules coaches trust; no user, team or plan id, and nothing is stored.
+#[server]
+pub async fn suggestion_feedback(rule_id: String, action: String) -> Result<(), ServerFnError> {
+    use crate::server::db::DbError;
+    use crate::server::graph::suggest;
+    use crate::server::{authz, rate_limit::Bucket};
+
+    let ctx = authz::authed().await?;
+    ctx.require_team().await?;
+    // Per user, like votes and dismissals elsewhere (30, then one every 2 s).
+    authz::rate_limit_user(Bucket::Community, &ctx.user)?;
+    if !matches!(action.as_str(), "accept" | "dismiss") || !suggest::is_known_rule_id(&rule_id) {
+        return Err(authz::server_err(DbError::Invalid(
+            "Unknown suggestion.".into(),
+        )));
+    }
+    tracing::info!(rule_id = %rule_id, action = %action, "plan suggestion");
+    Ok(())
 }
 
 #[server]

@@ -681,7 +681,7 @@ pub fn rank(table: &TraitTable, state: &DraftState, k: &TeamKnowledge) -> GraphR
                     v,
                 ));
             }
-            if own_profile.frontline < 2 && t.frontline != Strength::Absent {
+            if own_profile.little_frontline() && t.frontline != Strength::Absent {
                 let v = if t.frontline == Strength::Strong {
                     1.0
                 } else {
@@ -695,7 +695,7 @@ pub fn rank(table: &TraitTable, state: &DraftState, k: &TeamKnowledge) -> GraphR
                     v,
                 ));
             }
-            if (own_profile.wave_clear as usize) < n_own && t.wave_clear == WaveClear::Strong {
+            if own_profile.slow_wave_clear() && t.wave_clear == WaveClear::Strong {
                 play += 0.5;
                 reasons.push(fit_reason(
                     Component::Playstyle,
@@ -707,8 +707,8 @@ pub fn rank(table: &TraitTable, state: &DraftState, k: &TeamKnowledge) -> GraphR
                     0.5,
                 ));
             }
-            let physical_heavy = own_profile.physical >= 0.75 * n_own as f32;
-            let magic_heavy = own_profile.magic >= 0.75 * n_own as f32;
+            let physical_heavy = own_profile.physical_heavy();
+            let magic_heavy = own_profile.magic_heavy();
             let is_physical = matches!(t.damage_type, DamageType::Physical | DamageType::TrueHeavy);
             let is_magic = t.damage_type == DamageType::Magic;
             if physical_heavy && is_magic {

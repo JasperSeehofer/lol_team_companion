@@ -662,6 +662,28 @@ impl CompProfile {
         (best[0].0 > 0 && best[0].0 > best[1].0).then_some(best[0].1)
     }
 
+    /// Composition thresholds, shared by the Draft Graph's ranking
+    /// (`fit.rs`) and the game plan's suggestions (`suggest.rs`).
+    /// Little front line: less than one strong (or two some) in total.
+    pub fn little_frontline(&self) -> bool {
+        self.frontline < 2
+    }
+
+    /// Slow wave clear: below "some" per pick on average.
+    pub fn slow_wave_clear(&self) -> bool {
+        (self.wave_clear as usize) < self.picks as usize
+    }
+
+    /// At least three quarters of the damage is physical.
+    pub fn physical_heavy(&self) -> bool {
+        self.physical >= 0.75 * self.picks as f32
+    }
+
+    /// At least three quarters of the damage is magic.
+    pub fn magic_heavy(&self) -> bool {
+        self.magic >= 0.75 * self.picks as f32
+    }
+
     /// "3 / 1.5": physical and magic shares, halves kept.
     pub fn damage_mix(&self) -> String {
         format!("{} / {}", half(self.physical), half(self.magic))
