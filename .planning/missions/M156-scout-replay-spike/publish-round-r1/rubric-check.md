@@ -1,7 +1,7 @@
 # UX rubric check
 
-- run: 43259824483
-- sha: 85e778a6b621b04ac4dc9a02c82e444a4e96977d
+- run: 43483088438
+- sha: b99d1040273709f8636509abd723f7d35bbbe57d
 - harness: scripts/ux-rubric/rubric-check.mjs (v24.22.2)
 - limitation: only public pages; signed-in surfaces need a sign-in step the harness does not have
 
@@ -14,7 +14,7 @@
 | I8 | http://127.0.0.1:3020/auth/login | phone | FIX | No undo affordance found (GUESS: heuristic check) |
 | V1 | http://127.0.0.1:3020/auth/login | phone | PASS |  |
 | V2 | http://127.0.0.1:3020/auth/login | phone | FIX | Off-scale spacing values found: [data-feedback-... |
-| V3 | http://127.0.0.1:3020/auth/login | phone | FIX | CPL violations: p: 87 chars; p: 279 chars |
+| V3 | http://127.0.0.1:3020/auth/login | phone | FIX | CPL violations: p: 87 chars; p: 279 chars; p: 1... |
 | V4 | http://127.0.0.1:3020/auth/login | phone | PASS |  |
 | Vo1 | http://127.0.0.1:3020/auth/login | phone | PASS | GUESS: voice checks not implemented in harness |
 | Vo2 | http://127.0.0.1:3020/auth/login | phone | PASS | GUESS: voice checks not implemented in harness |
@@ -32,7 +32,7 @@
 | I8 | http://127.0.0.1:3020/auth/login | desktop | FIX | No undo affordance found (GUESS: heuristic check) |
 | V1 | http://127.0.0.1:3020/auth/login | desktop | PASS |  |
 | V2 | http://127.0.0.1:3020/auth/login | desktop | FIX | Off-scale spacing values found: [data-feedback-... |
-| V3 | http://127.0.0.1:3020/auth/login | desktop | FIX | CPL violations: p: 87 chars; p: 279 chars |
+| V3 | http://127.0.0.1:3020/auth/login | desktop | FIX | CPL violations: p: 87 chars; p: 279 chars; p: 1... |
 | V4 | http://127.0.0.1:3020/auth/login | desktop | PASS |  |
 | Vo1 | http://127.0.0.1:3020/auth/login | desktop | PASS | GUESS: voice checks not implemented in harness |
 | Vo2 | http://127.0.0.1:3020/auth/login | desktop | PASS | GUESS: voice checks not implemented in harness |
@@ -50,7 +50,7 @@
 | I8 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | phone | FIX | No undo affordance found (GUESS: heuristic check) |
 | V1 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | phone | PASS |  |
 | V2 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | phone | FIX | Off-scale spacing values found: [data-feedback-... |
-| V3 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | phone | FIX | CPL violations: p: 87 chars; p: 279 chars |
+| V3 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | phone | FIX | CPL violations: p: 87 chars; p: 279 chars; p: 1... |
 | V4 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | phone | PASS |  |
 | Vo1 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | phone | PASS | GUESS: voice checks not implemented in harness |
 | Vo2 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | phone | PASS | GUESS: voice checks not implemented in harness |
@@ -68,7 +68,7 @@
 | I8 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | desktop | FIX | No undo affordance found (GUESS: heuristic check) |
 | V1 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | desktop | PASS |  |
 | V2 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | desktop | FIX | Off-scale spacing values found: [data-feedback-... |
-| V3 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | desktop | FIX | CPL violations: p: 87 chars; p: 279 chars |
+| V3 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | desktop | FIX | CPL violations: p: 87 chars; p: 279 chars; p: 1... |
 | V4 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | desktop | PASS |  |
 | Vo1 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | desktop | PASS | GUESS: voice checks not implemented in harness |
 | Vo2 | http://127.0.0.1:3020/auth/login?next=%2Fdraft | desktop | PASS | GUESS: voice checks not implemented in harness |

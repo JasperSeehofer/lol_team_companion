@@ -1,11 +1,11 @@
 # CI e2e summary
 
-- run: 43259824483
-- sha: 85e778a6b621b04ac4dc9a02c82e444a4e96977d
+- run: 43483088438
+- sha: b99d1040273709f8636509abd723f7d35bbbe57d
 
 ## Playwright
 
-expected 166, unexpected 0, flaky 0, skipped 0
+expected 191, unexpected 0, flaky 0, skipped 0
 
 ## Server log (slow request, inflight, panicked, ERROR)
 
