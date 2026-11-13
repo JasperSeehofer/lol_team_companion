@@ -1,0 +1,4 @@
+2026-10-21 14:00:00,000 scout.probe INFO probe.json written; 0 sub-probes failed: none
+2026-10-21 14:20:00,000 scout.track_minimap INFO track_minimap.json: 361 samples
+2026-10-21 14:40:00,000 scout.track_topdown INFO track_topdown.json: 121 frames
+2026-10-21 14:45:00,000 scout.fetch_timeline INFO timeline.json: 7 frames; match.json: 10 participants (minimised)
