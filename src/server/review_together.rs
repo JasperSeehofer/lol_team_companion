@@ -597,12 +597,16 @@ fn written_count(contents: &Contents) -> u32 {
         .count() as u32
 }
 
-/// Current members with at least one card (a pass is not a voice).
+/// Current members with at least one card in a signed prompt (a pass is
+/// not a voice). Cards under the anonymous prompt never count: otherwise
+/// "5 of 5 voices" could tell the team that a member who signed nothing
+/// wrote an anonymous card. Someone who wrote only anonymous cards looks
+/// the same as someone who passed.
 fn voice_count(contents: &Contents) -> u32 {
     let authors: HashSet<&str> = contents
         .entries
         .iter()
-        .filter(|e| e.is_card())
+        .filter(|e| e.is_card() && !e.prompt.is_anonymous())
         .map(|e| e.author_id.as_str())
         .collect();
     contents
@@ -723,7 +727,9 @@ pub fn assemble_state(
 
 /// The quiet nudge for the team: computed on request, never stored; a count
 /// only. Members whose account is newer than the oldest of the sessions
-/// looked at cannot have been quiet in it and are left out.
+/// looked at cannot have been quiet in it and are left out. Only cards in a
+/// signed prompt count as speaking: an anonymous card would otherwise tell
+/// the facilitator who wrote under "What didn't go to plan".
 pub async fn quiet_nudge(db: &Surreal<Db>, team_id: &str) -> DbResult<Option<u8>> {
     #[derive(Debug, Deserialize, SurrealValue)]
     #[allow(dead_code)] // closed_at is selected for ORDER BY only
@@ -758,7 +764,7 @@ pub async fn quiet_nudge(db: &Surreal<Db>, team_id: &str) -> DbResult<Option<u8>
     }
     let ids: Vec<RecordId> = closed.iter().map(|c| c.id.clone()).collect();
     let mut r = db
-        .query("SELECT session, author FROM review_entry WHERE session IN $ids AND passed = false")
+        .query("SELECT session, author FROM review_entry WHERE session IN $ids AND passed = false AND prompt != 'off_plan'")
         .bind(("ids", ids))
         .await?;
     let wrote: Vec<Wrote> = r.take(0)?;

@@ -536,11 +536,13 @@ async fn votes_accepts_owners_and_close_write_a_review_that_resaves_clean() {
         db::list_action_items(&w.db, &w.team).await.unwrap().len(),
         3
     );
-    // Closed: voices (lead only passed), the review link, nothing writable.
+    // Closed: voices, the review link, nothing writable. The lead only
+    // passed and bob wrote only an anonymous card: neither is a voice, so
+    // the line cannot tell that bob wrote under "What didn't go to plan".
     let st = w.state(&w.bob, &s).await;
     assert_eq!(st.phase, Phase::Closed);
     assert_eq!(st.review_id.as_deref(), Some(review_id.as_str()));
-    assert_eq!(st.voices.unwrap().label(), "3 of 5 voices");
+    assert_eq!(st.voices.unwrap().label(), "2 of 5 voices");
     assert!(plus_one(&w.db, &w.team, &w.bob, &s, &e1).await.is_err());
     assert!(close_session(&w.db, &w.team, &w.ann, &s).await.is_err());
     // The review page's view.
@@ -550,7 +552,7 @@ async fn votes_accepts_owners_and_close_write_a_review_that_resaves_clean() {
         .unwrap();
     assert_eq!(view.accepted.len(), 3);
     assert_eq!(view.cards.off_plan.len(), 1);
-    assert_eq!(view.voices.unwrap().label(), "3 of 5 voices");
+    assert_eq!(view.voices.unwrap().label(), "2 of 5 voices");
     // Patterns read the closed session's texts.
     let texts = session_pattern_texts(&w.db, &w.team).await.unwrap();
     assert_eq!(texts.len(), 1);
@@ -747,9 +749,11 @@ async fn the_quiet_nudge_needs_three_closed_sessions_and_is_a_count() {
             .await
             .unwrap()
             .session_id;
-        for who in [&w.lead, &w.ann, &w.bob] {
+        for who in [&w.lead, &w.ann] {
             w.write(who, &s, Prompt::Decided, "spoke").await;
         }
+        // bob writes, but only anonymously: that does not count as speaking.
+        w.write(&w.bob, &s, Prompt::OffPlan, "unsigned").await;
         pass_prompt(&w.db, &w.team, &w.cat, &s, Prompt::Decided, true)
             .await
             .unwrap();
@@ -761,16 +765,18 @@ async fn the_quiet_nudge_needs_three_closed_sessions_and_is_a_count() {
         last = s;
     }
     let _ = last;
-    // cat (passes only) and coa (nothing) were quiet in all three.
-    assert_eq!(quiet_nudge(&w.db, &w.team).await.unwrap(), Some(2));
+    // cat (passes only), coa (nothing) and bob (anonymous cards only) were
+    // quiet in all three.
+    assert_eq!(quiet_nudge(&w.db, &w.team).await.unwrap(), Some(3));
     // Shown to the facilitator of a writing session only, as a count.
     let s = w.open(&w.lead).await;
     let st = w.state(&w.lead, &s).await;
-    assert_eq!(st.quiet, Some(2));
+    assert_eq!(st.quiet, Some(3));
     assert_eq!(w.state(&w.ann, &s).await.quiet, None);
     let json = serde_json::to_string(&st).unwrap();
-    assert!(json.contains("\"quiet\":2"));
+    assert!(json.contains("\"quiet\":3"));
     assert!(!json.contains(w.cat.as_str()) && !json.contains("\"cat\""));
+    assert!(!json.contains(w.bob.as_str()) && !json.contains("\"bob\""));
 }
 
 #[tokio::test]

@@ -272,7 +272,8 @@ pub fn suggest_clusters(cards: &[ClusterInput]) -> Vec<ClusterSuggestion> {
 /// The quiet nudge: how many of `members` (user ids) wrote no card (a pass
 /// does not count) in each of the last sessions. `sessions` holds, per
 /// closed session (newest first), the ids of the users with at least one
-/// non-pass card. `None` with fewer than [`QUIET_LOOKBACK`] sessions, and
+/// non-pass card in a signed prompt (anonymous cards never count, so the
+/// nudge says nothing about who wrote them). `None` with fewer than [`QUIET_LOOKBACK`] sessions, and
 /// when nobody is quiet. Only the count leaves this function.
 pub fn quiet_count(members: &[String], sessions: &[Vec<String>]) -> Option<u8> {
     if sessions.len() < QUIET_LOOKBACK {

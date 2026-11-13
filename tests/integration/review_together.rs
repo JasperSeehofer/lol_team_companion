@@ -270,7 +270,7 @@ async fn closing_writes_a_stamped_review_that_resaves_without_new_items() {
     );
     let st = w.state(&w.cat, &s).await;
     assert_eq!(st.phase, Phase::Closed);
-    assert_eq!(st.voices.unwrap().label(), "3 of 4 voices");
+    assert_eq!(st.voices.unwrap().label(), "2 of 4 voices");
     let view = rt::session_for_review(&w.db, &w.team, &w.cat, &review_id)
         .await
         .unwrap()
