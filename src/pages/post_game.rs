@@ -98,7 +98,7 @@ pub async fn get_review_candidates(
         .map_err(authz::server_err)
 }
 
-/// M159 item 5: "Review as a team" on a game: `None` when the game is not
+/// M159 item 5: "Write a review" on a game: `None` when the game is not
 /// one the viewer's team can review (the action is hidden), else whether
 /// the team already has a review of it.
 #[server]
@@ -662,6 +662,21 @@ pub fn PostGamePage() -> impl IntoView {
         || (),
         |_| crate::pages::review_together::get_session_pattern_texts(),
     );
+    // M165 item 7: the session that generated the open review, read-only.
+    let together = Resource::new(
+        move || {
+            query
+                .read()
+                .get("review_id")
+                .filter(|r| !r.trim().is_empty())
+        },
+        |id| async move {
+            match id {
+                Some(id) => crate::pages::review_together::get_review_session_for_review(id).await,
+                None => Ok(None),
+            }
+        },
+    );
     let plans = Resource::new(|| (), |_| list_plans_for_postgame());
     let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
     // M159 item 5: the games a review can be of; a thread link's match
@@ -833,7 +848,7 @@ pub fn PostGamePage() -> impl IntoView {
     // The open review's id goes in the address so a reload or link reopens it.
     let nav = navigator();
 
-    // M159 item 5: `?riot_match_id=` (a game's "Review as a team") opens
+    // M159 item 5: `?riot_match_id=` (a game's "Write a review") opens
     // the team's review of that game, or preselects the game for a new one.
     // Only one of the team's candidate games counts; any other id is
     // ignored and nothing is preselected.
@@ -1109,6 +1124,13 @@ pub fn PostGamePage() -> impl IntoView {
                     <PatternsSection reviews=reviews session_texts=session_texts />
                 </div>
                 <div class="flex min-w-0 flex-col gap-12">
+                    // M165: a review the team wrote together shows its
+                    // notes above the editable outcome, rating and notes.
+                    <Suspense fallback=|| ()>
+                        {move || together.get().and_then(|r| r.ok()).flatten().map(|v| view! {
+                            <crate::pages::review_together::ReviewedTogether view=v />
+                        })}
+                    </Suspense>
                     <LinksSection ed=ed plans=plans drafts=drafts candidates=candidates facts=facts />
                     <OutcomeSection ed=ed />
                     <section aria-labelledby="review-points-heading" class="flex flex-col gap-4">
