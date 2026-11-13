@@ -403,7 +403,12 @@ test("review together: sealed, anonymous, decided and counted by five members", 
   await lead.page.getByTestId("start-round").click();
   await expect(lead.page.locator("[data-deadline]")).toContainText("min left", { timeout: 15000 });
   await expect(lead.page.getByTestId("add-minute")).toBeVisible({ timeout: 15000 });
-  await lead.page.getByTestId("add-minute").click();
+  // A few more minutes, so the round cannot end by itself before the
+  // facilitator reveals (a slow debug build writes twelve notes meanwhile).
+  for (let i = 0; i < 6; i++) {
+    await lead.page.getByTestId("add-minute").click();
+    await lead.page.waitForTimeout(300);
+  }
   await expect(phone.page.locator("[data-deadline]")).toContainText("Closes", { timeout: 15000 });
   await shot(lead.page, "review-together-facilitator-1280-expanded");
 
@@ -678,6 +683,10 @@ test("review together: sealed, anonymous, decided and counted by five members", 
   for (const n of [1, 3]) await vote(author, n);
   await vote(members.d, 2);
   await vote(quietOne, 4);
+  // The facilitator's state has every vote before Decide picks the top three.
+  for (const [n, v] of [[1, "3 votes"], [2, "3 votes"], [3, "2 votes"], [4, "1 vote"]] as const) {
+    await expect(proposal(lead.page, P(n))).toContainText(v, { timeout: 15000 });
+  }
   await lead.page.getByTestId("start-deciding").click();
   for (const n of [1, 2, 3]) {
     await expect(proposal(lead.page, P(n)).getByRole("checkbox", { name: "Accept" })).toBeChecked({ timeout: 15000 });
