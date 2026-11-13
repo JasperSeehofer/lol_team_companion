@@ -578,10 +578,19 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
     };
 
     let mut steps = vec![brief, drafts, plan, items, review];
-    if let Some(next) = steps
-        .iter_mut()
-        .find(|s| matches!(s.state, PrepState::Todo | PrepState::Attention) && s.href.is_some())
-    {
+    let open = |s: &PrepStep| {
+        matches!(s.state, PrepState::Todo | PrepState::Attention) && s.href.is_some()
+    };
+    // M165: once the match has started, preparing for it is over; an open
+    // review is the step to do now ("Review together" as the one chalk
+    // action), even when earlier steps were skipped.
+    let review_now = started && steps.last().is_some_and(open);
+    let next = if review_now {
+        steps.last_mut()
+    } else {
+        steps.iter_mut().find(|s| open(s))
+    };
+    if let Some(next) = next {
         next.state = PrepState::Next;
     }
     steps
@@ -1703,6 +1712,21 @@ mod tests {
             ..link(Phase::Writing)
         }];
         assert_eq!(prep_steps(&m)[4].action.as_deref(), Some("Review together"));
+    }
+
+    #[test]
+    fn a_started_match_offers_the_review_even_without_preparation() {
+        use PrepState::*;
+        // Nothing prepared: the unread brief no longer holds the chalk.
+        let s = prep_steps(&md(-1));
+        assert_eq!(s[4].state, Next);
+        assert_eq!(s[4].action.as_deref(), Some("Review together"));
+        assert_eq!(s.iter().filter(|x| x.state == Next).count(), 1);
+        assert_eq!(s[0].state, Todo);
+        // Before the start, the first open step is next as before.
+        let s = prep_steps(&md(5));
+        assert_eq!(s[0].state, Next);
+        assert_ne!(s[4].state, Next);
     }
 
     #[test]
