@@ -525,9 +525,12 @@ test("review together: sealed, anonymous, decided and counted by five members", 
       // One wrapper fades: no note has an opacity or animation of its own.
       expect(probe.others, "no animation besides the reveal wrapper").toBe(0);
       expect(probe.notes.every((o) => o === "1")).toBe(true);
+      // Mid-fade at 110 ms: partial, never final (the app's --ease-out is a
+      // strong quint, so half the time is most of the way: about 0.97).
+      if (t === 0) expect(probe.wrapper).toBeLessThan(0.05);
       if (t === 110) {
         expect(probe.wrapper).toBeGreaterThan(0.05);
-        expect(probe.wrapper).toBeLessThan(0.95);
+        expect(probe.wrapper).toBeLessThan(1);
       }
       await rawShot(m.page, `review-together-reveal-seq-${width}-${t}ms`);
     }
