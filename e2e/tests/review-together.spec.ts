@@ -228,7 +228,7 @@ async function revealNow(page: Page) {
     await tools.getByRole("button", { name: "Round controls" }).click();
   }
   await page.getByTestId("reveal-now").click();
-  const dialog = page.locator("#confirm-reveal");
+  const dialog = page.locator('dialog[data-dialog="confirm-reveal"]');
   await expect(dialog).toBeVisible();
   await dialog.locator('[data-confirm="confirm"]').click();
   await expect(page.locator("[data-reveal]")).toBeVisible({ timeout: 20000 });
@@ -256,7 +256,7 @@ async function closeSession(page: Page) {
   const close = page.getByTestId("close-session");
   await expect(close).toBeEnabled({ timeout: 15000 });
   await close.click();
-  const dialog = page.locator("#confirm-close");
+  const dialog = page.locator('dialog[data-dialog="confirm-close"]');
   await expect(dialog).toBeVisible();
   await dialog.locator('[data-confirm="confirm"]').click();
   await page.waitForURL(/\/post-game\?review_id=post_game_learning/, { timeout: 20000 });
