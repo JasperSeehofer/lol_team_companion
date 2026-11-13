@@ -1,0 +1,86 @@
+{
+  "id": "m165-r1-review-together",
+  "title": "M165 · Review together R1: silent round, reveal at once, decide (all items shipped, no R1b)",
+  "date": "2026-11-14",
+  "mission": "M165",
+  "status": "open",
+  "summary": "A team can now review a game together from the match thread. Each player answers four short prompts alone, and nobody's words reach anyone else before the reveal, the facilitator's included. The facilitator sees only 'N of 5 written'. Players can write together under a 3-minute timer or alone within 24 hours, on a phone too. At the reveal every note appears at once, in one 220 ms fade. Words are in the team-note serif with the author's name under them. 'What didn't go to plan' carries no name, avatar or 'yours' marker, for anyone. The team +1s, near-duplicates are suggested for merging, and lone notes stay. Members vote, at most three items are accepted, and each gets an owner, who is checked against the current members. This check is new, and it also covers ordinary action items. Closing writes the review with M159's stamps, its two point lists empty, one '4 of 5 voices' line and no per-player count. The facilitator alone may see an unnamed quiet-player nudge, as a count only. An independent privacy review found one leak: voices could unmask anonymous notes. It was fixed, so voices and the nudge now count signed prompts only. A five-member e2e spec searches every context's payloads, hydration data and DOM for names and ids. CI is green: 192/192 e2e, 0 flaky, no stalled requests. The atelier passes all 8 recipe cards after two taste rounds and a one-line post-round spacing fix. The harness has six rubric rows that misfire, which need your ruling (question 3). No migration: the four new tables come from the baseline schema at the next start. Report: REPORT-R1.md.",
+  "questions": [
+    {
+      "text": "Land mission/M165-team-companion-review-together-r1 once the fresh verifier's VERIFY-R1 says PASS? Landing is tap-only, and merged is not live: deploy is a separate step (82-release.sh behind its own cards). The four new tables are created by the baseline schema at the first start of the new build. No migration runs.",
+      "kind": "merge",
+      "yes": "Yes, merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands it after VERIFY-R1 PASS. Deploy is a separate card. R2 (timeline moments, lanes crossed) starts from main."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open for the follow-ups you rule below."
+        }
+      ],
+      "recommend": "Yes, merge. Items 0–11 are complete with unit, integration and e2e tests, CI is green on the tip, and the atelier passes every surface."
+    },
+    {
+      "text": "(react) The privacy page now says: 'For the anonymous prompt, the app stores who wrote each card so that you can export or delete it; teammates never see it.' Today, deleting your account keeps your anonymous notes in the team's review under 'Former member', the way signed notes and team notes are kept. So 'delete' is only half true. My suggestion: on account deletion, delete a person's anonymous notes and keep the signed ones as 'Former member'. That makes the sentence true as written. Then show the sentence to your adviser. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Delete anonymous, keep signed",
+          "consequence": "A small R1b change in account.rs (the DELETE_USER statement and its test). The sentence stays as it is, and you show it to your adviser."
+        },
+        {
+          "label": "Keep all as Former member",
+          "consequence": "No code change. The sentence is reworded to 'so that you can export it, and account deletion unlinks it from you', and the adviser reads that."
+        }
+      ],
+      "recommend": "Delete anonymous, keep signed. A note nobody can trace to the person has little value to the team once the person has gone, and the promise then reads plainly."
+    },
+    {
+      "text": "(react) A review's share link (/s/) currently shows a session review's decided action items and nothing of the notes. The share page was not changed this round. My suggestion: keep it that way for now, and add the notes without names in R2 only if a team asks. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Decided items only",
+          "consequence": "Nothing changes. Players' words never leave the team through a link."
+        },
+        {
+          "label": "Add notes without names",
+          "consequence": "R2 adds the revealed notes to the shared review, every note unnamed, the signed ones included."
+        }
+      ],
+      "recommend": "Decided items only. The notes were written for the team, and a link can travel further than anyone meant."
+    },
+    {
+      "text": "(react) The round-0 criterion asks for rubric rows A1–A4, I1–I8 and V1–V3 to be green under rubric-check.mjs. A1–A3 and V1 pass. I1, I2, I6, I8, V2 and V3 fail on every page, and the atelier traced each to the harness, not this surface. For example, V2 scans every rule in the stylesheet, used or not, and V3 counts the characters of the first 20 paragraphs rather than measuring line length. The real point behind V3 was fixed: notes now run about 72 characters per line. My suggestion: accept the atelier's ruling note for this round, and file the STALE notes so the harness gets fixed separately. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Accept the ruling note",
+          "consequence": "The criterion counts as met for these rows. The harness fixes are a separate garden task."
+        },
+        {
+          "label": "Fix the harness first",
+          "consequence": "Landing waits for a rubric-check.mjs fix and a re-run on these frames."
+        }
+      ],
+      "recommend": "Accept the ruling note. The rows fail identically on every page of the app, including ones this round never touched."
+    },
+    {
+      "text": "(react) Names: 'Review together' now means only the session. On the match thread's review step it is the chalk action, and 'Write it alone' is a quiet link. On a match page, M159's 'Review as a team' button still opens the single-author editor, because a synced game may have no scheduled match. It is renamed 'Write a review'. My suggestion: keep this. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep it",
+          "consequence": "Nothing changes."
+        },
+        {
+          "label": "Alone first",
+          "consequence": "A small follow-up makes 'Write it alone' the chalk action and 'Review together' the quiet link."
+        }
+      ],
+      "recommend": "Keep it. Review together is the reason for the round, and writing alone stays one tap away."
+    }
+  ]
+}

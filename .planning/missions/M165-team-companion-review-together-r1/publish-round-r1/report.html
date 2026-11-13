@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M165 Round 1</title>
+<style>
+:root { --bg:#fbfaf7; --fg:#1d2320; --muted:#5b6560; --rule:#d9dcd6; --ok:#1f7a4a; --warn:#9a5b00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#141917; --fg:#e7ebe8; --muted:#a3ada8; --rule:#2c3531; --ok:#5fcf93; --warn:#e3a54b; } }
+:root[data-theme="dark"] { --bg:#141917; --fg:#e7ebe8; --muted:#a3ada8; --rule:#2c3531; --ok:#5fcf93; --warn:#e3a54b; }
+body { background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, sans-serif; margin:0; padding:24px 16px; }
+main { max-width:1200px; margin:0 auto; }
+.prose { max-width:68ch; }
+h1 { font-size:1.6rem; margin:0 0 .25rem; } h2 { font-size:1.15rem; margin:2rem 0 .5rem; } h3 { font-size:1rem; margin:1.25rem 0 .4rem; }
+p.meta { color:var(--muted); margin:0 0 1.5rem; }
+table { width:100%; border-collapse:collapse; font-size:.95rem; } td, th { text-align:left; padding:.4rem .5rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+.ok { color:var(--ok); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+code { font-size:.9em; overflow-wrap:anywhere; }
+.pair { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap:16px; align-items:start; }
+figure { margin:0; } figure img { width:100%; height:auto; border:1px solid var(--rule); display:block; }
+figcaption { color:var(--muted); font-size:.85rem; margin-top:.3rem; }
+.narrow img { max-width:390px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Review together R1: silent round, reveal at once, decide</h1>
+<p class="meta">Mission M165 · branch <code>mission/M165-team-companion-review-together-r1</code> · 2026-11-14 · full report: REPORT-R1.md · atelier critique: atelier-frames-critique-r2.md · before-frame sources: frames/before/SOURCES.md</p>
+
+<div class="prose">
+<h2>Summary</h2>
+<p>A team can now review a game together from the match thread. Each player answers four short prompts alone. Nobody's words reach anyone else before the reveal, the facilitator's included. Players write together under a 3-minute timer, or alone within 24 hours, on a phone too.</p>
+<p>At the reveal every note appears at once, in one 220 ms fade. "What didn't go to plan" shows no name, avatar or "yours" marker, for anyone. The team +1s, near-duplicates are suggested for merging, members vote, at most three items are accepted, and each gets an owner. Closing writes the review with M159's stamps. A five-member e2e spec searches every context for names and ids. No migration: the four new tables come from the baseline schema.</p>
+
+<h2>Least-confident decisions</h2>
+<ol>
+<li><span class="warn">Account deletion keeps anonymous cards</span> under "Former member". The privacy sentence says you can "export or delete" them, so it is only half true. Question 1 below.</li>
+<li><span class="warn">Voices and the nudge ignore the anonymous prompt.</span> A privacy review found "5 of 5 voices" could unmask a writer, so only signed prompts count. A member who wrote only anonymous cards is not counted as a voice.</li>
+<li><span class="warn">Harness rows are not all green.</span> A1 to A3 and V1 pass. I1, I2, I6, I8, V2, V3 fail on every page; the atelier traced each to the harness. Question 3 below.</li>
+<li><span class="warn">Names.</span> "Review together" now means only the session. The match page button "Review as a team" became "Write a review". I overruled the atelier here. Question 4 below.</li>
+<li>A session closes 24 h after the match starts, or 24 h after opening if opened later. "Reveal now" works without a timed round.</li>
+<li>Deleting an action item and re-saving the review brings it back. This was already so before this round.</li>
+<li>A merged group's +1 count is the first card's count.</li>
+</ol>
+
+<h2>Status per item</h2>
+<table>
+<tr><th>#</th><th>Item</th><th>State</th></tr>
+<tr><td>0</td><td>Atelier intake (references, brief, 8 recipe cards)</td><td class="ok">shipped</td></tr>
+<tr><td>1</td><td>Data model: four tables, no migration</td><td class="ok">shipped</td></tr>
+<tr><td>2</td><td>Short-poll transport and presence</td><td class="ok">shipped</td></tr>
+<tr><td>3</td><td>Open from the match thread</td><td class="ok">shipped</td></tr>
+<tr><td>4</td><td>Silent round, timed or async</td><td class="ok">shipped</td></tr>
+<tr><td>5</td><td>Reveal, +1, merge suggestions</td><td class="ok">shipped</td></tr>
+<tr><td>6</td><td>Decide: votes, accept up to 3, owners checked</td><td class="ok">shipped</td></tr>
+<tr><td>7</td><td>Generated review on close</td><td class="ok">shipped</td></tr>
+<tr><td>8</td><td>Voices line and quiet nudge</td><td class="ok">shipped</td></tr>
+<tr><td>9</td><td>Anonymity guarantee and tests</td><td class="ok">shipped</td></tr>
+<tr><td>10</td><td>Privacy rows (stored, listed, export, deletion)</td><td class="ok">shipped</td></tr>
+<tr><td>11</td><td>CHANGELOG and docs</td><td class="ok">shipped</td></tr>
+<tr><td>R2</td><td>Timeline moments, lanes crossed, carry-forward</td><td class="warn">R2, unchanged</td></tr>
+</table>
+
+<h2>CI</h2>
+<p>Commit 37a7936 (run 43518892716): all five jobs green; e2e 192 expected, 0 unexpected, 0 flaky, 0 skipped; no slow, panic or error lines. Tip 1aab82c (fix 977542c, run 43524977997): check and e2e green with the same counts. Image, ops-scripts and style jobs for 977542c were not visible to the author. Four earlier CI rounds failed only in the new spec.</p>
+
+<h2>Atelier verdicts</h2>
+<ul>
+<li>Round 1: <span class="warn">FIX</span>. F4 blocked (a capture defect: markers showed the author's letter). Others did not block.</li>
+<li>Round 2: <span class="ok">7 of 8 cards PASS</span> (V5, V7, V8 included). The writing card stayed FIX on F1 (sealed sentence was inline).</li>
+<li>Post-round fix 977542c made it a block paragraph. The 390 frame now shows a gap of about 24 px; all 8 cards pass.</li>
+<li>Reveal sequence: one wrapper, all groups at once, instant under reduced motion, no per-person tally.</li>
+</ul>
+
+<h2>Questions for you</h2>
+<p>Landing question first: merge the branch once the fresh verifier says PASS? Recommended: yes. Merged is not live; deploy is a separate card. Then the four react questions:</p>
+<h3>1. Account deletion and anonymous cards</h3>
+<p>Suggestion: delete a person's anonymous notes on account deletion and keep signed ones as "Former member". The sentence then holds as written; show it to your adviser. The other option is to keep all as "Former member" and reword the sentence.</p>
+<h3>2. Share link for a session review</h3>
+<p>Suggestion: decided items only, as now. Add unnamed notes in R2 only if a team asks. Notes were written for the team, and a link can travel.</p>
+<h3>3. Harness rows</h3>
+<p>Suggestion: accept the atelier's ruling note and fix the harness separately. The rows fail the same on every page. The other option is to fix the harness first, which delays landing.</p>
+<h3>4. Names</h3>
+<p>Suggestion: keep "Review together" as the chalk action and "Write it alone" as the quiet link. The other option makes "alone" the main action.</p>
+</div>
+<h2>Match Day: review step</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/after/match-day-review-together-390.png" alt="After, 390" loading="lazy"><figcaption>After, 390</figcaption></figure>
+<figure><img src="frames/after/match-day-review-together-1280.png" alt="After, 1280" loading="lazy"><figcaption>After, 1280</figcaption></figure>
+</div>
+<h2>Writing alone (sealed)</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/after/review-together-writing-390.png" alt="After, 390" loading="lazy"><figcaption>After, 390</figcaption></figure>
+<figure><img src="frames/after/review-together-writing-1280.png" alt="After, 1280" loading="lazy"><figcaption>After, 1280</figcaption></figure>
+</div>
+<h2>Facilitator view and quiet nudge</h2>
+<div class="pair">
+<figure><img src="frames/after/review-together-facilitator-1280.png" alt="Facilitator: only "N of 5 written", 1280" loading="lazy"><figcaption>Facilitator: only "N of 5 written", 1280</figcaption></figure>
+<figure><img src="frames/after/review-together-nudge-1280.png" alt="Quiet-player nudge (count only), 1280" loading="lazy"><figcaption>Quiet-player nudge (count only), 1280</figcaption></figure>
+</div>
+<h2>Reveal</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/after/review-together-reveal-390.png" alt="After, 390" loading="lazy"><figcaption>After, 390</figcaption></figure>
+<figure><img src="frames/after/review-together-reveal-1280.png" alt="After, 1280" loading="lazy"><figcaption>After, 1280</figcaption></figure>
+</div>
+<h2>Reveal sequence (1280, one 220 ms fade)</h2>
+<div class="pair">
+<figure><img src="frames/after/review-together-reveal-seq-1280-before.png" alt="Sequence: before" loading="lazy"><figcaption>Sequence: before</figcaption></figure>
+<figure><img src="frames/after/review-together-reveal-seq-1280-50ms.png" alt="Sequence: 50 ms" loading="lazy"><figcaption>Sequence: 50 ms</figcaption></figure>
+<figure><img src="frames/after/review-together-reveal-seq-1280-110ms.png" alt="Sequence: 110 ms" loading="lazy"><figcaption>Sequence: 110 ms</figcaption></figure>
+<figure><img src="frames/after/review-together-reveal-seq-1280-after.png" alt="Sequence: after" loading="lazy"><figcaption>Sequence: after</figcaption></figure>
+<figure><img src="frames/after/review-together-reveal-reduced-1280.png" alt="Reduced motion: instant" loading="lazy"><figcaption>Reduced motion: instant</figcaption></figure>
+</div>
+<h2>Decide</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/after/review-together-decide-390.png" alt="After, 390" loading="lazy"><figcaption>After, 390</figcaption></figure>
+<figure><img src="frames/after/review-together-decide-1280.png" alt="After, 1280" loading="lazy"><figcaption>After, 1280</figcaption></figure>
+</div>
+<h2>Generated review</h2>
+<div class="pair">
+<figure class="narrow"><img src="frames/after/review-together-review-390.png" alt="After, 390" loading="lazy"><figcaption>After, 390</figcaption></figure>
+<figure><img src="frames/after/review-together-review-1280.png" alt="After, 1280" loading="lazy"><figcaption>After, 1280</figcaption></figure>
+</div>
+<h2>Before (proxy)</h2>
+<p class="meta">Review together is new. This is the closest existing frame of a surface it touches (M159 match page). Sources: frames/before/SOURCES.md</p>
+<div class="pair">
+<figure><img src="frames/before/match-detail-review-1280.png" alt="Before (M159 proxy): match page, 1280" loading="lazy"><figcaption>Before (M159 proxy): match page, 1280</figcaption></figure>
+</div>
+</main>
+</body>
+</html>
