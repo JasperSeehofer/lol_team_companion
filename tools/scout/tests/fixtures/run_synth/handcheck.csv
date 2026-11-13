@@ -1,0 +1,6 @@
+event_id,kind,game_time_mmss,champion,x,y,auto_says,jasper_says,note
+1,ward,02:11,Leona,9800,9000,ward; WARD_PLACED YELLOW_TRINKET at 02:10,yes,
+2,ward,02:51,LeeSin,5200,9000,ward; WARD_PLACED CONTROL_WARD at 02:50,yes,
+3,recall,03:19,Jinx,447,405,"recall, 3 purchase(s) within 15 s",yes,
+4,ward,03:20,,9000,5000,red ward; no WARD_PLACED within 2 s,no,
+5,ward,03:51,Vi,9800,5200,ward; WARD_PLACED SIGHT_WARD at 03:50,yes,

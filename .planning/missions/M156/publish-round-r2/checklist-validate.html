@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scout validation run</title>
+<style>
+:root{--bg:#f7f8f6;--fg:#1d2420;--muted:#55605a;--card:#ffffff;--rule:#d8ddd9;--code:#eef1ee;--accent:#2f6f4f;--warn:#8a4b12}
+@media (prefers-color-scheme: dark){:root{--bg:#141a17;--fg:#e4e9e5;--muted:#a3ada7;--card:#1c2420;--rule:#2f3934;--code:#25302a;--accent:#7cc79f;--warn:#e0a46a}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);overflow-x:hidden}
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px;max-width:760px;margin:0 auto}
+h1{font-size:22px;line-height:1.25;margin:4px 0 12px}
+.intro{color:var(--muted);font-size:15px}
+ol{list-style:none;padding:0;margin:16px 0}
+li{display:flex;gap:10px;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:12px;margin:0 0 10px;min-width:0}
+.n{flex:0 0 28px;height:28px;border-radius:14px;background:var(--accent);color:var(--bg);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
+.b{min-width:0;flex:1}
+.b p{margin:0 0 6px;overflow-wrap:anywhere}
+.b p:last-child{margin-bottom:0}
+.tag{font-weight:700;margin-right:4px}
+.out .tag{color:var(--accent)}
+.fail{color:var(--muted);font-size:15px}
+.fail .tag{color:var(--warn)}
+code{font:13.5px/1.45 ui-monospace,"Cascadia Mono",Consolas,monospace;background:var(--code);border-radius:4px;padding:1px 4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+footer{color:var(--muted);font-size:14px;border-top:1px solid var(--rule);padding-top:10px}
+</style></head><body>
+<h1>Scout validation run (Windows, PowerShell, about 30 min)</h1>
+<p class="intro">Short re-run of the same game as before, to measure the R2 fixes (K+F tracker, circle icons, wards, recalls). Repository root, PowerShell, WireGuard to brain up. First type once: <code>function spy { .\tools\scout\.venv\Scripts\python -m scout.session @args }</code>. Run data never goes to GitHub. If a step fails and its &quot;If it fails&quot; line does not help, note it in the run&#x27;s <code>run.log</code> and go on.</p>
+<ol>
+<li><span class="n">1</span><div class="b"><p><strong>Get the branch.</strong> <code>git switch mission/M156-scout-replay-spike; git pull --ff-only</code>, then <code>.\tools\scout\.venv\Scripts\pip install -e &quot;tools/scout&quot;</code> (picks up the R2 code).</p>
+<p class="out"><span class="tag">Output</span> none.</p>
+<p class="fail"><span class="tag">If it fails</span> <code>git status</code>; commit or stash local changes first.</p></div></li>
+<li><span class="n">2</span><div class="b"><p><strong>HDR off</strong> on the game monitor (Settings &gt; System &gt; Display &gt; Use HDR: off). The minimap step writes a warning to <code>run.log</code> if it is still on.</p>
+<p class="out"><span class="tag">Output</span> none.</p>
+<p class="fail"><span class="tag">If it fails</span> check that the game runs on that monitor.</p></div></li>
+<li><span class="n">3</span><div class="b"><p><strong>New run dir, same game.</strong> <code>spy start EUW1_&lt;gameId&gt;</code> with the same match id as the first run (today&#x27;s date makes it a fresh folder).</p>
+<p class="out"><span class="tag">Output</span> <code>tools\scout\runs\&lt;date&gt;-EUW1_&lt;gameId&gt;\</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> the id must look like <code>EUW1_7100000099</code>.</p></div></li>
+<li><span class="n">4</span><div class="b"><p><strong>Timeline first</strong> (the minimap and top-down steps read it). Your development key only, never the production key: <code>$env:RIOT_API_KEY = Read-Host &quot;Riot key&quot;</code>, then <code>spy timeline</code>, then <code>Remove-Item Env:RIOT_API_KEY</code>.</p>
+<p class="out"><span class="tag">Output</span> <code>match.json</code>, <code>timeline.json</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> 403 = expired key; 404 = wrong id.</p></div></li>
+<li><span class="n">5</span><div class="b"><p><strong>Open the replay</strong> of that game in borderless full screen on the main monitor; do not run the probe (its recording would use up this sign-in&#x27;s one recording).</p></div></li>
+<li><span class="n">6</span><div class="b"><p><strong>Minimap pass (game length ÷ 8, hands off).</strong> <code>spy minimap</code> (speed 8, base circle icons by default; add the same <code>--minimap-box L,T,W,H</code> as last time if you used one; if <code>tools\scout\models\yolov12.pt</code> exists, move it out of that folder first, so the template detector runs as before).</p>
+<p class="out"><span class="tag">Output</span> <code>track_minimap.json</code>, <code>frames_minimap\</code>, <code>run.log</code> (HDR warning, icon sources).</p>
+<p class="fail"><span class="tag">If it fails</span> if <code>run.log</code> shows icons from Data Dragon only (<code>icon template</code> lines), CommunityDragon was unreachable; note it and go on.</p></div></li>
+<li><span class="n">7</span><div class="b"><p><strong>Sign out of Windows and back in</strong> (one recording per sign-in), reopen the replay (step 5).</p></div></li>
+<li><span class="n">8</span><div class="b"><p><strong>Top-down window (about 2 min).</strong> <code>spy topdown</code> (camera 50000 scaled for 16:9, window 600–900 s).</p>
+<p class="out"><span class="tag">Output</span> <code>track_topdown.json</code>, <code>frames_topdown\</code>.</p>
+<p class="fail"><span class="tag">If it fails</span> 0 frames = a recording already ran in this sign-in; repeat step 7. Whole map not in view: add <code>--keystroke-unlock</code>.</p></div></li>
+<li><span class="n">9</span><div class="b"><p><strong>Score.</strong> <code>spy score</code>.</p>
+<p class="out"><span class="tag">Output</span> <code>score.json</code>, <code>handcheck.csv</code> (wards and recalls of the NEW outputs).</p>
+<p class="fail"><span class="tag">If it fails</span> the message names the missing file; redo that step.</p></div></li>
+<li><span class="n">10</span><div class="b"><p><strong>Re-mark the hand check.</strong> <code>spy handcheck</code>; per row jump the replay to <code>game_time_mmss</code> and write <code>yes</code> or <code>no</code> in <code>jasper_says</code> (do not copy the old verdicts).</p>
+<p class="out"><span class="tag">Output</span> <code>handcheck.csv</code>, saved.</p></div></li>
+<li><span class="n">11</span><div class="b"><p><strong>Check and send to brain.</strong> <code>spy check</code>, then <code>spy send</code> (one <code>scp</code> into brain&#x27;s inbox).</p>
+<p class="out"><span class="tag">Output</span> <code>~/.local/share/scout/inbox/&lt;run&gt;/</code> on brain.</p>
+<p class="fail"><span class="tag">If check fails</span> delete the largest PNGs in <code>frames_topdown</code>, run it again. Never <code>git add</code> or push the run.</p></div></li>
+</ol>
+<footer><p>Delete <code>%TEMP%\scout-rec</code> and <code>%TEMP%\scout-frames</code> when done. The validation decides: route A&#x27;s real error and detection after K+F, the ward and recall verdicts, and whether to merge (<code>docs/scout-findings.md</code>).</p><p>Source: <code>tools/scout/CHECKLIST-VALIDATE.md</code> on <code>mission/M156-scout-replay-spike</code>.</p></footer>
+</body></html>

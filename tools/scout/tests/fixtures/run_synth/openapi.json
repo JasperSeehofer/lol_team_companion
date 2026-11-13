@@ -1,0 +1,28 @@
+{
+ "openapi": "3.0.0",
+ "info": {
+  "title": "synthetic replay api"
+ },
+ "paths": {
+  "/replay/game": {},
+  "/replay/playback": {
+   "post": {
+    "speed": "number"
+   }
+  },
+  "/replay/recording": {
+   "post": {
+    "replaySpeed": "number",
+    "enforceFrameRate": "boolean"
+   }
+  },
+  "/replay/render": {
+   "post": {
+    "interfaceAll": "boolean",
+    "interfaceMinimap": "boolean",
+    "farClip": "number",
+    "fogOfWar": "boolean"
+   }
+  }
+ }
+}
