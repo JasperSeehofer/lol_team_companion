@@ -1,42 +1,38 @@
 # CI e2e summary
 
-- run: 43492196074
-- sha: c26e5c78bea93850805da45c1bf192238272b91f
+- run: 43499305253
+- sha: 67f214e693b2049e9e9357c35754cbe4568d8ccc
 
 ## Playwright
 
 expected 191, unexpected 1, flaky 0, skipped 0
 
 ### [unexpected] review-together.spec.ts:318 review together: sealed, anonymous, decided and counted by five members
-attempt 1: failed (30626 ms)
+attempt 1: failed (48788 ms)
 ```
-Error: expect(locator).toHaveCount(expected) failed
+Error: expect(locator).toBeVisible() failed
 
-Locator:  locator('[data-prep] a[href^="/review/together?"]').filter({ hasText: 'Review together' })
-Expected: 1
-Received: 0
-Timeout:  15000ms
+Locator: locator('#confirm-reveal')
+Expected: visible
+Timeout: 5000ms
+Error: element(s) not found
 
 Call log:
-  - Expect "toHaveCount" with timeout 15000ms
-  - waiting for locator('[data-prep] a[href^="/review/together?"]').filter({ hasText: 'Review together' })
-    19 × locator resolved to 0 elements
-       - unexpected value "0"
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for locator('#confirm-reveal')
 ```
-attempt 2: failed (32373 ms)
+attempt 2: failed (51592 ms)
 ```
-Error: expect(locator).toHaveCount(expected) failed
+Error: expect(locator).toBeVisible() failed
 
-Locator:  locator('[data-prep] a[href^="/review/together?"]').filter({ hasText: 'Review together' })
-Expected: 1
-Received: 0
-Timeout:  15000ms
+Locator: locator('#confirm-reveal')
+Expected: visible
+Timeout: 5000ms
+Error: element(s) not found
 
 Call log:
-  - Expect "toHaveCount" with timeout 15000ms
-  - waiting for locator('[data-prep] a[href^="/review/together?"]').filter({ hasText: 'Review together' })
-    19 × locator resolved to 0 elements
-       - unexpected value "0"
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for locator('#confirm-reveal')
 ```
 
 ## Server log (slow request, inflight, panicked, ERROR)
