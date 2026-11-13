@@ -495,6 +495,57 @@ pub struct OpenedSession {
     pub created: bool,
 }
 
+/// What the session page loads first (`get_session_page`): the session's
+/// id (opened from a match thread link when the address named a match),
+/// the page title, the team's current members' usernames (owner chips),
+/// and the viewer's full state.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SessionPage {
+    pub session_id: String,
+    /// "Scrim vs Riverside Rooks" (+ " \u{b7} G2" for a series game).
+    pub title: String,
+    pub members: Vec<String>,
+    pub state: SessionState,
+}
+
+/// The rows a revealed group renders, in the group's order: each row holds
+/// the indexes of its cards. A merged cluster is one row, placed where its
+/// first card stands, with its cards in the group's order; every other card
+/// is a row of its own. `cards` is (id, cluster) per card.
+pub fn note_rows(cards: &[(String, Option<String>)]) -> Vec<Vec<usize>> {
+    let mut rows: Vec<(String, Vec<usize>)> = Vec::new();
+    for (i, (id, cluster)) in cards.iter().enumerate() {
+        let root = cluster.clone().unwrap_or_else(|| id.clone());
+        match rows.iter_mut().find(|(r, _)| *r == root) {
+            Some((_, members)) => members.push(i),
+            None => rows.push((root, vec![i])),
+        }
+    }
+    rows.into_iter().map(|(_, m)| m).collect()
+}
+
+/// The card a merged row's one +1 counts on: the cluster's root when it is
+/// in the row, else the row's first card.
+pub fn row_root(cards: &[(String, Option<String>)], row: &[usize]) -> usize {
+    let first = row.first().copied().unwrap_or(0);
+    let Some(root) = cards
+        .get(first)
+        .map(|(id, c)| c.clone().unwrap_or_else(|| id.clone()))
+    else {
+        return first;
+    };
+    row.iter()
+        .copied()
+        .find(|&i| cards.get(i).is_some_and(|(id, _)| *id == root))
+        .unwrap_or(first)
+}
+
+/// Minutes left on a timed round, for the calm timer: `None` once it is
+/// under a minute ("under a minute left"), else whole minutes rounded up.
+pub fn minutes_left(remaining_ms: i64) -> Option<i64> {
+    (remaining_ms > 60_000).then(|| (remaining_ms + 59_999) / 60_000)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -645,6 +696,32 @@ mod tests {
         let got = suggested_accepts(&[p("d", 1), p("a", 3), p("c", 0), p("b", 3), p("e", 2)]);
         assert_eq!(got, vec!["a", "b", "e"]);
         assert!(suggested_accepts(&[p("a", 0)]).is_empty());
+    }
+
+    #[test]
+    fn merged_cards_become_one_row_where_the_first_stands() {
+        let c = |id: &str, cl: Option<&str>| (id.to_string(), cl.map(str::to_string));
+        let cards = vec![
+            c("x", None),
+            c("b", Some("a")),
+            c("y", None),
+            c("a", None),
+            c("z", Some("y")),
+        ];
+        assert_eq!(note_rows(&cards), vec![vec![0], vec![1, 3], vec![2, 4]]);
+        assert_eq!(row_root(&cards, &[1, 3]), 3);
+        assert_eq!(row_root(&cards, &[2, 4]), 2);
+        assert!(note_rows(&[]).is_empty());
+    }
+
+    #[test]
+    fn the_timer_counts_whole_minutes() {
+        assert_eq!(minutes_left(180_000), Some(3));
+        assert_eq!(minutes_left(150_000), Some(3));
+        assert_eq!(minutes_left(61_000), Some(2));
+        assert_eq!(minutes_left(60_000), None);
+        assert_eq!(minutes_left(0), None);
+        assert_eq!(minutes_left(-5), None);
     }
 
     #[test]
