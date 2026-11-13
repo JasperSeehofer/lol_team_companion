@@ -38,6 +38,11 @@ pub struct PrepStep {
     pub href: Option<String>,
     /// Label of the action link on the next step ("Open the brief").
     pub action: Option<String>,
+    /// M165: a second, quiet text link after the action (href, label):
+    /// "Write it alone" beside "Review together". Never chalk; shown on
+    /// every state of the step, so the other way stays reachable when the
+    /// step is not the next one.
+    pub alt: Option<(String, String)>,
 }
 
 impl PrepStep {
@@ -49,6 +54,7 @@ impl PrepStep {
             state,
             href: None,
             action: None,
+            alt: None,
         }
     }
     pub fn detail(mut self, d: impl Into<String>) -> Self {
@@ -62,6 +68,13 @@ impl PrepStep {
     pub fn link(mut self, href: impl Into<String>, action: impl Into<String>) -> Self {
         self.href = Some(href.into());
         self.action = Some(action.into());
+        self
+    }
+    /// M165: the quiet second link ("Write it alone"), rendered after the
+    /// action in the `NudgeLine` link grammar (`text-label text-secondary`,
+    /// underlined, never chalk), 44px tall on phones.
+    pub fn alt_link(mut self, href: impl Into<String>, label: impl Into<String>) -> Self {
+        self.alt = Some((href.into(), label.into()));
         self
     }
 }
@@ -87,7 +100,10 @@ pub enum PrepEmphasis {
 /// where it is done. With `emphasis` Quiet the next step is outlined and
 /// uses no accent at all, so the page's own primary action stays the only
 /// chalk; the next step still stands out by its larger title, its own row
-/// and its link.
+/// and its link. A step's second link (`PrepStep::alt_link`, M165) is a
+/// plain underlined text link after the action, its own tab stop, at least
+/// 44px tall below `md`; it wraps under the action on phones and sits inline
+/// after it from `md`.
 #[component]
 pub fn PrepSequence(
     #[prop(into)] label: String,
@@ -163,8 +179,8 @@ pub fn PrepSequence(
                             <a
                                 href=href
                                 class=match emphasis {
-                                    PrepEmphasis::Primary => "col-start-2 inline-flex h-8 w-fit items-center gap-2 rounded-ctl border border-accent bg-accent px-3 text-label font-semibold text-accent-ink transition-colors hover:bg-accent-hover",
-                                    PrepEmphasis::Quiet => "col-start-2 inline-flex h-8 w-fit items-center gap-2 rounded-ctl border border-outline px-3 text-label font-medium text-primary transition-colors hover:bg-ink-3",
+                                    PrepEmphasis::Primary => "inline-flex h-8 w-fit items-center gap-2 rounded-ctl border border-accent bg-accent px-3 text-label font-semibold text-accent-ink transition-colors hover:bg-accent-hover",
+                                    PrepEmphasis::Quiet => "inline-flex h-8 w-fit items-center gap-2 rounded-ctl border border-outline px-3 text-label font-medium text-primary transition-colors hover:bg-ink-3",
                                 }
                             >
                                 {action}
@@ -172,6 +188,24 @@ pub fn PrepSequence(
                             </a>
                         }),
                         _ => None,
+                    };
+                    let alt = s.alt.clone().map(|(href, label)| view! {
+                        <a
+                            href=href
+                            class="inline-flex min-h-11 items-center text-label text-secondary underline decoration-outline underline-offset-4 hover:text-primary md:min-h-0"
+                            data-prep-alt=""
+                        >
+                            {label}
+                        </a>
+                    });
+                    let actions = match (action, alt) {
+                        (None, None) => None,
+                        (action, alt) => Some(view! {
+                            <div class="col-start-2 col-end-4 flex flex-col items-start gap-x-4 md:flex-row md:items-center">
+                                {action}
+                                {alt}
+                            </div>
+                        }),
                     };
                     view! {
                         <li class=row aria-current=is_next.then_some("step")>
@@ -184,7 +218,7 @@ pub fn PrepSequence(
                                 {s.detail.clone().map(|d| view! { <p class="mt-0.5 text-label text-muted">{d}</p> })}
                             </div>
                             {status_view}
-                            {action}
+                            {actions}
                         </li>
                     }
                 })
