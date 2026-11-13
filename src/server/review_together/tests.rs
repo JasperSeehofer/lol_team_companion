@@ -961,6 +961,7 @@ fn a_revealed_state_serializes_the_off_plan_group_without_authors() {
         review_id: None,
         voices: None,
         rev: 7,
+        closed_at: None,
     };
     let entry = |id: &str, author: &str, name: &str, prompt: Prompt, text: &str, key: i64| Entry {
         id: id.into(),

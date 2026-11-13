@@ -462,6 +462,13 @@ pub struct ReviewSessionView {
     /// The accepted items with their owners, as decided.
     pub accepted: Vec<AcceptedItem>,
     pub voices: Option<Voices>,
+    /// The scheduled match it reviewed (None once deleted) and the game.
+    pub match_id: Option<String>,
+    pub game_number: i32,
+    /// "Scrim vs Riverside Rooks · G2", filled in by the page's server fn.
+    pub match_title: Option<String>,
+    /// When the session closed (RFC 3339, UTC).
+    pub closed_at: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

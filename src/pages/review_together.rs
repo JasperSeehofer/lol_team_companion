@@ -87,6 +87,31 @@ pub async fn get_session_state(
     Ok(poll)
 }
 
+/// The match a session reviews, as its page title reads: "Scrim vs
+/// Riverside Rooks", plus " · G2" for a series (`None` when the match is
+/// gone or not the team's).
+#[cfg(feature = "ssr")]
+async fn match_title(
+    db: &surrealdb::Surreal<surrealdb::engine::local::Db>,
+    team_id: &str,
+    match_id: &str,
+    game_number: i32,
+) -> Option<String> {
+    use crate::models::match_day::{game_count, kind_label};
+    let m = crate::server::db::get_scheduled_match(db, team_id, match_id)
+        .await
+        .ok()?;
+    let base = match &m.opponent_name {
+        Some(o) => format!("{} vs {o}", kind_label(&m.kind)),
+        None => kind_label(&m.kind).to_string(),
+    };
+    Some(if game_count(&m.format) > 1 {
+        format!("{base} \u{b7} G{game_number}")
+    } else {
+        base
+    })
+}
+
 /// The session page's first load: the session named by `session`, or the
 /// one of `match_id` and `game` (opened when the game has none yet, the
 /// opener facilitating: the match thread's "Review together"). Returns the
@@ -98,7 +123,6 @@ pub async fn get_session_page(
     match_id: Option<String>,
     game: Option<i32>,
 ) -> Result<SessionPage, ServerFnError> {
-    use crate::models::match_day::{game_count, kind_label};
     use crate::server::{authz, db, review_together};
     let session = session.filter(|s| !s.trim().is_empty());
     let session_id = match (session, match_id.filter(|m| !m.trim().is_empty())) {
@@ -135,22 +159,10 @@ pub async fn get_session_page(
     };
     respect_guidance(&ctx.db, &ctx.user.id, &mut state).await?;
     let title = match &state.match_id {
-        Some(m) => match db::get_scheduled_match(&ctx.db, &team_id, m).await {
-            Ok(m) => {
-                let base = match &m.opponent_name {
-                    Some(o) => format!("{} vs {o}", kind_label(&m.kind)),
-                    None => kind_label(&m.kind).to_string(),
-                };
-                if game_count(&m.format) > 1 {
-                    format!("{base} \u{b7} G{}", state.game_number)
-                } else {
-                    base
-                }
-            }
-            Err(_) => "Review together".to_string(),
-        },
-        None => "Review together".to_string(),
-    };
+        Some(m) => match_title(&ctx.db, &team_id, m, state.game_number).await,
+        None => None,
+    }
+    .unwrap_or_else(|| "Review together".to_string());
     let members = db::get_user_team_with_members(&ctx.db, &ctx.user.id)
         .await
         .map_err(authz::server_err)?
@@ -453,9 +465,15 @@ pub async fn get_review_session_for_review(
     use crate::server::{authz, review_together};
     let ctx = authz::authed().await?;
     let team_id = ctx.require_team().await?;
-    review_together::session_for_review(&ctx.db, &team_id, &ctx.user.id, &review_id)
+    let mut view = review_together::session_for_review(&ctx.db, &team_id, &ctx.user.id, &review_id)
         .await
-        .map_err(authz::server_err)
+        .map_err(authz::server_err)?;
+    if let Some(v) = view.as_mut() {
+        if let Some(m) = v.match_id.clone() {
+            v.match_title = match_title(&ctx.db, &team_id, &m, v.game_number).await;
+        }
+    }
+    Ok(view)
 }
 
 /// For "Patterns" on the review page: the closed sessions' "went to plan"
@@ -752,9 +770,13 @@ fn SessionView(page: crate::models::review_together::SessionPage) -> impl IntoVi
                 .as_ref()
                 .map(|c| c.decided.len() + c.to_plan.len() + c.off_plan.len() + c.next_time.len())
                 .unwrap_or(0);
-            announce.set(match notes {
-                1 => "Revealed: 1 note.".to_string(),
-                n => format!("Revealed: {n} notes."),
+            let notes = match notes {
+                1 => "1 note".to_string(),
+                n => format!("{n} notes"),
+            };
+            announce.set(match next.voices {
+                Some(v) => format!("Revealed: {notes}, {}.", v.label()),
+                None => format!("Revealed: {notes}."),
             });
             #[cfg(feature = "hydrate")]
             if !reduced_motion() {
@@ -875,7 +897,11 @@ fn SessionView(page: crate::models::review_together::SessionPage) -> impl IntoVi
             title=title
             eyebrow="Review together"
             meta=move || view! {
-                <SaveStatus state=tracker.state />
+                // Idle says nothing: the region stays mounted (announced on
+                // its first change) but out of the flow, so it takes no gap.
+                <span class=move || if tracker.state.with(|s| matches!(s, SaveState::Idle)) { "sr-only" } else { "contents" }>
+                    <SaveStatus state=tracker.state />
+                </span>
                 <DeadlineLine state=state received=received />
                 {move || (phase.get().is_open_after_reveal()).then(|| {
                     let n = state.with(|s| s.proposals.len());
@@ -884,7 +910,7 @@ fn SessionView(page: crate::models::review_together::SessionPage) -> impl IntoVi
             }
         />
         {move || writing().then(|| view! {
-            <Text tone=Tone::Secondary class="-mt-3 mb-6">{SEALED}</Text>
+            <Text tone=Tone::Secondary class="mb-6">{SEALED}</Text>
         })}
         <div class="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,42rem)_20rem] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-12 lg:gap-y-8">
             <aside class="flex flex-col gap-4 lg:col-start-2 lg:row-start-1 lg:border-l lg:border-rule lg:pl-8" aria-label="The session" data-session-side="">
@@ -1107,7 +1133,7 @@ fn FacilitatorTools(ctx: Ctx) -> impl IntoView {
                 .flatten()
                 .map(|n| view! { <div class="md:basis-full lg:basis-auto"><QuietNudge count=n /></div> })}
             {move || (facilitator.get() && phase.get() == Phase::Writing).then(|| view! {
-                <div class="flex flex-col gap-3">
+                <div class="flex flex-col items-start gap-3">
                     <Disclosure label=Signal::derive(|| "Round controls".to_string()) open=open controls="round-controls" />
                     <Show when=move || open.get()>
                         <div id="round-controls" class="flex flex-wrap gap-3" data-round-controls="">
@@ -1944,19 +1970,21 @@ fn ProposalRow(ctx: Ctx, id: String, text: String, members: Vec<String>) -> impl
                 })}
             </div>
             {move || accepted.get().then(|| {
+                let line = view! {
+                    <p class="text-label text-secondary" data-owner-line="">
+                        {move || match owner.get() {
+                            Some(o) => format!("Accepted \u{b7} owner {o}"),
+                            None => "Accepted \u{b7} no owner yet".to_string(),
+                        }}
+                    </p>
+                };
                 if facilitator.get() {
                     view! {
                         <OwnerChips text=text_for_chips.clone() members=members.clone() owner=owner on_pick=pick />
+                        {line}
                     }.into_any()
                 } else {
-                    view! {
-                        <p class="text-label text-secondary">
-                            {move || match owner.get() {
-                                Some(o) => format!("Accepted \u{b7} owner {o}"),
-                                None => "Accepted \u{b7} no owner yet".to_string(),
-                            }}
-                        </p>
-                    }.into_any()
+                    line.into_any()
                 }
             })}
         </li>
@@ -1994,10 +2022,13 @@ fn ClosedView(ctx: Ctx) -> impl IntoView {
 /// decided items, and exactly one team-level voices line.
 #[component]
 pub fn ReviewedTogether(view: ReviewSessionView) -> impl IntoView {
+    use crate::components::local_time::LocalTime;
     let ReviewSessionView {
         cards,
         accepted,
         voices,
+        match_title,
+        closed_at,
         ..
     } = view;
     let state_like = SessionState {
@@ -2030,7 +2061,14 @@ pub fn ReviewedTogether(view: ReviewSessionView) -> impl IntoView {
         <section class="flex flex-col gap-8 border-y border-rule bg-ink-1 py-6" aria-labelledby="together-h" data-reviewed-together="">
             <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4">
                 <h2 id="together-h" class="font-display text-title font-semibold tracking-[-0.01em] text-primary">"Reviewed together"</h2>
-                {meta.map(|m| view! { <span class="figures text-label text-secondary" data-voices="">{m}</span> })}
+                <p class="flex flex-wrap items-baseline gap-x-2 text-label text-secondary" data-together-meta="">
+                    {match_title.map(|t| view! { <span data-together-match="">{t}</span><span aria-hidden="true">"\u{b7}"</span> })}
+                    {meta.map(|m| view! { <span class="figures" data-voices="">{m}</span> })}
+                    {closed_at.map(|c| view! {
+                        <span aria-hidden="true">"\u{b7}"</span>
+                        <span>"closed "<LocalTime iso=c class="figures" /></span>
+                    })}
+                </p>
             </div>
             <div class="flex max-w-2xl flex-col gap-8 px-4">
                 {Prompt::ALL.into_iter().map(|prompt| {
@@ -2038,7 +2076,7 @@ pub fn ReviewedTogether(view: ReviewSessionView) -> impl IntoView {
                     let n: usize = rows.iter().map(|r| r.notes.len()).sum();
                     let plus: Vec<u32> = rows.iter().map(|r| plus_of(&state_like, &r.root).0).collect();
                     view! {
-                        <NoteGroup prompt=prompt count=Signal::derive(move || n)>
+                        <NoteGroup prompt=prompt count=Signal::derive(move || n) nested=true>
                             {rows.into_iter().zip(plus).map(|(r, p)| {
                                 let merged = r.notes.len() > 1;
                                 let k = r.notes.len();

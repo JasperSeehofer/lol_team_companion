@@ -26,22 +26,27 @@ pub fn ReviewNote(
     author: Option<String>,
 ) -> impl IntoView {
     view! {
-        <p class="note text-reading text-primary [overflow-wrap:anywhere]">{text}</p>
+        <p class="note text-reading text-primary max-w-prose [overflow-wrap:anywhere]">{text}</p>
         {author.map(|a| view! { <p class="text-caption text-muted">{a}</p> })}
     }
 }
 
-/// One prompt's revealed notes: the prompt as an `h2`, the note count, the
-/// anonymity caption under "What didn't go to plan", optional facilitator
-/// tools, then the notes as a ruled list (`children` are its `<li>` rows).
+/// One prompt's revealed notes: the prompt as an `h2` (an `h3` when
+/// `nested`, inside the review page's "Reviewed together" section), the
+/// note count, the anonymity caption under "What didn't go to plan",
+/// optional facilitator tools, then the notes as a ruled list (`children`
+/// are its `<li>` rows).
 ///
-/// A11y: a `section` labelled by its heading; the notes are a list, one
-/// item per note or merged group; the caption is plain text under the
-/// heading, read before the notes.
+/// A11y: a `section` labelled by its heading, one level under the section
+/// that holds it; the notes are a list, one item per note or merged group;
+/// the caption is plain text under the heading, read before the notes.
 #[component]
 pub fn NoteGroup(
     prompt: Prompt,
     #[prop(into)] count: Signal<usize>,
+    /// Inside another section (the review page): an `h3` in `text-heading`.
+    #[prop(optional)]
+    nested: bool,
     /// Facilitator tools above the list (near-duplicates).
     #[prop(optional, into)]
     tools: Option<ViewFn>,
@@ -51,7 +56,11 @@ pub fn NoteGroup(
     view! {
         <section class="flex flex-col gap-3" aria-labelledby=heading_id.clone() data-note-group=prompt.key()>
             <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h2 id=heading_id.clone() class="font-display text-title font-semibold tracking-[-0.01em] text-primary">{prompt.label()}</h2>
+                {if nested {
+                    view! { <h3 id=heading_id.clone() class="font-display text-heading font-semibold text-primary">{prompt.label()}</h3> }.into_any()
+                } else {
+                    view! { <h2 id=heading_id.clone() class="font-display text-title font-semibold tracking-[-0.01em] text-primary">{prompt.label()}</h2> }.into_any()
+                }}
                 <span class="figures text-caption text-muted">
                     {move || match count.get() {
                         1 => "1 note".to_string(),
@@ -172,8 +181,9 @@ pub fn VotesLeft(#[prop(into)] left: Signal<u32>, total: u32) -> impl IntoView {
 /// username; pressing the chosen one again clears it.
 ///
 /// A11y: a group named "Owner of: <text>" of toggle buttons
-/// (`aria-pressed` on the owner); "No owner yet" is plain text until one is
-/// chosen.
+/// (`aria-pressed` on the owner); the page writes the choice in words
+/// under it ("Accepted · owner X"), so it is not told by the pressed state
+/// alone.
 #[component]
 pub fn OwnerChips(
     #[prop(into)] text: String,
@@ -207,7 +217,6 @@ pub fn OwnerChips(
                     })
                     .collect_view()}
             </div>
-            {move || owner.get().is_none().then(|| view! { <p class="text-caption text-muted">"No owner yet"</p> })}
         </div>
     }
 }

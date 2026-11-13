@@ -166,6 +166,8 @@ struct DbSession {
     rev: i64,
     #[serde(default)]
     scheduled_match_deleted: Option<bool>,
+    #[serde(default)]
+    closed_at: Option<Datetime>,
 }
 
 /// One session as the assembly reads it (stored phase; see [`Session::phase_at`]).
@@ -189,6 +191,8 @@ pub struct Session {
     pub review_id: Option<String>,
     pub voices: Option<Voices>,
     pub rev: i64,
+    /// When the session closed (RFC 3339), once it has.
+    pub closed_at: Option<String>,
 }
 
 impl Session {
@@ -233,6 +237,7 @@ impl From<DbSession> for Session {
             review_id: s.review.map(|r| r.to_sql()),
             voices,
             rev: s.rev,
+            closed_at: s.closed_at.as_ref().map(dt_to_string),
         }
     }
 }
@@ -354,7 +359,7 @@ fn now_rfc3339() -> String {
 // Reads
 // ---------------------------------------------------------------------------
 
-const SESSION_FIELDS: &str = "id, team, scheduled_match, scheduled_match.format AS match_format, series, game_number, match_riot_id, facilitator, facilitator.username AS facilitator_name, phase, writing_closes_at, async_closes_at, round_started_at, review, voices, members, rev, scheduled_match_deleted";
+const SESSION_FIELDS: &str = "id, team, scheduled_match, scheduled_match.format AS match_format, series, game_number, match_riot_id, facilitator, facilitator.username AS facilitator_name, phase, writing_closes_at, async_closes_at, round_started_at, review, voices, members, rev, scheduled_match_deleted, closed_at";
 
 /// One session of `team_id`; another team's or an unknown id is `NotFound`.
 pub async fn load_session(db: &Surreal<Db>, team_id: &str, session_id: &str) -> DbResult<Session> {
@@ -720,7 +725,15 @@ pub fn assemble_state(
         } else {
             None
         },
-        voices: s.voices,
+        // Stored at close; after the reveal the same team-level count, for
+        // the reveal's announcement ("Revealed: 14 notes, 5 of 5 voices.").
+        // Never while writing.
+        voices: s.voices.or_else(|| {
+            (!writing).then(|| Voices {
+                voices: voice_count(contents),
+                members: contents.members.len() as u32,
+            })
+        }),
         present,
     }
 }
@@ -835,6 +848,10 @@ pub async fn session_for_review(
             })
             .collect(),
         voices: s.voices,
+        match_id: s.match_id.clone(),
+        game_number: s.game_number,
+        match_title: None,
+        closed_at: s.closed_at.clone(),
     }))
 }
 

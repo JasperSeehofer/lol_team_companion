@@ -51,9 +51,29 @@ const PLACEHOLDER_PNG = Buffer.from(
   "base64"
 );
 
-/** A marker no other member's text contains. */
+/**
+ * A marker no other member's text contains: a random eight-letter token per
+ * member and prompt, drawn once per run. The token encodes nothing about
+ * who wrote it (no letter, no index, no order), so the anonymous group's
+ * frames cannot show the author; only this map, inside the test, knows.
+ */
+const MARKERS = new Map<string, string>();
+function token(): string {
+  const letters = "bcdfghjkmnpqrstvwxz";
+  for (;;) {
+    let t = "";
+    for (let i = 0; i < 8; i++) t += letters[Math.floor(Math.random() * letters.length)];
+    if (![...MARKERS.values()].includes(t)) return t;
+  }
+}
 function mark(who: Who, p: PromptKey): string {
-  return `mk${who}${SHORT}${p.replace("_", "")}`;
+  const key = `${who}:${p}`;
+  let m = MARKERS.get(key);
+  if (!m) {
+    m = `ref ${token()}`;
+    MARKERS.set(key, m);
+  }
+  return m;
 }
 
 /** The words each member writes (b and d write alike for next time: a merge). */
