@@ -132,7 +132,8 @@ const PLACEHOLDER_PNG = Buffer.from(
 /**
  * Champion and item art comes from the app's own image endpoint
  * (`/img/champion/...`, which fetches from Data Dragon once per patch); the
- * browser loads nothing from a third party (role icons are typographic). The
+ * browser loads nothing from a third party (role icons come from the app's
+ * own `/img/ui/position/...`, not stubbed: ui-icons.spec.ts checks them). The
  * page "load" event waits for every image, so one stalled upstream fetch
  * (common through the cloud-session proxy) used to time out `page.goto` at
  * random. Tests serve a placeholder instead: they check our pages, not the

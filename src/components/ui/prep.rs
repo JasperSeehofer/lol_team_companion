@@ -73,8 +73,9 @@ pub enum PrepEmphasis {
     /// Match Day.
     #[default]
     Primary,
-    /// The view has its own primary action (the game plan's "Save plan"):
-    /// the next step is outlined, not filled.
+    /// The view has its own primary action (the game plan's "Save plan",
+    /// Match Day's field card): the next step is outlined, not filled, and
+    /// carries no chalk (number box `border-outline`, text in ink).
     Quiet,
 }
 
@@ -83,8 +84,10 @@ pub enum PrepEmphasis {
 /// A11y: an ordered list; each item states its status in words ("Done",
 /// "Next", "Needs attention"), with the shape of the number box as a second
 /// cue. The next step carries `aria-current="step"` and a real link to
-/// where it is done. With `emphasis` Quiet the next step is outlined, so
-/// the page's own primary action stays the only chalk fill.
+/// where it is done. With `emphasis` Quiet the next step is outlined and
+/// uses no accent at all, so the page's own primary action stays the only
+/// chalk; the next step still stands out by its larger title, its own row
+/// and its link.
 #[component]
 pub fn PrepSequence(
     #[prop(into)] label: String,
@@ -106,7 +109,7 @@ pub fn PrepSequence(
                     };
                     let num = match s.state {
                         PrepState::Done => "figures inline-grid size-6 place-items-center rounded-ctl bg-ink-3 text-caption text-secondary",
-                        PrepState::Next if emphasis == PrepEmphasis::Quiet => "figures inline-grid size-6 place-items-center rounded-ctl border border-accent text-caption font-semibold text-accent",
+                        PrepState::Next if emphasis == PrepEmphasis::Quiet => "figures inline-grid size-6 place-items-center rounded-ctl border border-outline text-caption font-semibold text-primary",
                         PrepState::Next => "figures inline-grid size-6 place-items-center rounded-ctl bg-accent text-caption font-semibold text-accent-ink",
                         PrepState::Todo => "figures inline-grid size-6 place-items-center rounded-ctl border border-outline text-caption text-muted",
                         PrepState::Attention => "figures inline-grid size-6 place-items-center rounded-ctl border border-warning text-caption text-warning",
@@ -118,6 +121,11 @@ pub fn PrepSequence(
                     };
                     let status_class = match s.state {
                         PrepState::Done => "figures text-label text-success",
+                        // Quiet: no chalk at all (the view's own primary
+                        // action is its only chalk); a count ("Read by 2 of
+                        // 5") is secondary, the bare word "Next" ink.
+                        PrepState::Next if emphasis == PrepEmphasis::Quiet && s.status.is_some() => "figures text-label font-semibold text-secondary",
+                        PrepState::Next if emphasis == PrepEmphasis::Quiet => "figures text-label font-semibold text-primary",
                         PrepState::Next => "figures text-label font-semibold text-accent",
                         PrepState::Todo => "figures text-label text-muted",
                         PrepState::Attention => "figures text-label text-warning",

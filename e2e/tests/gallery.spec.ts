@@ -38,6 +38,7 @@ const SECTIONS = [
   "command",
   "avatar",
   "markers",
+  "marks",
   "readout",
   "bar",
   "draft",
@@ -45,6 +46,7 @@ const SECTIONS = [
   "legend",
   "canvas",
   "timeline",
+  "rift",
 ];
 
 const PANIC = /panicked at|Option::unwrap\(\) on None|unreachable/;
@@ -97,6 +99,34 @@ for (const width of [1280, 400]) {
     expect(errors, errors.join("\n")).toEqual([]);
   });
 }
+
+test("the drawn Rift zooms from sketch to survey from the keyboard", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const zoom = adminPage.getByTestId("rift-zoom");
+  await zoom.scrollIntoViewIfNeeded();
+  await expect(zoom.locator('[data-rift="sketch"]')).toBeVisible();
+  // Decorative: the drawing is hidden from assistive technology.
+  await expect(zoom.locator('[data-rift="sketch"]')).toHaveAttribute("aria-hidden", "true");
+  const stops = zoom.locator('[role="radio"]');
+  await expect(stops).toHaveCount(3);
+  await stops.nth(0).focus();
+  await adminPage.keyboard.press("ArrowRight");
+  await adminPage.keyboard.press("Enter");
+  await expect(zoom.locator('[data-rift="survey"][data-rift-zoom="2"]')).toBeVisible();
+  await adminPage.keyboard.press("ArrowRight");
+  await adminPage.keyboard.press("Enter");
+  const survey = zoom.locator('[data-rift="survey"][data-rift-zoom="4"]');
+  await expect(survey).toBeVisible();
+  await expect(survey.locator('[data-rift-layer="walls"]')).toHaveCount(1);
+  // The frame scrolls inside itself; the page never scrolls sideways.
+  const frame = adminPage.getByTestId("rift-frame");
+  await frame.focus();
+  await adminPage.keyboard.press("ArrowRight");
+  const overflow = await adminPage.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});
 
 test("tabs follow the arrow keys, Home and End", async ({ adminPage }) => {
   await openGallery(adminPage);
@@ -396,6 +426,17 @@ test("champion avatars use the app's image endpoint only", async ({ adminPage })
   await expect(img).toHaveAttribute("src", /^\/img\/champion\/.+\/icon/);
   await expect(adminPage.locator('[data-gallery="markers"] [data-role="Jungle"]').first()).toContainText("JGL");
   expect(external, external.join("\n")).toEqual([]);
+});
+
+test("marks are hidden from screen readers and stand beside their word", async ({ adminPage }) => {
+  await openGallery(adminPage);
+  const section = adminPage.locator('[data-gallery="marks"]');
+  // Nine inline marks, nine at 24 and nine 64 px specimens, all aria-hidden.
+  await expect(section.locator("svg")).toHaveCount(27);
+  await expect(section.locator('svg:not([aria-hidden="true"])')).toHaveCount(0);
+  for (const word of ["Top", "Jungle", "Mid", "Bot", "Support", "Dragon", "Baron", "Herald", "Tower"]) {
+    await expect(section.locator('[data-testid="marks-inline"]')).toContainText(word);
+  }
 });
 
 // Outside dev builds the gallery is admin-only: everyone else gets the 404

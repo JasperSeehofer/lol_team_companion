@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wednesday Scout Sheet</title>
+<style>
+  :root {
+    --bg: #12171a; --card: #1a2126; --code: #0d1114; --line: #2c363d;
+    --text: #e3e8ea; --muted: #9aa7ae; --accent: #d9e3a1; --warn: #e8b86a; --hand: #8fc1e3;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 32px 0 8px; color: var(--accent); }
+  p, li { color: var(--text); }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .note {
+    background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--warn);
+    border-radius: 6px; padding: 10px 12px; margin: 12px 0;
+  }
+  .note ul { margin: 4px 0; padding-left: 20px; }
+  ol.steps { list-style: none; padding: 0; margin: 0; }
+  ol.steps > li {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px; margin: 10px 0;
+  }
+  .n { font-weight: 700; color: var(--accent); margin-right: 6px; }
+  .tag {
+    display: inline-block; font-size: 12px; padding: 0 6px; border-radius: 4px;
+    border: 1px solid var(--hand); color: var(--hand); margin-left: 6px; vertical-align: 1px;
+  }
+  .tag.skip { border-color: var(--warn); color: var(--warn); }
+  .cmd { position: relative; margin: 8px 0 6px; }
+  pre {
+    margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 4px;
+    padding: 10px 76px 10px 10px; overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+  }
+  code { font: 14px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text); }
+  p code, li code, .fail code { background: var(--code); padding: 0 4px; border-radius: 3px; }
+  button.copy {
+    position: absolute; top: 6px; right: 6px; font: inherit; font-size: 13px;
+    background: var(--line); color: var(--text); border: 1px solid #44525b; border-radius: 4px;
+    padding: 4px 10px; cursor: pointer; min-height: 32px;
+  }
+  button.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .fail { color: var(--muted); font-size: 14px; margin: 4px 0 0; }
+  .fail b { color: var(--warn); font-weight: 600; }
+  footer { color: var(--muted); font-size: 14px; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Wednesday: navgrid and Scout run</h1>
+<p class="sub">M166 · about 2 hours · PowerShell in the <code>lol_team_companion</code> folder · WireGuard tunnel to brain up. Copy each block as it is.</p>
+
+<div class="note">
+  <ul>
+    <li><b>Keep the League client closed for steps 1 to 5.</b> The navgrid read refuses to run while it is open.</li>
+    <li>Picked <b>"Wait for Riot"</b> on the card? Do step 1, then skip steps 2 to 5 and start at step 6.</li>
+    <li><b>Skip step 9 this time.</b> The weights check could not run on brain (only 2 GB of memory free, it needs 3 GB), so nothing is waiting there. Download <code>yolov12.pt</code> from Google Drive as CHECKLIST step 3 says.</li>
+    <li>Run data goes to brain only (step 22, <code>session send</code>). <b>Never <code>git push</code> it</b>: the repo is public.</li>
+    <li>If the Scout prep did not land on the branch (the <code>scout.session</code> commands are unknown), follow <code>tools\scout\CHECKLIST.md</code> as it was.</li>
+  </ul>
+</div>
+
+<h2>Navgrid (League client closed)</h2>
+<ol class="steps">
+  <li><span class="n">1</span>Install Python 3.12 (once).
+    <div class="cmd"><pre><code>winget install Python.Python.3.12</code></pre></div>
+    <p class="fail"><b>If it fails:</b> run <code>py -0</code>; if 3.12 is already listed, go on.</p>
+  </li>
+  <li><span class="n">2</span>Get the navgrid branch.
+    <div class="cmd"><pre><code>git fetch origin; git switch mission/M166-scout-half-c-and-navgrid-prep; git pull --ff-only</code></pre></div>
+    <p class="fail"><b>If it fails:</b> run <code>git status</code>; commit or stash local changes first, then repeat.</p>
+  </li>
+  <li><span class="n">3</span>Make the navgrid venv.
+    <div class="cmd"><pre><code>py -3.12 -m venv tools\navgrid\.venv; .\tools\navgrid\.venv\Scripts\pip install -e tools/navgrid</code></pre></div>
+    <p class="fail"><b>If it fails:</b> <code>py -0</code> must list 3.12; rerun the pip part with <code>-v</code> and note the error.</p>
+  </li>
+  <li><span class="n">4</span>Read the map file once (prints at most 8 lines and the next scp line).
+    <div class="cmd"><pre><code>.\tools\navgrid\.venv\Scripts\python -m navgrid pc-run</code></pre></div>
+    <p class="fail"><b>If it fails:</b> "client running" means close League fully; "WAD not found" means add <code>--wad "&lt;path to Map11.wad.client&gt;"</code>. Running it a second time moves the earlier output to <code>navgrid\previous\</code>.</p>
+  </li>
+  <li><span class="n">5</span>Send the folder to brain. The first scp asks to accept brain's host key: type <code>yes</code>.
+    <div class="cmd"><pre><code>scp -r "$env:LOCALAPPDATA\navgrid\latest" ops@10.44.0.1:.local/share/navgrid/inbox/</code></pre></div>
+    <p class="fail"><b>If it fails:</b> check the WireGuard tunnel is up (<code>ping 10.44.0.1</code>), then repeat. Never put this folder in git.</p>
+  </li>
+</ol>
+
+<h2>Scout run</h2>
+<ol class="steps">
+  <li><span class="n">6</span>Get the Scout branch.
+    <div class="cmd"><pre><code>git switch mission/M156-scout-replay-spike; git pull --ff-only</code></pre></div>
+    <p class="fail"><b>If it fails:</b> run <code>git fetch origin</code> first (needed if you skipped step 2), then repeat.</p>
+  </li>
+  <li><span class="n">7</span>Make the Scout venv.
+    <div class="cmd"><pre><code>py -3.12 -m venv tools\scout\.venv; .\tools\scout\.venv\Scripts\pip install -e "tools/scout[yolo]"</code></pre></div>
+    <p class="fail"><b>If it fails:</b> rerun the pip part with <code>-v</code>; if <code>[yolo]</code> will not install, use <code>tools/scout</code> without it (the template detector still works).</p>
+  </li>
+  <li><span class="n">8</span>Start the run (put your match id from the match history in place of <code>&lt;gameId&gt;</code>).
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session start EUW1_&lt;gameId&gt;</code></pre></div>
+    <p class="fail"><b>If it fails:</b> "No module named scout.session" means the prep did not land: follow CHECKLIST.md as it was.</p>
+  </li>
+  <li><span class="n">9</span>Get the weights from brain. <span class="tag skip">skip this time</span>
+    <div class="cmd"><pre><code>scp ops@10.44.0.1:.cache/scout/models/yolov12.pt tools\scout\models\yolov12.pt</code></pre></div>
+    <p class="fail"><b>Instead:</b> download <code>yolov12.pt</code> (227 MB) from the Google Drive link in <code>tools\scout\vendor\pyLoL\README.md</code> into <code>tools\scout\models\</code> (CHECKLIST step 3). <b>If that fails:</b> skip it; the minimap step uses the template detector alone.</p>
+  </li>
+  <li><span class="n">10</span>Switch on the Replay API.
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session enable-api</code></pre></div>
+    <p class="fail"><b>If it fails:</b> add <code>--cfg "&lt;your League folder&gt;\Config\game.cfg"</code>; untick read-only in the file's Properties.</p>
+  </li>
+  <li><span class="n">11</span>Restart the League client and open the replay in borderless full screen on the main monitor. <span class="tag">by hand</span>
+    <p class="fail"><b>If it fails:</b> the replay must be from the current patch; download it again from the match history.</p>
+  </li>
+  <li><span class="n">12</span>Probe the client, hands off (about 3 minutes).
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session probe</code></pre></div>
+    <p class="fail"><b>If it fails:</b> open <code>https://127.0.0.1:2999/replay/game</code> in a browser; no answer means the replay is not open or step 10 did not take.</p>
+  </li>
+  <li><span class="n">13</span>Track the minimap, hands off (game length divided by 8).
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session minimap</code></pre></div>
+    <p class="fail"><b>If it fails:</b> if the first PNG in <code>frames_minimap</code> is not exactly the minimap, read its left, top, width, height in <code>probe_minimap_only.png</code> with Paint and add <code>--minimap-box L,T,W,H</code>.</p>
+  </li>
+  <li><span class="n">14</span>Sign out of Windows and back in, then reopen the replay. <span class="tag">by hand</span>
+    <p class="fail"><b>If it fails:</b> nothing is lost; the driver remembers the run. Reopen the replay and go on.</p>
+  </li>
+  <li><span class="n">15</span>Track the top-down view (about 8 minutes).
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session topdown</code></pre></div>
+    <p class="fail"><b>If it fails:</b> add <code>--keystroke-unlock</code> (press Ctrl+Shift+Y and zoom out when asked).</p>
+  </li>
+  <li><span class="n">16</span>Set the key for this window only. Type your <b>development key</b> at the prompt, never the production key; typed this way it never lands in PowerShell history.
+    <div class="cmd"><pre><code>$env:RIOT_API_KEY = Read-Host "Riot key"</code></pre></div>
+    <p class="fail"><b>If it fails:</b> regenerate the development key in the Riot developer portal and type it again.</p>
+  </li>
+  <li><span class="n">17</span>Fetch the timeline (the match file is saved without player identifiers).
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session timeline</code></pre></div>
+    <p class="fail"><b>If it fails:</b> HTTP 403 means the key expired (redo step 16); 404 means a wrong match id.</p>
+  </li>
+  <li><span class="n">18</span>Clear the key.
+    <div class="cmd"><pre><code>Remove-Item Env:RIOT_API_KEY</code></pre></div>
+    <p class="fail"><b>If it fails:</b> close this PowerShell window; the key goes with it.</p>
+  </li>
+  <li><span class="n">19</span>Score the run.
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session score</code></pre></div>
+    <p class="fail"><b>If it fails:</b> note the error and go on; brain scores the run again from the sent files.</p>
+  </li>
+  <li><span class="n">20</span>Open the hand check; per row, jump the replay to the time and write <code>yes</code> or <code>no</code>, then save.
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session handcheck</code></pre></div>
+    <p class="fail"><b>If it fails:</b> open <code>handcheck.csv</code> in the run folder with Notepad yourself. Fewer than 10 rows is fine.</p>
+  </li>
+  <li><span class="n">21</span>Check the run folder (at most 50 MB, no video, no key, no player identifiers).
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session check</code></pre></div>
+    <p class="fail"><b>If it fails:</b> delete the largest PNGs in <code>frames_topdown</code> and run it again.</p>
+  </li>
+  <li><span class="n">22</span>Send the run to brain, never to GitHub.
+    <div class="cmd"><pre><code>.\tools\scout\.venv\Scripts\python -m scout.session send</code></pre></div>
+    <p class="fail"><b>If it fails:</b> check the tunnel and repeat; it refuses a run that fails step 21, so fix that first. Add <code>--dry-run</code> to see the scp line.</p>
+  </li>
+</ol>
+
+<footer>Afterwards you can delete <code>%TEMP%\scout-rec</code> and <code>%TEMP%\scout-frames</code>. That's all: the agent takes it from here.</footer>
+</main>
+<script>
+(function () {
+  function selectText(el) {
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  function flash(btn, text) {
+    btn.textContent = text;
+    setTimeout(function () { btn.textContent = "Copy"; }, 1600);
+  }
+  document.querySelectorAll(".cmd").forEach(function (box) {
+    var code = box.querySelector("code");
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "copy";
+    btn.textContent = "Copy";
+    btn.setAttribute("aria-label", "Copy command");
+    btn.addEventListener("click", function () {
+      var text = code.textContent;
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(
+          function () { flash(btn, "Copied"); },
+          function () { selectText(code); flash(btn, "Selected"); }
+        );
+      } else {
+        selectText(code);
+        flash(btn, "Selected");
+      }
+    });
+    box.appendChild(btn);
+  });
+})();
+</script>
+</body>
+</html>

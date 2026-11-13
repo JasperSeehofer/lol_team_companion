@@ -834,6 +834,9 @@ pub fn MatchDetailPage() -> impl IntoView {
     let params = use_params_map();
     let match_id = move || params.read().get("id").unwrap_or_default();
     let detail = Resource::new(match_id, fetch_match_detail);
+    // M159: "Review as a team" only for a game the viewer's team played
+    // (checked on the server); created before the Suspense (rule 58).
+    let team_review = Resource::new(match_id, crate::pages::post_game::team_review_state);
 
     view! {
         <PageShell attr:data-feedback-label="Match detail">
@@ -855,7 +858,7 @@ pub fn MatchDetailPage() -> impl IntoView {
                             {crate::models::utils::error_text(&e)}
                         </Callout>
                     }.into_any(),
-                    Ok(d) => view! { <MatchBody d=d /> }.into_any(),
+                    Ok(d) => view! { <MatchBody d=d team_review=team_review /> }.into_any(),
                 })}
             </Suspense>
         </PageShell>
@@ -863,7 +866,10 @@ pub fn MatchDetailPage() -> impl IntoView {
 }
 
 #[component]
-fn MatchBody(d: MatchDetail) -> impl IntoView {
+fn MatchBody(
+    d: MatchDetail,
+    team_review: Resource<Result<Option<bool>, ServerFnError>>,
+) -> impl IntoView {
     let user = d
         .participants
         .iter()
@@ -924,6 +930,7 @@ fn MatchBody(d: MatchDetail) -> impl IntoView {
     let mode = d.game_mode.clone();
     let dur = format_duration(d.game_duration);
     let mid = d.match_id.clone();
+    let review_mid = d.match_id.clone();
     let has_user = user.is_some();
     view! {
         <PageHeader
@@ -935,9 +942,16 @@ fn MatchBody(d: MatchDetail) -> impl IntoView {
                 <span>{format!("{mode} \u{00b7} {dur}")}</span>
                 <span class="figures text-muted">{mid.clone()}</span>
             }
-            actions=move || has_user.then(|| view! {
-                <Button variant=ButtonVariant::Primary href=learning_href.clone()>"Write a learning"</Button>
-            })
+            actions=move || view! {
+                {team_review.get().and_then(|r| r.ok()).flatten().map(|reviewed| view! {
+                    <Button variant=ButtonVariant::Secondary size=ButtonSize::Touch href=format!("/post-game?riot_match_id={}", review_mid.clone()) attr:data-testid="review-as-team">
+                        {if reviewed { "Open team review" } else { "Review as a team" }}
+                    </Button>
+                })}
+                {has_user.then(|| view! {
+                    <Button variant=ButtonVariant::Primary href=learning_href.clone()>"Write a learning"</Button>
+                })}
+            }
         />
         <div class="flex flex-col gap-12">
             // Blue above red at full width: both tables have the same columns,

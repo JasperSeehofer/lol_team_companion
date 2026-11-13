@@ -1,0 +1,84 @@
+/* C paper: a proposed light remap of the Survey tokens (DESIGN 3.2 form, the
+   same names under one wrapper class). Draft for the M151 still only: it is
+   not in input.css and the app has one theme. Neutral-cool paper in the
+   green-slate hue family (hue 195-200, chroma at most 0.010 on every ground):
+   no cream, no parchment, no sepia. Ink near-black. One spot colour, the chalk
+   (hue 108), darkened until it reads as text on paper. Side and result colours
+   keep their hue and meaning at 3:1 or better as marks and lines.
+   Contrast for every pair below: G/c/contrast.md, computed by
+   `python3 -I G/tools/oklch.py pairs G/c/paper-tokens.css`.
+   Raw colour functions are allowed here only because this file proposes token values. */
+
+.paper {
+  color-scheme: light;
+  /* Grounds: four quiet steps, chroma <= 0.010. */
+  --color-page: oklch(0.985 0.004 200); /* lint:allow(raw-colour) proposed token */
+  --color-ink-1: oklch(0.968 0.005 200); /* lint:allow(raw-colour) proposed token */
+  --color-ink-2: oklch(0.948 0.006 200); /* lint:allow(raw-colour) proposed token */
+  --color-ink-3: oklch(0.920 0.008 200); /* lint:allow(raw-colour) proposed token */
+  --color-canvas: oklch(0.975 0.006 195); /* lint:allow(raw-colour) proposed token */
+  /* Lines: rule is a hairline (decorative, no ratio required); outline bounds controls (3:1). */
+  --color-rule: oklch(0.860 0.008 200); /* lint:allow(raw-colour) proposed token */
+  --color-outline: oklch(0.560 0.014 200); /* lint:allow(raw-colour) proposed token */
+  /* Text. */
+  --color-primary: oklch(0.220 0.012 200); /* lint:allow(raw-colour) proposed token */
+  --color-secondary: oklch(0.390 0.014 200); /* lint:allow(raw-colour) proposed token */
+  --color-muted: oklch(0.490 0.014 200); /* lint:allow(raw-colour) proposed token */
+  /* The one spot colour: chalk on paper (pale chalk fails on white, so it is deepened). */
+  --color-accent: oklch(0.460 0.095 108); /* lint:allow(raw-colour) proposed token */
+  --color-accent-hover: oklch(0.400 0.085 108); /* lint:allow(raw-colour) proposed token */
+  --color-accent-ink: oklch(0.985 0.004 200); /* lint:allow(raw-colour) proposed token */
+  --color-accent-soft: oklch(0.460 0.095 108 / 0.10); /* lint:allow(raw-colour) proposed token */
+  /* Sides: marks and lines at >= 3:1 on every ground; -deep becomes a pale tint behind primary text. */
+  --color-side-blue: oklch(0.530 0.130 245); /* lint:allow(raw-colour) proposed token */
+  --color-side-red: oklch(0.540 0.150 28); /* lint:allow(raw-colour) proposed token */
+  --color-side-blue-deep: oklch(0.930 0.025 245); /* lint:allow(raw-colour) proposed token */
+  --color-side-red-deep: oklch(0.930 0.025 28); /* lint:allow(raw-colour) proposed token */
+  /* Results: a win is a filled teal with paper text; a loss stays the muted grey (no red). */
+  --color-win: oklch(0.480 0.090 175); /* lint:allow(raw-colour) proposed token */
+  --color-win-ink: oklch(0.985 0.004 200); /* lint:allow(raw-colour) proposed token */
+  --color-loss: oklch(0.490 0.014 200); /* lint:allow(raw-colour) proposed token */
+  /* Status, deepened to read as text on paper. */
+  --color-success: oklch(0.480 0.110 155); /* lint:allow(raw-colour) proposed token */
+  --color-warning: oklch(0.510 0.110 70); /* lint:allow(raw-colour) proposed token */
+  --color-danger: oklch(0.500 0.170 20); /* lint:allow(raw-colour) proposed token */
+  --color-danger-deep: oklch(0.420 0.150 18); /* lint:allow(raw-colour) proposed token */
+  --color-info: oklch(0.480 0.090 230); /* lint:allow(raw-colour) proposed token */
+  --color-scrim: oklch(0.220 0.012 200 / 0.40); /* lint:allow(raw-colour) proposed token */
+  --focus-ring: var(--color-accent);
+  background-color: var(--color-page);
+  color: var(--color-primary);
+}
+
+/* Pairs checked (fg on bg, minimum; AA: 4.5 text, 3 for large text, control edges and marks):
+   pair: primary on page, need 4.5 (body text)
+   pair: primary on ink-1, need 4.5 (text on raised surface)
+   pair: primary on ink-3, need 4.5 (text on the highest step)
+   pair: secondary on page, need 4.5 (secondary text, marks beside labels)
+   pair: secondary on ink-2, need 4.5 (secondary text on a monogram)
+   pair: muted on page, need 4.5 (captions, meta)
+   pair: muted on ink-1, need 4.5 (captions on raised surface)
+   pair: muted on ink-3, need 4.5 (captions on the highest step)
+   pair: outline on page, need 3 (control edge)
+   pair: outline on ink-2, need 3 (control edge on a field)
+   pair: rule on page, need 1.2 (hairline, decorative)
+   pair: accent on page, need 4.5 (chalk as text: map label)
+   pair: accent on ink-1, need 4.5 (chalk as text on raised surface)
+   pair: accent-ink on accent, need 4.5 (primary button label)
+   pair: accent-ink on accent-hover, need 4.5 (primary button hovered)
+   pair: primary on accent-soft, need 4.5 (text on a selected row)
+   pair: side-blue on page, need 3 (side mark and line)
+   pair: side-red on page, need 3 (side mark and line)
+   pair: side-blue on ink-3, need 3 (side mark on the highest step)
+   pair: side-red on ink-3, need 3 (side mark on the highest step)
+   pair: primary on side-blue-deep, need 4.5 (side badge text)
+   pair: primary on side-red-deep, need 4.5 (side badge text)
+   pair: win on page, need 3 (win mark and border)
+   pair: win-ink on win, need 4.5 (win badge text)
+   pair: loss on page, need 3 (loss mark and border)
+   pair: success on page, need 4.5 (status text)
+   pair: warning on page, need 4.5 (status text)
+   pair: danger on page, need 4.5 (status text)
+   pair: info on page, need 4.5 (status text)
+   pair: accent-ink on danger-deep, need 4.5 (danger button hovered; on paper the label must be paper, not primary)
+*/

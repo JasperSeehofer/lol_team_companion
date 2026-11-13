@@ -14,16 +14,17 @@ use crate::components::local_time::{
 };
 use crate::components::ui::PrepEmphasis;
 use crate::components::ui::{
-    Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone, Dialog,
-    EmptySize, EmptyState, Field, GameResult, GlyphSize, HeadingLevel, InputKind, PageHeader,
-    PageShell, PageWidth, PrepSequence, PrepState, PrepStep, ResultGlyph, Role, RoleLabel,
-    SectionHeader, Segment, SegmentedControl, Select, SelectOption, Skeleton, SkeletonGroup,
-    SkeletonShape, TextField, Toast, ToastContext,
+    Button, ButtonSize, ButtonVariant, ChampionAvatar, ConfirmDialog, ConfirmTone, Dialog, Edge,
+    EmptySize, EmptyState, Field, GameResult, GlyphSize, HeadingLevel, InputKind, Layer, Pad,
+    PageHeader, PageShell, PageWidth, PrepSequence, PrepState, PrepStep, ResultGlyph, RiftCrop,
+    RiftGround, RiftSketch, Role, RoleLabel, SectionHeader, Segment, SegmentedControl, Select,
+    SelectOption, Skeleton, SkeletonGroup, SkeletonShape, Surface, SurfaceTag, TextField, Toast,
+    ToastContext,
 };
 use crate::models::guidance::HomeGuide;
 use crate::models::match_day::{
-    format_label, kind_label, BriefPlayer, LinkRef, MatchDay, OpponentBrief, ScheduledMatchInput,
-    FORMATS, KINDS,
+    format_label, game_count, kind_label, review_games, review_readout, reviews_complete,
+    BriefPlayer, GameReview, LinkRef, MatchDay, OpponentBrief, ScheduledMatchInput, FORMATS, KINDS,
 };
 use crate::pages::closed_beta::Landing;
 
@@ -61,9 +62,11 @@ async fn home_guide_for(
 }
 
 /// Home. `guide` is "Guide me" (`/?guide=1`): the checklist shows even when
-/// it is hidden or complete.
+/// it is hidden or complete. `match_id` (`/?match_id=`, M159) makes one of
+/// the team's upcoming matches the current view; any other id shows the
+/// next match with a neutral line.
 #[server]
-pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
+pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, ServerFnError> {
     use crate::models::match_day::{shorten, BriefPlayer, OpponentBrief, PatchLine, ReviewLine};
     use crate::models::opponent::is_stale;
     use crate::models::utils::format_timestamp;
@@ -85,9 +88,17 @@ pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
     };
     let team_id = team.id.clone().unwrap_or_default();
 
-    let mut next = db::next_scheduled_match(&db, &team_id)
+    // M159: the current match is the next one unless the address chose
+    // another of the team's upcoming matches (checked against the team's
+    // own list; a foreign or unknown id is treated like no match).
+    let upcoming = db::upcoming_scheduled_matches(&db, &team_id)
         .await
         .map_err(authz::server_err)?;
+    let next_match = db::next_scheduled_match(&db, &team_id)
+        .await
+        .map_err(authz::server_err)?;
+    let choice = crate::models::match_day::choose_match(upcoming, next_match, match_id.as_deref());
+    let mut next = choice.current;
     // "Read by N of M" counts current members only (people who left keep
     // their mark in the row).
     if let Some(m) = next.as_mut() {
@@ -122,9 +133,6 @@ pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
                     })
                     .collect();
                 ps.sort_by_key(|p| Role::parse(&p.role).map(|r| r as u8).unwrap_or(9));
-                facts = db::match_prep_facts(&db, &team_id, opp_id, &opp.name, &m.starts_at)
-                    .await
-                    .map_err(authz::server_err)?;
                 brief = Some(OpponentBrief {
                     id: opp_id.clone(),
                     name: opp.name.clone(),
@@ -136,6 +144,17 @@ pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
                 });
             }
         }
+        // M159: only work stamped to this match counts; unstamped work
+        // against its opponent is offered as earlier work.
+        facts = db::match_prep_facts(
+            &db,
+            &team_id,
+            &m.id,
+            brief.as_ref().map(|b| b.id.as_str()),
+            brief.as_ref().map(|b| b.name.as_str()),
+        )
+        .await
+        .map_err(authz::server_err)?;
     }
 
     let open = db::list_open_action_items(&db, &team_id)
@@ -196,6 +215,9 @@ pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
         drafts: facts.drafts,
         plans: facts.plans,
         review_after: facts.review_after,
+        played_games: facts.played_games,
+        reviewed_games: facts.reviewed_games,
+        earlier: facts.earlier,
         open_item_count: open.len(),
         open_items: open.into_iter().take(4).collect(),
         last_review,
@@ -203,6 +225,13 @@ pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
         patch,
         opponents,
         now: chrono::Utc::now().to_rfc3339(),
+        upcoming: choice
+            .others
+            .iter()
+            .map(crate::models::match_day::UpcomingMatch::from)
+            .collect(),
+        chosen: choice.chosen,
+        unknown_match: choice.unknown,
     };
     // A nudge never repeats the prep sequence's next step.
     let skip = prep_steps(&md)
@@ -211,6 +240,44 @@ pub async fn get_home(guide: bool) -> Result<Home, ServerFnError> {
         .and_then(|s| s.href);
     let guide = home_guide_for(&db, &user, guide, skip.as_deref()).await;
     Ok(Home::Team(Box::new(md), guide))
+}
+
+/// M159: the scheduled match a carried link (`?match_id=`) names, for the
+/// caller's team. Another team's or an unknown id is "Not found"; the id
+/// in the address is never trusted beyond this lookup.
+#[server]
+pub async fn get_thread_match(
+    match_id: String,
+) -> Result<crate::models::match_day::ThreadMatch, ServerFnError> {
+    use crate::server::{authz, db};
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    let m = db::get_scheduled_match(&ctx.db, &team_id, &match_id)
+        .await
+        .map_err(authz::server_err)?;
+    Ok(crate::models::match_day::ThreadMatch::from(&m))
+}
+
+/// M159: "Use for this match": stamps one piece of earlier, unstamped work
+/// (`kind` "draft" | "plan" | "review") with the team's match. Both ids are
+/// checked as the caller's team records in the DB layer ("Not found"
+/// otherwise).
+#[server]
+pub async fn use_for_match(
+    match_id: String,
+    kind: String,
+    item_id: String,
+) -> Result<(), ServerFnError> {
+    use crate::models::match_day::WorkKind;
+    use crate::server::{authz, db};
+    let ctx = authz::authed().await?;
+    let team_id = ctx.require_team().await?;
+    let Some(kind) = WorkKind::parse(&kind) else {
+        return Err(authz::server_err(db::DbError::NotFound));
+    };
+    db::use_for_match(&ctx.db, &team_id, &match_id, kind.table(), &item_id)
+        .await
+        .map_err(authz::server_err)
 }
 
 /// Create or update the next match (any member).
@@ -252,6 +319,35 @@ fn plural(n: usize, one: &str, many: &str) -> String {
         format!("1 {one}")
     } else {
         format!("{n} {many}")
+    }
+}
+
+/// M159: `game` for a link, only for a series (a Bo1 has no game number).
+fn series_game(format: &str, game: i32) -> Option<i32> {
+    (crate::models::match_day::game_count(format) > 1).then_some(game)
+}
+
+/// M159: "Start a draft" from the match thread: the draft page prefills the
+/// opponent and a name and stamps the match on the first save.
+pub fn thread_draft_href(
+    m: &crate::models::match_day::ScheduledMatch,
+    game: Option<i32>,
+) -> String {
+    let mut href = format!("/draft?match_id={}", m.id);
+    if let Some(o) = &m.opponent_id {
+        href.push_str(&format!("&opponent_id={o}"));
+    }
+    if let Some(g) = game {
+        href.push_str(&format!("&game={g}"));
+    }
+    href
+}
+
+/// M159: the match stamp (and game) carried onward by a plan or review link.
+fn thread_suffix(m: &crate::models::match_day::ScheduledMatch, game: Option<i32>) -> String {
+    match game {
+        Some(g) => format!("&match_id={}&game={g}", m.id),
+        None => format!("&match_id={}", m.id),
     }
 }
 
@@ -317,7 +413,10 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
             })
             .status("None yet");
         if md.brief.is_some() {
-            s = s.link("/draft", "Start a draft");
+            s = s.link(
+                thread_draft_href(m, series_game(&m.format, 1)),
+                "Start a draft",
+            );
         }
         s
     } else {
@@ -343,7 +442,11 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
                 s = s
                     .detail(format!("Plan the game from \u{201c}{}\u{201d}.", d.name))
                     .link(
-                        format!("/game-plan?draft_id={}", d.id),
+                        format!(
+                            "/game-plan?draft_id={}{}",
+                            d.id,
+                            thread_suffix(m, series_game(&m.format, 1))
+                        ),
                         "Write the game plan",
                     );
             }
@@ -378,23 +481,60 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
             .link("/action-items", "Go through them")
     };
 
-    let review = match (&md.review_after, started) {
-        (Some(r), _) => PrepStep::new("After the game: review", PrepState::Done)
-            .detail("The review of this match is written.")
+    // M159: the review step counts only reviews stamped to this match, game
+    // by game for a series. A game counts as played when it has a stamped
+    // draft or review; when none does, game 1 is required. The step is done
+    // only when every played game has a review (`review_games`). A stamped
+    // review without a game number counts as game 1.
+    let reviewed: Vec<i32> = if md.reviewed_games.is_empty() && md.review_after.is_some() {
+        vec![1]
+    } else {
+        md.reviewed_games.clone()
+    };
+    let games = review_games(&m.format, &md.played_games, &reviewed);
+    let complete = reviews_complete(&games);
+    let series = game_count(&m.format) > 1;
+    let readout = review_readout(&games);
+    let to_write = games
+        .iter()
+        .find(|(_, s)| *s == GameReview::ToDo)
+        .map(|(g, _)| *g)
+        .unwrap_or(1);
+    let review = match (&md.review_after, complete, started) {
+        (Some(r), true, _) => PrepStep::new("After the game: review", PrepState::Done)
+            .detail(if series {
+                readout.clone()
+            } else {
+                "The review of this match is written.".to_string()
+            })
             .status("Written")
             .link(format!("/post-game?review_id={}", r.id), "Open the review"),
-        (None, false) => PrepStep::new("After the game: review", PrepState::Todo)
+        (None, _, false) => PrepStep::new("After the game: review", PrepState::Todo)
             .detail("Write it right after the match, while it is fresh.")
             .status("After the game"),
-        (None, true) => {
+        (written, _, _) => {
+            let carried = thread_suffix(m, series_game(&m.format, to_write));
             let href = match (md.plans.first(), md.drafts.first()) {
-                (Some(p), _) => format!("/post-game?plan_id={}", p.id),
-                (None, Some(d)) => format!("/post-game?draft_id={}", d.id),
-                _ => "/post-game".to_string(),
+                (Some(p), _) => format!("/post-game?plan_id={}{carried}", p.id),
+                (None, Some(d)) => format!("/post-game?draft_id={}{carried}", d.id),
+                _ => format!("/post-game?{}", &carried[1..]),
             };
+            let reviewed_n = games.iter().filter(|(_, s)| *s == GameReview::Done).count();
+            let played_n = games
+                .iter()
+                .filter(|(_, s)| *s != GameReview::NotPlayed)
+                .count();
             PrepStep::new("After the game: review", PrepState::Todo)
-                .detail("The match has started. Review it while it is fresh.")
-                .status("To write")
+                .detail(if series {
+                    readout.clone()
+                } else {
+                    "The match has started. Review it while it is fresh.".to_string()
+                })
+                .status(if written.is_some() {
+                    format!("{reviewed_n} of {played_n} reviewed")
+                } else {
+                    "To write".to_string()
+                })
                 .link(href, "Write the review")
         }
     };
@@ -413,8 +553,14 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
 pub fn HomePage() -> impl IntoView {
     let query = leptos_router::hooks::use_query_map();
     let home = Resource::new(
-        move || query.read().get("guide").as_deref() == Some("1"),
-        get_home,
+        move || {
+            let q = query.read();
+            (
+                q.get("guide").as_deref() == Some("1"),
+                q.get("match_id").filter(|m| !m.trim().is_empty()),
+            )
+        },
+        |(guide, match_id)| get_home(guide, match_id),
     );
     view! {
         <Suspense fallback=|| view! {
@@ -530,6 +676,11 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
     let has_match = next.is_some();
     let team_name = md.team_name.clone();
     let nudge = guide.nudge.clone();
+    let upcoming = md.upcoming.clone();
+    let chosen = md.chosen;
+    let unknown_match = md.unknown_match;
+    // M159: the editor edits the current match, or adds another one.
+    let adding = RwSignal::new(false);
 
     let set_read = Callback::new(move |read: bool| {
         let Some(id) = match_id.clone() else {
@@ -544,16 +695,10 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
     });
 
     let meta = {
-        let next = next.clone();
         let patch = patch.clone();
         move || {
-            let when = next.clone().map(|m| {
-                view! {
-                    <LocalTime iso=m.starts_at.clone() class="figures text-primary" />
-                    <span aria-hidden="true" class="text-muted">"/"</span>
-                    <span>{format_label(&m.format)}</span>
-                }
-            });
+            // The start time and format moved into the field card (M152);
+            // without a match the meta is the team and the patch.
             let patch = patch.clone().map(|p| {
                 view! {
                     <span aria-hidden="true" class="text-muted">"/"</span>
@@ -565,8 +710,11 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
             });
             view! {
                 <span>{team_name.clone()}</span>
-                {when.map(|w| view! { <span aria-hidden="true" class="text-muted">"/"</span> {w} })}
                 {patch}
+                {chosen.then(|| view! {
+                    <span aria-hidden="true" class="text-muted">"/"</span>
+                    <a href="/" class="text-primary underline decoration-outline underline-offset-4 hover:decoration-accent" data-testid="back-to-next-match">"Back to next match"</a>
+                })}
             }
         }
     };
@@ -578,13 +726,36 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                 eyebrow="Match Day"
                 meta=meta
                 actions=move || has_match.then(|| view! {
-                    <div class="hidden md:block">
-                        <Button on_click=Callback::new(move |_| editor_open.set(true)) attr:data-testid="edit-next-match">
+                    <div class="hidden gap-2 md:flex">
+                        <Button
+                            on_click=Callback::new(move |_| {
+                                adding.set(false);
+                                editor_open.set(true);
+                            })
+                            attr:data-testid="edit-next-match"
+                        >
                             "Edit match"
+                        </Button>
+                        <Button
+                            variant=ButtonVariant::Quiet
+                            on_click=Callback::new(move |_| {
+                                adding.set(true);
+                                editor_open.set(true);
+                            })
+                            attr:data-testid="add-another-match"
+                        >
+                            "Add a match"
                         </Button>
                     </div>
                 })
             />
+            {unknown_match.then(|| view! {
+                <div class="mb-6" data-testid="unknown-match">
+                    <crate::components::ui::Callout tone=crate::components::ui::CalloutTone::Info>
+                        "That match is not on your team's schedule. This is the next match."
+                    </crate::components::ui::Callout>
+                </div>
+            })}
             // Phones may add the first match (the empty state's action) but
             // editing an existing one stays a larger-screen task (DESIGN 6.9).
             {has_match.then(|| view! {
@@ -592,6 +763,15 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                     "Read-only on the phone. Edit the match on a larger screen."
                 </p>
             })}
+            {next.clone().map(|m| view! {
+                <FieldCard
+                    starts_at=m.starts_at.clone()
+                    format=m.format.clone()
+                    steps=steps.clone()
+                    heading=if chosen { "Upcoming match" } else { "Next match" }
+                />
+            })}
+            {(!upcoming.is_empty()).then(|| view! { <UpcomingMatches matches=upcoming.clone() /> })}
             {guide.welcome.clone().map(|w| view! { <WelcomePanel welcome=w primary=false on_change=on_change /> })}
             // Match Day has its own primary action (the prep sequence's
             // next step or "Add the next match"): the checklist stays quiet.
@@ -623,11 +803,21 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                         <div class="flex min-w-0 flex-col gap-10">
                             <section aria-labelledby="prep-h" data-prep>
                                 <SectionHeader title="Preparation" id="prep-h" meta=format!("{} of 5 done", steps.iter().filter(|s| s.state == PrepState::Done).count()) />
-                                <PrepSequence label="Preparation for the next match" steps=steps.clone() />
+                                // The field card holds the next step as the page's one
+                                // primary action: the sequence stays quiet (M152).
+                                <PrepSequence label="Preparation for the next match" steps=steps.clone() emphasis=PrepEmphasis::Quiet />
                                 {m.notes.clone().map(|n| view! {
                                     <p class="mt-4 max-w-prose text-body text-secondary"><span class="eyebrow mr-2">"Notes"</span>{n}</p>
                                 })}
                                 {nudge.clone().map(|n| view! { <div class="mt-4"><NudgeLine nudge=n on_change=on_change /></div> })}
+                                // M159: unstamped work against this opponent is
+                                // offered, never counted (atelier card 2d).
+                                {match (&md.brief, md.earlier.is_empty()) {
+                                    (Some(b), false) => Some(view! {
+                                        <EarlierWorkList match_id=m.id.clone() opponent=b.name.clone() items=md.earlier.clone() on_change=on_change />
+                                    }),
+                                    _ => None,
+                                }}
                             </section>
                             <Brief brief=md.brief.clone() viewer_read=viewer_read read_by=m.brief_read_by.len() members=md.member_count set_read=set_read />
                         </div>
@@ -639,8 +829,245 @@ fn MatchDayView(md: MatchDay, guide: HomeGuide, on_change: Callback<()>) -> impl
                     </div>
                 }.into_any(),
             }}
-            <MatchEditor open=editor_open existing=editor_match.get_value() opponents=opponents.get_value() on_saved=on_change />
+            {move || {
+                let add = adding.get();
+                let existing = if add { None } else { editor_match.get_value() };
+                view! { <MatchEditor open=editor_open existing=existing later=add chosen=chosen opponents=opponents.get_value() on_saved=on_change /> }
+            }}
         </PageShell>
+    }
+}
+
+/// "Best of 3, with 2 of 5 prep steps done." (R0 T1-7: the title already
+/// names the opponent.)
+pub fn field_sentence(format: &str, steps: &[PrepStep]) -> String {
+    let done = steps.iter().filter(|s| s.state == PrepState::Done).count();
+    format!(
+        "{}, with {done} of {} prep steps done.",
+        format_label(format),
+        steps.len()
+    )
+}
+
+/// Match Day's field card (M152, M151 references.md field card, R0 fixes
+/// T1-4 and T1-7): eyebrow, one figure (the start time), one sentence (the
+/// format and the prep count, from the team's records), one action (the
+/// prep sequence's next step, the page's only primary button) and the 88 px
+/// Rift inset, ink only, floated top right with the sentence wrapping
+/// beside it.
+///
+/// No team names beside the inset (recipe card E, critique r1 surfaces
+/// ruling 1): a name by a map pins a team to a base the data does not hold
+/// (a best of 3 has no sides), and the page title already faces the teams
+/// ("Scrim vs Riverside Rooks").
+///
+/// A11y: one `<h2>` ("Next match"); the figure is a `<time>`; the inset is
+/// `aria-hidden` (the page title already says who plays); the action is a
+/// real link.
+#[component]
+fn FieldCard(
+    starts_at: String,
+    format: String,
+    steps: Vec<PrepStep>,
+    /// "Next match", or "Upcoming match" for one chosen from the list (M159).
+    #[prop(default = "Next match")]
+    heading: &'static str,
+) -> impl IntoView {
+    let sentence = field_sentence(&format, &steps);
+    let action = steps
+        .iter()
+        .find(|s| s.state == PrepState::Next)
+        .and_then(|s| Some((s.href.clone()?, s.action.clone()?)));
+    view! {
+        <Surface layer=Layer::Ink1 edge=Edge::RuleY pad=Pad::Md tag=SurfaceTag::Section labelled_by="field-h" class="mb-10 max-w-[40rem] flow-root" attr:data-field-card="">
+            <div class="float-right mb-2 ml-4 w-[88px]" aria-hidden="true" data-field-inset>
+                <RiftSketch crop=RiftCrop::Inset ground=RiftGround::Ink1 class="w-[88px]" />
+            </div>
+            <h2 id="field-h" class="eyebrow">{heading}</h2>
+            <p class="mt-2 flex flex-wrap items-baseline gap-x-3">
+                <LocalTime iso=starts_at.clone() style=TimeStyle::Clock class="figures font-medium text-headline text-primary lg:text-display" attr:data-field-figure="" />
+                <LocalTime iso=starts_at style=TimeStyle::Day class="text-label text-muted" />
+            </p>
+            <p class="mt-3 max-w-[60ch] text-reading text-secondary" data-field-sentence>{sentence}</p>
+            {action.map(|(href, label)| view! {
+                <div class="clear-both mt-5 grid sm:block">
+                    <Button href=href variant=ButtonVariant::Primary size=ButtonSize::Touch attr:data-testid="field-next-step">{label}</Button>
+                </div>
+            })}
+        </Surface>
+    }
+}
+
+/// "Bo3" for a stored format.
+fn format_short(format: &str) -> &'static str {
+    match format {
+        "bo3" => "Bo3",
+        "bo5" => "Bo5",
+        _ => "Bo1",
+    }
+}
+
+/// How many upcoming rows show before "Show all".
+const UPCOMING_COLLAPSED: usize = 3;
+
+/// M159: "Earlier work vs Rooks (n)": drafts, plans and reviews against
+/// the match's opponent made before the match thread, each with a link and
+/// a Quiet "Use for this match" that stamps it (`use_for_match`, checked as
+/// the team's records on the server) and reloads Match Day. Never counted
+/// as done; nothing renders when there is none.
+#[component]
+fn EarlierWorkList(
+    match_id: String,
+    opponent: String,
+    items: Vec<crate::models::match_day::EarlierWork>,
+    on_change: Callback<()>,
+) -> impl IntoView {
+    use crate::models::match_day::{earlier_breakdown, WorkKind};
+    let toast = use_context::<ToastContext>().expect("ToastProvider");
+    let busy = RwSignal::new(None::<String>);
+    let n = items.len();
+    let breakdown = earlier_breakdown(&items);
+    let rows = items
+        .into_iter()
+        .map(|e| {
+            let kind_word = match e.kind {
+                WorkKind::Draft => "Draft",
+                WorkKind::Plan => "Plan",
+                WorkKind::Review => "Review",
+            };
+            let href = e.kind.href(&e.id);
+            let label = format!("Use {} for this match", e.name);
+            let id = e.id.clone();
+            let id_busy = e.id.clone();
+            let kind = e.kind.as_str().to_string();
+            let match_id = match_id.clone();
+            let on_use = Callback::new(move |_: leptos::ev::MouseEvent| {
+                if busy.get_untracked().is_some() {
+                    return;
+                }
+                busy.set(Some(id.clone()));
+                let (match_id, kind, id) = (match_id.clone(), kind.clone(), id.clone());
+                leptos::task::spawn_local(async move {
+                    match use_for_match(match_id, kind, id).await {
+                        Ok(()) => {
+                            toast.push.run(Toast::success("Linked to this match."));
+                            on_change.run(());
+                        }
+                        Err(e) => {
+                            busy.set(None);
+                            toast
+                                .push
+                                .run(Toast::error(format!("Could not link it: {e}")));
+                        }
+                    }
+                });
+            });
+            view! {
+                <li class="flex min-h-11 items-center justify-between gap-3 border-b border-rule py-1" data-testid="earlier-work">
+                    <a href=href class="min-w-0 truncate text-body text-primary underline decoration-outline underline-offset-4 hover:decoration-accent">
+                        <span class="text-muted">{kind_word} ": "</span>{e.name.clone()}
+                    </a>
+                    // From md the quiet button's padding is pulled back so its
+                    // label ends on the edge of the count caption above (on
+                    // phones the page gutter has no room for it).
+                    <div class="shrink-0 md:-mr-3">
+                        <Button
+                            variant=ButtonVariant::Quiet
+                            size=ButtonSize::Touch
+                            aria_label=label
+                            loading=Signal::derive(move || busy.get().as_deref() == Some(id_busy.as_str()))
+                            on_click=on_use
+                            attr:data-testid="use-for-match"
+                        >
+                            "Use for this match"
+                        </Button>
+                    </div>
+                </li>
+            }
+        })
+        .collect_view();
+    view! {
+        <section aria-labelledby="earlier-h" class="mt-6" data-earlier>
+            <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-rule pb-2">
+                <h3 id="earlier-h" class="text-label font-medium text-secondary">{format!("Earlier work vs {opponent} ({n})")}</h3>
+                <span class="text-caption text-muted">{breakdown}</span>
+            </div>
+            <p class="mt-2 text-caption text-muted">"Made before this match. It counts in the steps above once you use it for this match."</p>
+            <ul class="mt-1">{rows}</ul>
+        </section>
+    }
+}
+
+/// M159, recipe card 1: the team's other upcoming matches under the
+/// current one, a ruled list (time · kind · format · opponent). Three rows,
+/// then "Show all (n)". Each row is a plain link to `/?match_id=`, which
+/// makes that match the current view.
+///
+/// A11y: a `<nav>` labelled "Upcoming matches"; each row is one link whose
+/// name reads its time, kind, format ("best of 3") and opponent; rows are
+/// at least 44 px tall below `md`; "Show all" carries `aria-expanded` and
+/// `aria-controls`.
+#[component]
+fn UpcomingMatches(matches: Vec<crate::models::match_day::UpcomingMatch>) -> impl IntoView {
+    let total = matches.len();
+    let expanded = RwSignal::new(false);
+    let rows = matches
+        .into_iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let href = format!("/?match_id={}", m.id);
+            let kind = if m.kind == "match" { "Official" } else { "Scrim" };
+            let tone = if m.kind == "match" {
+                crate::components::ui::BadgeTone::Info
+            } else {
+                crate::components::ui::BadgeTone::Neutral
+            };
+            let opponent = m.opponent_name.clone();
+            let confirmed = m.confirmed;
+            let folded = i >= UPCOMING_COLLAPSED;
+            view! {
+                <li class="border-b border-rule" class:hidden=move || folded && !expanded.get()>
+                    <a
+                        href=href
+                        class="flex min-h-11 flex-col justify-center gap-1 py-2 hover:bg-ink-1 md:grid md:min-h-8 md:grid-cols-[10rem_5rem_4rem_minmax(0,1fr)_auto] md:items-center md:gap-3"
+                        data-testid="upcoming-match"
+                    >
+                        <LocalTime iso=m.starts_at.clone() style=TimeStyle::When class="text-label font-semibold text-primary" />
+                        <span class="flex min-w-0 items-center gap-2 md:contents">
+                            <span><crate::components::ui::Badge tone=tone>{kind}</crate::components::ui::Badge></span>
+                            <span><crate::components::ui::Badge label=format_label(&m.format).to_string()>{format_short(&m.format)}</crate::components::ui::Badge></span>
+                            {match opponent {
+                                Some(o) => view! { <span class="min-w-0 truncate text-body text-secondary">"vs " {o}</span> }.into_any(),
+                                None => view! { <span class="min-w-0 truncate text-body text-muted">"No opponent yet"</span> }.into_any(),
+                            }}
+                        </span>
+                        {confirmed.map(|n| view! {
+                            <span class="figures text-caption text-secondary">{format!("{n} confirmed")}</span>
+                        })}
+                    </a>
+                </li>
+            }
+        })
+        .collect_view();
+    view! {
+        <nav aria-labelledby="upcoming-h" class="mb-10 max-w-[40rem]" data-testid="upcoming-matches">
+            <SectionHeader title="Upcoming matches" level=HeadingLevel::H3 id="upcoming-h" meta=total.to_string() />
+            <ul id="upcoming-list" class="border-t border-rule">{rows}</ul>
+            {(total > UPCOMING_COLLAPSED).then(|| view! {
+                <div class="mt-2">
+                    <Button
+                        variant=ButtonVariant::Quiet
+                        size=ButtonSize::Touch
+                        on_click=Callback::new(move |_| expanded.update(|e| *e = !*e))
+                        attr:aria-expanded=move || expanded.get().to_string()
+                        attr:aria-controls="upcoming-list"
+                        attr:data-testid="upcoming-show-all"
+                    >
+                        {move || if expanded.get() { "Show fewer".to_string() } else { format!("Show all ({total})") }}
+                    </Button>
+                </div>
+            })}
+        </nav>
     }
 }
 
@@ -847,6 +1274,13 @@ fn Form(md: MatchDay) -> impl IntoView {
 fn MatchEditor(
     open: RwSignal<bool>,
     existing: Option<crate::models::match_day::ScheduledMatch>,
+    /// Adding a match while one is already next (M159): "Add a match".
+    #[prop(optional)]
+    later: bool,
+    /// The match shown was chosen from the upcoming list (`/?match_id=`):
+    /// the editor edits that match, "Edit this match" (M159).
+    #[prop(optional)]
+    chosen: bool,
     opponents: Vec<LinkRef>,
     on_saved: Callback<()>,
 ) -> impl IntoView {
@@ -955,7 +1389,7 @@ fn MatchEditor(
         <Dialog
             id="match-editor"
             open=open
-            title=if editing { "Edit the next match" } else { "Add the next match" }
+            title=if editing && chosen { "Edit this match" } else if editing { "Edit the next match" } else if later { "Add a match" } else { "Add the next match" }
             description="Times are in your own time zone."
             dismiss_on_scrim=false
             footer=move || view! {
@@ -1029,6 +1463,7 @@ mod tests {
                 opponent_name: Some("Rooks".into()),
                 notes: None,
                 brief_read_by: vec![],
+                series_id: None,
             }),
             brief: Some(OpponentBrief {
                 id: "opponent:o".into(),
@@ -1042,6 +1477,9 @@ mod tests {
             drafts: vec![],
             plans: vec![],
             review_after: None,
+            played_games: vec![],
+            reviewed_games: vec![],
+            earlier: vec![],
             open_items: vec![],
             open_item_count: 0,
             last_review: None,
@@ -1049,11 +1487,33 @@ mod tests {
             patch: None,
             opponents: vec![],
             now: now.to_rfc3339(),
+            upcoming: vec![],
+            chosen: false,
+            unknown_match: false,
         }
     }
 
     fn states(steps: &[PrepStep]) -> Vec<PrepState> {
         steps.iter().map(|s| s.state).collect()
+    }
+
+    #[test]
+    fn the_field_sentence_counts_done_steps_from_the_records() {
+        let mut m = md(5);
+        // Format bo3, only "Open action items" done.
+        assert_eq!(
+            field_sentence("bo3", &prep_steps(&m)),
+            "Best of 3, with 1 of 5 prep steps done."
+        );
+        m.next
+            .as_mut()
+            .unwrap()
+            .brief_read_by
+            .push("user:me".into());
+        assert_eq!(
+            field_sentence("bo3", &prep_steps(&m)),
+            "Best of 3, with 2 of 5 prep steps done."
+        );
     }
 
     #[test]
@@ -1080,7 +1540,11 @@ mod tests {
         });
         let s = prep_steps(&m);
         assert_eq!(states(&s), vec![Done, Done, Next, Done, Todo]);
-        assert_eq!(s[2].href.as_deref(), Some("/game-plan?draft_id=draft:d"));
+        // M159: the plan link carries the match and the game onward.
+        assert_eq!(
+            s[2].href.as_deref(),
+            Some("/game-plan?draft_id=draft:d&match_id=scheduled_match:1&game=1")
+        );
         m.plans.push(LinkRef {
             id: "game_plan:p".into(),
             name: "P".into(),
@@ -1113,12 +1577,82 @@ mod tests {
         });
         let s = prep_steps(&m);
         assert_eq!(states(&s), vec![Done, Done, Done, Done, Next]);
-        assert_eq!(s[4].href.as_deref(), Some("/post-game?plan_id=game_plan:p"));
+        assert_eq!(
+            s[4].href.as_deref(),
+            Some("/post-game?plan_id=game_plan:p&match_id=scheduled_match:1&game=1")
+        );
         m.review_after = Some(LinkRef {
             id: "post_game_learning:r".into(),
             name: "R".into(),
         });
         assert_eq!(states(&prep_steps(&m)), vec![Done, Done, Done, Done, Done]);
+    }
+
+    #[test]
+    fn a_series_review_step_reads_game_by_game() {
+        let mut m = md(-1);
+        m.played_games = vec![1, 2];
+        m.reviewed_games = vec![1];
+        m.review_after = Some(LinkRef {
+            id: "post_game_learning:r".into(),
+            name: "R".into(),
+        });
+        let s = prep_steps(&m);
+        assert_ne!(s[4].state, PrepState::Done);
+        assert_eq!(
+            s[4].detail.as_deref(),
+            Some("G1 done \u{b7} G2 to do \u{b7} G3 not played")
+        );
+        assert_eq!(s[4].status.as_deref(), Some("1 of 2 reviewed"));
+        assert_eq!(
+            s[4].href.as_deref(),
+            Some("/post-game?match_id=scheduled_match:1&game=2")
+        );
+        m.reviewed_games = vec![1, 2];
+        let s = prep_steps(&m);
+        assert_eq!(s[4].state, PrepState::Done);
+        assert_eq!(
+            s[4].detail.as_deref(),
+            Some("G1 done \u{b7} G2 done \u{b7} G3 not played")
+        );
+    }
+
+    #[test]
+    fn earlier_work_never_makes_a_step_done() {
+        use crate::models::match_day::{EarlierWork, WorkKind};
+        let mut m = md(-1);
+        m.earlier = vec![
+            EarlierWork {
+                kind: WorkKind::Draft,
+                id: "draft:old".into(),
+                name: "Old".into(),
+            },
+            EarlierWork {
+                kind: WorkKind::Review,
+                id: "post_game_learning:old".into(),
+                name: "Old review".into(),
+            },
+        ];
+        let s = prep_steps(&m);
+        assert_eq!(s[1].state, PrepState::Todo);
+        assert_ne!(s[4].state, PrepState::Done);
+        assert_eq!(s[4].status.as_deref(), Some("To write"));
+    }
+
+    #[test]
+    fn start_a_draft_carries_the_match() {
+        let m = md(5);
+        assert_eq!(
+            prep_steps(&m)[1].href.as_deref(),
+            Some("/draft?match_id=scheduled_match:1&opponent_id=opponent:o&game=1")
+        );
+        // A Bo1 has no game number.
+        let mut m = md(5);
+        m.next.as_mut().unwrap().format = "bo1".into();
+        assert_eq!(
+            prep_steps(&m)[1].href.as_deref(),
+            Some("/draft?match_id=scheduled_match:1&opponent_id=opponent:o")
+        );
     }
 
     #[test]

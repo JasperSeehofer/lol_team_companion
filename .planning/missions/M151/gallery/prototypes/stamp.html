@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Result stamp prototype</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; background: var(--color-page); color: var(--color-primary); font-family: var(--font-sans); }
+  main { max-width: 44rem; margin: 0 auto; padding: calc(var(--spacing) * 8) calc(var(--spacing) * 4); }
+  h1 { font-family: var(--font-display); font-weight: 600; margin: calc(var(--spacing) * 2) 0; }
+  .lede { color: var(--color-secondary); max-width: 60ch; margin: 0 0 calc(var(--spacing) * 6); }
+
+  .results { display: grid; gap: calc(var(--spacing) * 3); }
+  .result { display: flex; align-items: center; gap: calc(var(--spacing) * 4);
+            background: var(--color-ink-1); border-top: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule);
+            padding: calc(var(--spacing) * 4); }
+  .result p { margin: 0; color: var(--color-primary); }
+  .side { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1.5); color: var(--color-secondary); white-space: nowrap; }
+  .sm { width: calc(var(--spacing) * 2.5); height: calc(var(--spacing) * 2.5); flex: none; display: inline-block; }
+  .sm.blue { background: var(--color-side-blue); border-radius: 50%; } /* lint:allow(css-round) SideMarker: blue is a circle */
+  .sm.red { background: var(--color-side-red); border-radius: 1px; }
+
+  /* ResultGlyph, proposed GlyphSize::Lg (recipe card "Post-game result stamp"). */
+  .stamp { flex: none; display: inline-grid; place-items: center; width: 64px; height: 64px; border-radius: 0;
+           border: 1.5px solid var(--color-loss); font-family: var(--font-display); font-weight: 600; font-size: 40px; line-height: 1; }
+  .stamp[data-result="Win"] { background: var(--color-win); border-color: var(--color-win); color: var(--color-win-ink); }
+  .stamp[data-result="Loss"] { background: transparent; color: var(--color-loss); }
+  @media (min-width: 768px) { .stamp { width: 80px; height: 80px; font-size: 48px; } }
+
+  .actions { margin-top: calc(var(--spacing) * 5); }
+  button { font: inherit; height: calc(var(--spacing) * 8); padding: 0 calc(var(--spacing) * 3); border-radius: var(--radius-ctl);
+           border: 1px solid var(--color-accent); background: var(--color-accent); color: var(--color-accent-ink); cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">M151 prototype, post-game review</p>
+  <h1 class="text-headline">Result stamp</h1>
+  <p class="lede text-reading">One stamp per review page, beside one sentence. Win is a filled teal square, loss a hollow outline in the neutral loss tone: never red, never the side colours.</p>
+
+  <div id="stamps" class="results">
+    <div class="result">
+      <span class="stamp" role="img" aria-label="Win" data-result="Win"><span aria-hidden="true">W</span></span>
+      <p class="text-reading">Won in <span class="figures">31:20</span> on <span class="side"><span class="sm blue" aria-hidden="true"></span>blue side</span>.</p>
+    </div>
+    <div class="result">
+      <span class="stamp" role="img" aria-label="Loss" data-result="Loss"><span aria-hidden="true">L</span></span>
+      <p class="text-reading">Lost in <span class="figures">27:05</span> on <span class="side"><span class="sm red" aria-hidden="true"></span>red side</span>.</p>
+    </div>
+  </div>
+  <div class="actions"><button type="button">Write the review</button></div>
+</main>
+</body>
+</html>

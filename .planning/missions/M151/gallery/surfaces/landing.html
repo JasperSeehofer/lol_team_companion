@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing still</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="surfaces.css">
+<style>
+  /* closed_beta.rs Landing: PageShell Standard, pt-12 sm:pt-24 */
+  .landing { padding-top: calc(var(--spacing) * 12); }
+  .hero-title { margin-top: calc(var(--spacing) * 4); font-family: var(--font-display); font-size: var(--text-headline);
+    line-height: var(--text-headline--line-height); font-weight: 600; letter-spacing: -0.025em; color: var(--color-primary); }
+  .lede { margin-top: calc(var(--spacing) * 5); max-width: 42rem; color: var(--color-secondary); }
+  .actions { margin-top: calc(var(--spacing) * 8); display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--spacing) * 3); }
+  .hero-art { margin-top: calc(var(--spacing) * 10); width: 100%; aspect-ratio: 1; }
+  .loop { margin-top: calc(var(--spacing) * 16); display: grid; gap: calc(var(--spacing) * 6) calc(var(--spacing) * 8);
+    border-top: 1px solid var(--color-rule); padding-top: calc(var(--spacing) * 8); }
+  .loop li { display: flex; flex-direction: column; gap: calc(var(--spacing) * 1.5); }
+  .loop .t { font-family: var(--font-display); font-size: var(--text-heading); line-height: var(--text-heading--line-height); font-weight: 600; color: var(--color-primary); }
+  @media (min-width: 640px) { .loop { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1024px) {
+    .nav-in { padding: 0 calc(var(--spacing) * 8); }
+    .shell { padding-left: calc(var(--spacing) * 8); padding-right: calc(var(--spacing) * 8); }
+    .landing { padding-top: calc(var(--spacing) * 20); }
+    .hero { display: grid; grid-template-columns: 5fr 7fr; gap: calc(var(--spacing) * 12); align-items: start; }
+    .hero-title { font-size: var(--text-display); line-height: var(--text-display--line-height); }
+    .hero-art { margin-top: 0; width: 560px; justify-self: end; }
+    .loop { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header class="nav"><div class="nav-in"><a class="wordmark" href="#">Team Companion</a></div></header>
+<main class="shell w-wide landing">
+  <section class="hero">
+    <div>
+      <p class="eyebrow">Closed beta · by invitation</p>
+      <h1 class="hero-title">The coaching workspace for one team.</h1>
+      <p class="lede text-reading">Team Companion keeps a team's scouting, drafts, game plans and reviews in one loop, so every scrim adds to what the team knows.</p>
+      <div class="actions">
+        <a class="btn btn-primary btn-lg" href="#">Sign in</a>
+        <span class="text-body c-muted">Have an invite link? Open it to create your account.</span>
+      </div>
+    </div>
+    <figure class="hero-art" data-art="hero" data-label="Your team" aria-hidden="true"></figure>
+  </section>
+  <ol class="loop">
+    <li><span class="figures text-caption c-muted">01</span><span class="t">Scout</span><span class="text-body c-secondary">Dossiers on every opponent, with the evidence behind each finding.</span></li>
+    <li><span class="figures text-caption c-muted">02</span><span class="t">Draft</span><span class="text-body c-secondary">Plan and branch the draft; every suggestion says why it fits.</span></li>
+    <li><span class="figures text-caption c-muted">03</span><span class="t">Plan</span><span class="text-body c-secondary">Write the game plan the five of you will actually play.</span></li>
+    <li><span class="figures text-caption c-muted">04</span><span class="t">Review</span><span class="text-body c-secondary">Turn each game into lessons and action items for the next prep.</span></li>
+  </ol>
+</main>
+<script src="surface.js"></script>
+</body>
+</html>

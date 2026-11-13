@@ -35,16 +35,14 @@ export function filterRealErrors(errors: string[]): string[] {
 }
 
 /**
- * Console errors that say nothing about the app: favicon/asset 404s and
- * ERR_TUNNEL_CONNECTION_FAILED, which a sandbox proxy reports for blocked
- * third-party hosts (e.g. CommunityDragon role icons). Never seen in CI.
+ * Console errors that say nothing about the app: favicon/asset 404s.
+ * (M152: the old ERR_TUNNEL_CONNECTION_FAILED allowance for third-party
+ * hosts such as CommunityDragon is gone. Role and objective icons come from
+ * the app's own /img/ui/ route, so a blocked third-party request is now a
+ * regression, not noise.)
  */
 export function isEnvironmentNoise(e: string): boolean {
-  return (
-    e.includes("favicon") ||
-    e.includes("404 (Not Found)") ||
-    e.includes("ERR_TUNNEL_CONNECTION_FAILED")
-  );
+  return e.includes("favicon") || e.includes("404 (Not Found)");
 }
 
 /**

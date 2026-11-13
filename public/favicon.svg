@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<!-- Favicon candidate from the T1 field sketch: our base (chalk circle, bottom left), the far base (square), the diagonal between, inside the sheet frame.
+     A favicon cannot read CSS tokens, so the colours are page, primary and accent converted to hex by tools/oklch.py. -->
+<rect width="32" height="32" rx="4" fill="#081415"/> <!-- lint:allow(hex) token page as hex: a favicon cannot read CSS -->
+<g fill="none" stroke="#e9f0ef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"> <!-- lint:allow(hex) token primary as hex -->
+<path d="M12.5,19.5 L19.5,12.5"/>
+<path d="M20,8 H24 V12 H20 Z"/>
+<path d="M4,4 H28 V28 H4 Z" stroke-width="1.5" stroke-opacity="0.7"/>
+</g>
+<circle cx="10" cy="22" r="2.5" fill="none" stroke="#e7e798" stroke-width="2"/> <!-- lint:allow(hex) token accent as hex -->
+</svg>

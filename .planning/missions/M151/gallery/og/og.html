@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1200, initial-scale=1">
+<title>Open Graph card</title>
+<!-- OG card 1200x630 (recipe card "OG"): ?t=t1|t2|t3 picks ../surfaces/art/<t>.json
+     and the SVG (and optional css) it names, so T2/T3 drop in unchanged.
+     ?v=share&team=Northgate%20Academy is the share-link variant.
+     Capture: node G/tools/capture.mjs "G/og/og.html?t=t1" G/out/og-t1.png --og -->
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../surfaces/surfaces.css">
+<style>
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: var(--color-page); }
+  .card { position: relative; width: 1200px; height: 630px; overflow: hidden; }
+  /* Left 640: name + one sentence, 64 margin, vertically centred. */
+  .words { position: absolute; left: 64px; top: 64px; bottom: 64px; width: 576px;
+    display: flex; flex-direction: column; justify-content: center; gap: calc(var(--spacing) * 6); z-index: 1; }
+  .name { font-family: var(--font-display); font-weight: 600; font-size: 72px; line-height: 1.05; letter-spacing: -0.02em; color: var(--color-primary); }
+  .line { font-family: var(--font-sans); font-size: 40px; line-height: 1.25; color: var(--color-secondary); max-width: 15em; }
+  .over { font-family: var(--font-display); font-weight: 600; font-size: 36px; line-height: 1; color: var(--color-secondary); }
+  .team { font-family: var(--font-display); font-weight: 600; font-size: 72px; line-height: 1.05; letter-spacing: -0.02em; color: var(--color-primary); }
+  /* Right 560: the sketch, a 600 square from x 720 that bleeds 120 px (the far base falls outside) off the right edge;
+     its corners on the left stay inside the frame so it reads as a sheet, not a divider. */
+  [data-art="og"] { position: absolute; left: 720px; top: 15px; width: 600px; height: 600px; --ink-w: 2px; }
+  [data-art="og"] .ticks { display: none; }
+  [data-art="og"] .chalk path { stroke-width: 2px; }
+  [data-art="og"] .art-label { font-family: var(--font-mono); font-size: 32px; line-height: 1; font-weight: 500;
+    letter-spacing: 0.06em; text-transform: uppercase; }
+  /* Share variant: the label names the team ("NORTHGATE ACADEMY", 17 caps); 26 px keeps it inside the centre 1100 px. */
+  html[data-v="share"] [data-art="og"] .art-label { font-size: 26px; letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="words" id="words">
+    <p class="name">Team Companion</p>
+    <p class="line">Scouting, drafts, game plans and reviews in one loop.</p>
+  </div>
+  <figure data-art="og" aria-hidden="true"></figure>
+</main>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const t = q.get("t") || "t1";
+  const share = q.get("v") === "share";
+  const team = q.get("team") || "Northgate Academy";
+  document.documentElement.dataset.t = t;
+  if (share) document.documentElement.dataset.v = "share";
+  if (share) {
+    // Share-link variant: the product name stays, the team leads, one sentence.
+    const w = document.getElementById("words");
+    w.innerHTML = "";
+    const p = (cls, text) => Object.assign(document.createElement("p"), { className: cls, textContent: text });
+    w.append(p("over", "Team Companion"), p("team", team), p("line", "A game plan, shared read-only with a link."));
+  }
+  const ART = "../surfaces/art/";
+  const cfg = await (await fetch(`${ART}${t}.json`)).json();
+  if (cfg.css) document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: ART + cfg.css }));
+  const box = document.querySelector('[data-art="og"]');
+  box.insertAdjacentHTML("afterbegin", await (await fetch(ART + cfg.svg)).text());
+  const svg = box.querySelector("svg");
+  if (cfg.crops?.og) { svg.setAttribute("viewBox", cfg.crops.og); svg.setAttribute("preserveAspectRatio", "xMidYMid slice"); }
+  const vb = svg.getAttribute("viewBox").split(/\s+/).map(Number);
+  if (cfg.label) {
+    const n = Object.assign(document.createElement("span"), { className: "art-label", textContent: share ? team : "Your team" });
+    n.style.left = `${((cfg.label.x - vb[0]) / vb[2]) * 100}%`;
+    n.style.top = `${((cfg.label.y - vb[1]) / vb[3]) * 100}%`;
+    box.append(n);
+  }
+  if (cfg.css) await new Promise((r) => { const l = document.head.lastElementChild; l.onload = l.onerror = r; });
+  document.documentElement.dataset.ready = "1";
+})();
+</script>
+</body>
+</html>

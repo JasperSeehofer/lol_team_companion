@@ -38,13 +38,12 @@ for (const { path, title } of PUBLIC_PAGES) {
       "isn't endorsed by Riot Games"
     );
 
-    // No JS errors. Generic 404s are ignored because third-party assets
-    // (e.g. CommunityDragon role icons) can be unreachable in sandboxed
-    // environments; the stylesheet itself is checked in a dedicated test below.
+    // No JS errors. Generic 404s are ignored (the stylesheet itself is
+    // checked in a dedicated test below). There is no third-party allowance:
+    // icons come from the app's own /img/ui/ route (M152).
     expect(errors.filter((e) =>
       !e.includes("favicon") &&
-      !e.includes("404 (Not Found)") &&
-      !e.includes("ERR_TUNNEL_CONNECTION_FAILED")
+      !e.includes("404 (Not Found)")
     )).toHaveLength(0);
   });
 }

@@ -8,6 +8,32 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Milestone M159: Match thread (2026-10-18)
+
+Planned for the second round of this milestone, not built yet: creating the series from a best of 3 or 5 match, RSVP for a match, and a share link for the opponent brief.
+
+#### Added
+- Drafts, game plans and reviews can now remember the scheduled match they were made for (and, for a best-of series, which game). Only your own team's matches can be chosen. Deleting a match never deletes the work made for it: the game plan and review pages then say "The match this was made for was deleted."
+- Match Day lists your team's other upcoming scrims and matches under the current one (three at first, then "Show all"). Open one to make it the current view; "Back to next match" returns. "Add a match" adds a later match while one is already next.
+- "Start a draft", "Write the game plan" and "Write the review" on Match Day now open for that match: the draft comes with the opponent chosen and a name like "vs Rooks · Sun 19:00 · G1", and saving links the draft, plan or review to the match (and game). A plan or review started from a linked draft or plan is linked too. A link naming a match that is not on your team's schedule opens an ordinary new draft, plan or review and says so. Editing a match opened from the upcoming list now reads "Edit this match".
+- Match Day's preparation steps now count only the drafts, plans and reviews made for that match, so a rematch against the same team starts fresh. For a best of 3 or 5 the review step reads game by game ("G1 done · G2 to do · G3 not played") and is done once every game played has a review. Drafts, plans and reviews against the same opponent from before appear as "Earlier work vs <opponent>", each with "Use for this match" to link it.
+- A review now says which game it is of in words: pick the game from a list of your team's synced games (the date, your champions and win or loss; games where three or more of you played together, newest first, and games near the scheduled match first when the review was opened from it), or "Not in the list (scrim / custom)" for a scrim or custom game, which saves without a synced game. A match's page and each game on Team games have "Review as a team" ("Open team review" once the team has one), which opens the review with that game chosen. Riot match ids are no longer shown on the review page.
+
+### Identity, round 1 (2026-10-17)
+
+#### Added
+- Link previews: a link to Team Companion pasted into a chat app shows a card with the name, a short description and an image. A shared link's card only says that it is a shared, read-only page: never the team, the plan or the player, and it looks the same whether the link still works or not. The browser tab has its own icon, and phone browsers colour their bar to match the app.
+- Role labels now show the lane's position icon beside the letters (TOP, JGL, MID, BOT, SUP), in the label's own colour (never the highlight colour). The icons come from Team Companion itself, never from another site; screen readers still hear the role's name, and a guessed role keeps its dashed underline and "?".
+- The footer, the privacy page and the terms now also carry the notice Riot's "Legal Jibber Jabber" policy asks for (that Team Companion was made under that policy using assets owned by Riot Games, and that Riot Games does not endorse it), word for word, beside Riot's existing disclaimer, which stays.
+- For admins: the design gallery (/design) has a "Drawn Rift" section, the map as Team Companion draws it from measured coordinates (no picture of the game's map is used): a sketch with lanes, river, bases, Baron and Dragon and bush marks, and, zoomed in to 2x or 4x, a survey with exact wall outlines, bushes, towers, inhibitors, pits and camps. How each coordinate was measured is in docs/rift-schematic.md.
+
+#### Changed
+- The landing and the closed-beta page open on the drawn Rift, with "Your team" marked at a base, beside one headline, one sentence and one way in (Sign in). On a phone the drawing comes after the button, still on the first screen.
+- A shared game plan, review or player card opens under a strip of the drawn Rift. For a game plan whose draft says which side the team drafted on, the strip looks at that side's base and marks it "Ours"; otherwise it shows the bridge at mid with no mark. It never names the team or anything from the link, and a link that no longer opens anything gets no mark.
+- A shared game plan shows each team's five champions in one row that never breaks onto a second line on any screen size (the icons get smaller first), with their names written underneath.
+- Match Day opens with the next match as a card: the start time large, the day beside it, one sentence with the format and how many of the five prep steps are done ("Best of 3, with 2 of 5 prep steps done."), and the next prep step as the page's one main button, beside a small drawing of the Rift (lanes, river and the two bases; the title already names both teams). The preparation list below keeps every step, with the next one outlined and in plain colours, so the card's button is the only highlighted thing. The start time and format moved from the line under the title into the card.
+- The game plan's step list and the getting-started checklist mark their next step with an outline in plain colours instead of the highlight colour, so each page's own main button stays the one highlighted action.
+
 ### First patch, round 2 (2026-10-17)
 
 #### Changed

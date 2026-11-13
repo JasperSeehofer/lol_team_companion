@@ -1,0 +1,86 @@
+/* Shared surface skeleton for the M151 identity stills (T1/T2/T3 swap only
+   the art layer). Mirrors the app primitives' classes with tokens.css values:
+   nav (nav.rs), PageShell/PageHeader/SectionHeader (layout.rs), Button
+   (button.rs), PrepSequence (prep.rs), ChampionAvatar monogram (avatar.rs). */
+
+* { box-sizing: border-box; }
+p, h1, h2, h3, ol, ul, figure { margin: 0; padding: 0; }
+ol, ul { list-style: none; }
+a { color: inherit; text-decoration: none; }
+
+.c-primary { color: var(--color-primary); }
+.c-secondary { color: var(--color-secondary); }
+.c-muted { color: var(--color-muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* nav.rs: sticky header, bg-ink-1, h-12, wordmark */
+.nav { border-bottom: 1px solid var(--color-rule); background: var(--color-ink-1); }
+.nav-in { max-width: 80rem; margin: 0 auto; padding: 0 calc(var(--spacing) * 4); height: calc(var(--spacing) * 12);
+  display: flex; align-items: center; justify-content: space-between; gap: calc(var(--spacing) * 6); }
+.wordmark { font-family: var(--font-display); font-size: var(--text-reading); font-weight: 700; letter-spacing: -0.01em; color: var(--color-primary); }
+
+/* layout.rs PageShell */
+.shell { margin: 0 auto; width: 100%; padding: calc(var(--spacing) * 6) calc(var(--spacing) * 4) calc(var(--spacing) * 16); }
+.w-standard { max-width: 64rem; }
+.w-reading { max-width: 48rem; }
+.w-wide { max-width: 72rem; }
+
+/* layout.rs PageHeader */
+.ph { padding-bottom: calc(var(--spacing) * 4); margin-bottom: calc(var(--spacing) * 6); border-bottom: 1px solid var(--color-rule); }
+.ph h1 { margin-top: calc(var(--spacing) * 2); font-family: var(--font-display); font-size: var(--text-headline); line-height: var(--text-headline--line-height);
+  font-weight: 600; letter-spacing: -0.02em; color: var(--color-primary); }
+.ph .meta { margin-top: calc(var(--spacing) * 2); display: flex; flex-wrap: wrap; gap: calc(var(--spacing) * 1) calc(var(--spacing) * 3); color: var(--color-secondary); }
+/* SectionHeader (h2) */
+.sh { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: calc(var(--spacing) * 2) calc(var(--spacing) * 4); margin-bottom: calc(var(--spacing) * 4); }
+.sh h2 { font-family: var(--font-display); font-size: var(--text-title); line-height: var(--text-title--line-height); font-weight: 600; letter-spacing: -0.01em; color: var(--color-primary); }
+.sh .meta { color: var(--color-muted); }
+
+/* button.rs: BASE + Primary; sizes Lg (h-10) and Touch (h-11 on phones) */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: calc(var(--spacing) * 2); white-space: nowrap;
+  border-radius: var(--radius-ctl); border: 1px solid transparent; font: inherit; font-weight: 500; background: transparent; cursor: pointer; }
+.btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); font-weight: 600; }
+.btn-quiet { border-color: var(--color-outline); color: var(--color-primary); }
+.btn-lg { height: calc(var(--spacing) * 10); padding: 0 calc(var(--spacing) * 4); font-size: var(--text-body); }
+.btn-sm { height: calc(var(--spacing) * 7); padding: 0 calc(var(--spacing) * 2.5); font-size: var(--text-label); }
+.btn-touch { height: calc(var(--spacing) * 11); padding: 0 calc(var(--spacing) * 4); font-size: var(--text-body); }
+
+/* RoleLabel + mark (mark grid spec: currentColor = secondary, beside the word) */
+.role { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1.5); font-family: var(--font-mono); font-size: var(--text-caption);
+  font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1; color: var(--color-secondary); }
+.mark { display: inline-flex; width: 16px; height: 16px; flex: none; color: var(--color-secondary); }
+.mark svg { width: 16px; height: 16px; display: block; }
+
+/* avatar.rs monogram, AvatarSize::Sm square */
+.mono { display: inline-grid; place-items: center; width: calc(var(--spacing) * 6); height: calc(var(--spacing) * 6); border-radius: var(--radius-ctl);
+  border: 1px solid var(--color-outline); background: var(--color-ink-2); font-size: var(--text-caption); color: var(--color-secondary); font-weight: 500; }
+
+/* ---------- Art layer (the only thing T1/T2/T3 change) ---------- */
+[data-art] { position: relative; display: block; --ink-w: 1px; }
+[data-art] > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+[data-art] .ink path { fill: none; stroke: var(--color-primary); stroke-opacity: 0.7; stroke-width: var(--ink-w);
+  vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+[data-art] .chalk path { fill: none; stroke: var(--color-accent); stroke-width: 1px; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+[data-art] .ticks path { fill: none; stroke: var(--color-muted); stroke-width: 1px; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+[data-art] .ticks { display: none; }
+[data-art] .hatch { shape-rendering: crispEdges; }
+[data-art="share"] .chalk, [data-art="inset"] .chalk { display: none; }
+[data-art="share"], [data-art="inset"] { overflow: hidden; }
+[data-art="share"] > svg, [data-art="inset"] > svg { overflow: hidden; }
+[data-art="share"] .chalk-lead path { fill: none; stroke: var(--color-accent); stroke-width: 1px; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+
+
+.art-label { position: absolute; transform: translateY(-50%); white-space: nowrap; color: var(--color-accent); }
+.art-label.halo { background: var(--color-page); padding: 0 calc(var(--spacing) * 1); }
+.art-label.end { transform: translate(-100%, -50%); }
+.art-mark, .art-tick { position: absolute; display: none; }
+.art-mark { transform: translateY(-50%); align-items: center; gap: calc(var(--spacing) * 1.5); white-space: nowrap; }
+.art-mark.word-left { flex-direction: row-reverse; transform: translate(-100%, -50%); }
+.art-mark .word { font-family: var(--font-mono); font-size: var(--text-caption); color: var(--color-muted); }
+.art-tick { font-family: var(--font-mono); font-size: var(--text-caption); line-height: 1; color: var(--color-muted); transform: translate(-50%, -50%); }
+
+@media (min-width: 1024px) {
+  [data-art="hero"] { --ink-w: 1.25px; }
+  [data-art="hero"] .ticks { display: inline; }
+  [data-art="hero"] .art-mark { display: inline-flex; }
+  [data-art="hero"] .art-tick { display: block; }
+}

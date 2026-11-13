@@ -79,6 +79,7 @@ async fn draft(
         None,
         None,
         None,
+        None,
     )
     .await
 }
@@ -134,6 +135,7 @@ async fn update_draft_keeps_old_actions_when_the_rewrite_fails() {
         None,
         None,
         None,
+        None,
     )
     .await;
     assert!(r.is_err());
@@ -179,6 +181,10 @@ async fn opponent_and_players_are_created_together() {
 
 fn review(t: &str, u: &str, improvements: &[&str]) -> PostGameLearning {
     PostGameLearning {
+        scheduled_match_id: None,
+        series_id: None,
+        game_number: None,
+        scheduled_match_deleted: false,
         draft_deleted: false,
         created_at: None,
         id: None,
@@ -343,6 +349,7 @@ async fn deleting_a_series_unlinks_its_drafts() {
         None,
         Some(series.clone()),
         Some(1),
+        None,
     )
     .await
     .unwrap();

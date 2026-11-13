@@ -1,0 +1,37 @@
+/* T2 engraved contour (recipe card T2): loaded by surface.js for ?t=t2 only.
+   Ground canvas; ordinary contours rule 1 px; the index contour ink at 40 %;
+   intermediate dashed rule 4 on 4 off; index figures 12 px muted, set along
+   the line (the break is in the geometry, see tools/build-t2-contour.py). */
+
+[data-art] > svg .ground { fill: var(--color-canvas); }
+[data-art] > svg .ct path { fill: none; stroke-width: 1px; vector-effect: non-scaling-stroke; stroke-linecap: butt; stroke-linejoin: round; }
+[data-art] > svg .ord path { stroke: var(--color-rule); }
+[data-art] > svg .mid path { stroke: var(--color-rule); stroke-dasharray: 4 4; }
+[data-art] > svg .idx path { stroke: var(--color-primary); stroke-opacity: 0.4; }
+[data-art] > svg .frame path { fill: none; stroke: var(--color-rule); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+[data-art] > svg .idx-lab { font-family: var(--font-mono); font-size: var(--text-caption); font-weight: 500; font-variant-numeric: tabular-nums; fill: var(--color-muted); }
+
+/* Variants: v-n = hero below 1024 px, v-w = hero from 1024 px and the share strip, v-0 = inset. */
+[data-art] > svg .v-n, [data-art] > svg .v-w { display: none; }
+[data-art="hero"] > svg .v-0, [data-art="share"] > svg .v-0 { display: none; }
+[data-art="hero"] > svg .v-n { display: inline; }
+[data-art="share"] > svg .v-w { display: inline; }
+[data-art="share"] > svg .frame, [data-art="inset"] > svg .frame { display: none; }
+
+/* Overlay words sit on the ground with a canvas halo, so contours stop short of them. */
+[data-art] .art-label, [data-art] .art-mark { background: var(--color-canvas); padding: 0 calc(var(--spacing) * 1); }
+[data-art] .art-label.halo { background: var(--color-canvas); }
+/* Spot points: the mark's centre sits on the point, the word beside it. */
+[data-art="hero"] .art-mark { transform: translate(calc(var(--spacing) * -3), -50%); }
+
+/* 390: a 358x240 field (the square's middle band, y 16.48..83.52), at most 4 marks. */
+@media (max-width: 1023.98px) {
+  [data-art="hero"] { clip-path: inset(16.48% 0); margin-top: calc(var(--spacing) * 10 - 16.48%); margin-bottom: -16.48%; }
+  [data-art="hero"] .art-mark:has([data-mark="baron"]),
+  [data-art="hero"] .art-mark:has([data-mark="dragon"]),
+  [data-art="hero"] .art-mark:has([data-mark="mid"]) { display: inline-flex; }
+}
+@media (min-width: 1024px) {
+  [data-art="hero"] > svg .v-n { display: none; }
+  [data-art="hero"] > svg .v-w { display: inline; }
+}

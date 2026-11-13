@@ -10,6 +10,7 @@ use crate::components::ui::{
 };
 use crate::models::draft::Draft;
 use crate::models::game_plan::{GamePlan, PostGameLearning};
+use crate::models::review_pick::ReviewCandidate;
 use crate::pages::navigate::{navigator, replace_url};
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -78,32 +79,42 @@ pub async fn list_drafts_for_postgame() -> Result<Vec<Draft>, ServerFnError> {
         .map_err(authz::server_err)
 }
 
+/// M159 item 5: the synced games a review can be of (three or more current
+/// members played together), newest first; with `match_id` (a scheduled
+/// match of the team, from the thread link) the games near its start come
+/// first. Team-scoped: another team's games and matches answer nothing.
 #[server]
-pub async fn get_recent_match_ids() -> Result<Vec<String>, ServerFnError> {
+pub async fn get_review_candidates(
+    match_id: Option<String>,
+) -> Result<Vec<ReviewCandidate>, ServerFnError> {
     use crate::server::authz;
-    use crate::server::db;
 
     let authz::Ctx { db: surreal, user } = authz::authed().await?;
-
-    let team_id = match db::get_user_team_id(&surreal, &user.id)
-        .await
-        .map_err(authz::server_err)?
-    {
-        Some(id) => id,
-        None => return Ok(Vec::new()),
+    let Some(team_id) = authz::current_team_for(&surreal, &user).await? else {
+        return Ok(Vec::new());
     };
-
-    let rows = db::get_team_match_stats(&surreal, &team_id)
+    crate::server::review_pick::review_candidates(&surreal, &team_id, match_id.as_deref())
         .await
-        .map_err(authz::server_err)?;
+        .map_err(authz::server_err)
+}
 
-    let mut seen = std::collections::HashSet::new();
-    let ids: Vec<String> = rows
-        .into_iter()
-        .filter(|r| seen.insert(r.riot_match_id.clone()))
-        .map(|r| r.riot_match_id)
-        .collect();
-    Ok(ids)
+/// M159 item 5: "Review as a team" on a game: `None` when the game is not
+/// one the viewer's team can review (the action is hidden), else whether
+/// the team already has a review of it.
+#[server]
+pub async fn team_review_state(riot_match_id: String) -> Result<Option<bool>, ServerFnError> {
+    use crate::server::authz;
+
+    let authz::Ctx { db: surreal, user } = authz::authed().await?;
+    let Some(team_id) = authz::current_team_for(&surreal, &user).await? else {
+        return Ok(None);
+    };
+    if riot_match_id.is_empty() || riot_match_id.len() > 32 {
+        return Ok(None);
+    }
+    crate::server::review_pick::team_review_state(&surreal, &team_id, &riot_match_id)
+        .await
+        .map_err(authz::server_err)
 }
 
 /// What a synced team match can answer for a review (M141, report
@@ -252,6 +263,54 @@ async fn check_review_links(
     Ok(())
 }
 
+/// M159: a new review carries the match stamp onward. Without one from the
+/// link, it takes the stamp (and game) of its plan, else of its draft; a
+/// stamped review takes the match's series. The ids were checked as the
+/// team's by `check_review_links`; the stamp is checked again in the DB
+/// layer.
+#[cfg(feature = "ssr")]
+async fn carry_match_stamp(
+    db: &surrealdb::Surreal<surrealdb::engine::local::Db>,
+    team_id: &str,
+    review: &mut PostGameLearning,
+) -> Result<(), ServerFnError> {
+    use crate::server::{authz, db};
+    review.scheduled_match_deleted = false;
+    if review.scheduled_match_id.is_none() {
+        if let Some(pid) = review.game_plan_id.as_deref().filter(|s| !s.is_empty()) {
+            if let Some(p) = db::get_game_plan(db, team_id, pid)
+                .await
+                .map_err(authz::server_err)?
+            {
+                if p.scheduled_match_id.is_some() {
+                    review.scheduled_match_id = p.scheduled_match_id;
+                    review.game_number = review.game_number.or(p.game_number);
+                }
+            }
+        }
+    }
+    if review.scheduled_match_id.is_none() {
+        if let Some(did) = review.draft_id.as_deref().filter(|s| !s.is_empty()) {
+            if let Some(d) = db::get_draft_for_prefill(db, team_id, did)
+                .await
+                .map_err(authz::server_err)?
+            {
+                if d.scheduled_match_id.is_some() {
+                    review.scheduled_match_id = d.scheduled_match_id;
+                    review.game_number = review.game_number.or(d.game_number);
+                }
+            }
+        }
+    }
+    if let (Some(mid), None) = (review.scheduled_match_id.clone(), &review.series_id) {
+        let m = db::get_scheduled_match(db, team_id, &mid)
+            .await
+            .map_err(authz::server_err)?;
+        review.series_id = m.series_id;
+    }
+    Ok(())
+}
+
 #[server]
 pub async fn create_review(review_json: String) -> Result<(String, usize), ServerFnError> {
     use crate::server::authz;
@@ -269,6 +328,7 @@ pub async fn create_review(review_json: String) -> Result<(String, usize), Serve
     review.team_id = team_id.clone();
     review.created_by = user.id.clone();
     check_review_links(&surreal, &team_id, &review).await?;
+    carry_match_stamp(&surreal, &team_id, &mut review).await?;
 
     // The review and its new action items are written in one transaction.
     let created = db::create_review_with_action_items(&surreal, review)
@@ -433,24 +493,6 @@ fn result_of(win_loss: Option<&str>) -> Option<GameResult> {
     }
 }
 
-/// Short label for a match id ("EUW1_7012345678" stays as it is; very long
-/// ids keep their tail).
-fn match_label(id: &str) -> String {
-    if id.chars().count() > 20 {
-        let tail: String = id
-            .chars()
-            .rev()
-            .take(12)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
-        format!("\u{2026}{tail}")
-    } else {
-        id.to_string()
-    }
-}
-
 #[derive(Clone, Copy)]
 struct ReviewEd {
     id: RwSignal<Option<String>>,
@@ -467,6 +509,8 @@ struct ReviewEd {
     rating: RwSignal<String>,
     /// The draft this review was linked to was deleted.
     draft_deleted: RwSignal<bool>,
+    /// M159: the scheduled match this review was of was deleted.
+    match_deleted: RwSignal<bool>,
     /// The match as loaded (or cleared): a different value is a choice
     /// someone made, which fills the form from the match (M141).
     loaded_match: RwSignal<String>,
@@ -489,6 +533,7 @@ impl ReviewEd {
             outcome: s(),
             rating: s(),
             draft_deleted: RwSignal::new(false),
+            match_deleted: RwSignal::new(false),
             loaded_match: s(),
             auto: RwSignal::new(None),
         }
@@ -496,6 +541,7 @@ impl ReviewEd {
     fn clear(&self) {
         self.id.set(None);
         self.draft_deleted.set(false);
+        self.match_deleted.set(false);
         self.loaded_match.set(String::new());
         self.auto.set(None);
         for sig in [
@@ -529,6 +575,7 @@ impl ReviewEd {
         self.rating
             .set(r.rating.map(|n| n.to_string()).unwrap_or_default());
         self.draft_deleted.set(r.draft_deleted);
+        self.match_deleted.set(r.scheduled_match_deleted);
     }
     /// Subscribe to every field (for the "unsaved changes" memo).
     fn track(&self) {
@@ -549,6 +596,10 @@ impl ReviewEd {
     }
     fn build(&self) -> PostGameLearning {
         PostGameLearning {
+            scheduled_match_id: None,
+            series_id: None,
+            game_number: None,
+            scheduled_match_deleted: false,
             draft_deleted: false,
             created_at: None,
             id: self.id.get_untracked(),
@@ -585,7 +636,17 @@ pub fn PostGamePage() -> impl IntoView {
     let reviews = Resource::new(|| (), |_| list_reviews());
     let plans = Resource::new(|| (), |_| list_plans_for_postgame());
     let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
-    let match_ids = Resource::new(|| (), |_| get_recent_match_ids());
+    // M159 item 5: the games a review can be of; a thread link's match
+    // orders the games near its start first.
+    let candidates = Resource::new(
+        move || {
+            query
+                .read()
+                .get("match_id")
+                .filter(|m| !m.trim().is_empty())
+        },
+        get_review_candidates,
+    );
     let ed = ReviewEd::new();
     // The chosen match's facts (M141): created before any Suspense.
     let facts = Resource::new(
@@ -640,6 +701,46 @@ pub fn PostGamePage() -> impl IntoView {
     // not land in another review.
     let edit_gen = StoredValue::new(0_u64);
     let saving = RwSignal::new(false);
+
+    // M159: `?match_id=&game=` (from the match thread) stamps a new review
+    // with that match on its first save. The match is resolved for the
+    // team on the server; an unknown or foreign id is dropped with a line.
+    use crate::models::match_day::ThreadLookup;
+    let thread_res = Resource::new(
+        move || {
+            query
+                .read()
+                .get("match_id")
+                .filter(|m| !m.trim().is_empty())
+        },
+        |id| async move {
+            match id {
+                Some(id) => match crate::pages::home::get_thread_match(id).await {
+                    Ok(t) => ThreadLookup::Found(t),
+                    Err(_) => ThreadLookup::Unknown,
+                },
+                None => ThreadLookup::NoLink,
+            }
+        },
+    );
+    // (match id, game) for a new review.
+    let thread = RwSignal::new(None::<(String, Option<i32>)>);
+    let thread_unknown = RwSignal::new(false);
+    Effect::new(move |_| {
+        let game = query.read().get("game");
+        match thread_res.get() {
+            Some(ThreadLookup::Found(t)) => {
+                let g = crate::models::match_day::parse_game(game.as_deref(), &t.format);
+                thread.set(Some((t.id, g)));
+                thread_unknown.set(false);
+            }
+            Some(ThreadLookup::Unknown) => {
+                thread.set(None);
+                thread_unknown.set(true);
+            }
+            _ => {}
+        }
+    });
 
     // `?review_id=` opens a review; `?plan_id=`/`?draft_id=` seed a new one.
     let opened = StoredValue::new(false);
@@ -703,14 +804,66 @@ pub fn PostGamePage() -> impl IntoView {
 
     // The open review's id goes in the address so a reload or link reopens it.
     let nav = navigator();
+
+    // M159 item 5: `?riot_match_id=` (a game's "Review as a team") opens
+    // the team's review of that game, or preselects the game for a new one.
+    // Only one of the team's candidate games counts; any other id is
+    // ignored and nothing is preselected.
+    let picked = StoredValue::new(false);
+    Effect::new(move |_| {
+        if picked.get_value() {
+            return;
+        }
+        let q = query.read();
+        let rid = match q.get("riot_match_id").filter(|s| !s.is_empty()) {
+            Some(r) if q.get("review_id").is_none() => r,
+            _ => {
+                picked.set_value(true);
+                return;
+            }
+        };
+        let (Some(list), Some(revs)) = (candidates.get(), reviews.get()) else {
+            return; // still loading
+        };
+        picked.set_value(true);
+        let list = list.unwrap_or_default();
+        if ed.id.get_untracked().is_some() || !list.iter().any(|c| c.riot_match_id == rid) {
+            return;
+        }
+        let existing = revs
+            .unwrap_or_default()
+            .into_iter()
+            .find(|r| r.match_riot_id.as_deref() == Some(rid.as_str()));
+        match existing {
+            Some(r) => {
+                ed.load(&r);
+                saved.set(Some(ed.build()));
+                edit_gen.update_value(|g| *g += 1);
+                opened.set_value(true);
+                if let Some(id) = r.id.as_deref() {
+                    replace_url(nav, &format!("/post-game?review_id={id}"));
+                }
+            }
+            None => ed.match_id.set(rid),
+        }
+    });
     let do_save = Callback::new(move |_: leptos::ev::MouseEvent| {
         // One save at a time: a double click must not create two reviews.
         if saving.get_untracked() {
             return;
         }
         let review = ed.build();
-        let json = serde_json::to_string(&review).unwrap_or_default();
         let is_update = review.id.is_some();
+        // M159: a new review takes the match thread's stamp (the editor's
+        // own snapshot stays without it, so it compares as before).
+        let mut to_send = review.clone();
+        if !is_update {
+            if let Some((m, g)) = thread.get_untracked() {
+                to_send.scheduled_match_id = Some(m);
+                to_send.game_number = g;
+            }
+        }
+        let json = serde_json::to_string(&to_send).unwrap_or_default();
         let gen = edit_gen.get_value();
         saving.set(true);
         leptos::task::spawn_local(async move {
@@ -747,6 +900,8 @@ pub fn PostGamePage() -> impl IntoView {
     let new_review = Callback::new(move |_: leptos::ev::MouseEvent| {
         opened.set_value(true);
         replace_url(nav, "/post-game");
+        thread.set(None);
+        thread_unknown.set(false);
         ed.clear();
         saved.set(None);
         edit_gen.update_value(|g| *g += 1);
@@ -822,6 +977,19 @@ pub fn PostGamePage() -> impl IntoView {
                 }
             />
             <crate::pages::share::ShareDialog open=share_open kind=crate::models::share::ShareKind::Review target=Signal::derive(move || ed.id.get()) />
+            // M159: a new review from the match thread says which game it is
+            // for; a link whose match is not the team's says so.
+            {move || (ed.id.get().is_none()).then(|| thread.get()).flatten().map(|(_, g)| view! {
+                <p class="-mt-3 mb-6 text-caption text-muted" data-testid="review-thread">
+                    {match g {
+                        Some(g) => format!("Saving links this review to game {g} of the match it was opened from."),
+                        None => "Saving links this review to the match it was opened from.".to_string(),
+                    }}
+                </p>
+            })}
+            {move || (ed.id.get().is_none() && thread_unknown.get()).then(|| view! {
+                <p class="-mt-3 mb-6 text-caption text-muted" data-testid="review-thread-unknown">"The link named a match that is not on your team's schedule. The review is saved without it."</p>
+            })}
             {move || ed.id.get().map(|_| view! {
                 <crate::components::guidance::FirstUseHint hint=crate::models::guidance::Hint::ShareLinks title="Share a read-only link" class="mb-6">
                     "Share makes a link to this review that opens without signing in, for a coach or a sub outside the team. Choose how long it lives; revoke it any time."
@@ -861,9 +1029,18 @@ pub fn PostGamePage() -> impl IntoView {
                                     <ul class="flex flex-col border-t border-rule" data-testid="review-list">
                                         {list.into_iter().map(|r| {
                                             let id = r.id.clone().unwrap_or_default();
-                                            let label = r.game_plan_id.as_deref().and_then(plan_name)
-                                                .or_else(|| r.match_riot_id.as_deref().map(match_label))
-                                                .unwrap_or_else(|| "Review without a plan".to_string());
+                                            // Never the raw Riot id (M159): a plan's name, else the
+                                            // game's date, else a neutral line.
+                                            let label = match r.game_plan_id.as_deref().and_then(plan_name) {
+                                                Some(n) => n.into_any(),
+                                                None => match r.match_riot_id.as_deref() {
+                                                    Some(rid) => match game_end_of(candidates, rid) {
+                                                        Some(t) => view! { "Game of " <crate::components::local_time::LocalTime iso=t style=crate::components::local_time::TimeStyle::DayMonth /> }.into_any(),
+                                                        None => "A synced game".into_any(),
+                                                    },
+                                                    None => "Review without a plan".into_any(),
+                                                },
+                                            };
                                             let points = r.what_went_well.len() + r.improvements.len() + r.action_items.len();
                                             let result = result_of(r.win_loss.as_deref());
                                             let r2 = r.clone();
@@ -904,7 +1081,7 @@ pub fn PostGamePage() -> impl IntoView {
                     <PatternsSection reviews=reviews />
                 </div>
                 <div class="flex min-w-0 flex-col gap-12">
-                    <LinksSection ed=ed plans=plans drafts=drafts match_ids=match_ids facts=facts />
+                    <LinksSection ed=ed plans=plans drafts=drafts candidates=candidates facts=facts />
                     <OutcomeSection ed=ed />
                     <section aria-labelledby="review-points-heading" class="flex flex-col gap-4">
                         <SectionHeader title="What we learned" id="review-points-heading" />
@@ -929,13 +1106,176 @@ pub fn PostGamePage() -> impl IntoView {
     }
 }
 
+/// When one of the team's candidate games ended (for a label).
+fn game_end_of(
+    candidates: Resource<Result<Vec<ReviewCandidate>, ServerFnError>>,
+    rid: &str,
+) -> Option<String> {
+    candidates
+        .get()
+        .and_then(|r| r.ok())
+        .and_then(|l| l.into_iter().find(|c| c.riot_match_id == rid))
+        .and_then(|c| c.game_end)
+}
+
+/// Rows shown before "Show more".
+const PICKER_ROWS: usize = 20;
+
+/// M159 item 5 (atelier card 2a): which game the review is of, as native
+/// radios: date, our champions and the result in words per row, games near
+/// the scheduled match first, and "Not in the list (scrim / custom)" always
+/// last and always usable (a scrim is a custom game and never syncs). The
+/// Riot id is the stored value, never shown.
+#[component]
+fn GamePicker(
+    ed: ReviewEd,
+    candidates: Resource<Result<Vec<ReviewCandidate>, ServerFnError>>,
+    facts: Resource<Result<Option<MatchFacts>, ServerFnError>>,
+) -> impl IntoView {
+    use crate::components::local_time::{LocalTime, TimeStyle};
+    use crate::components::ui::{AvatarSize, ChampionAvatar};
+    // "Not in the list" chosen for a review not saved yet; a saved review
+    // without a game reads as that choice too.
+    let custom = RwSignal::new(false);
+    Effect::new(move |_| {
+        let _ = ed.id.get();
+        custom.set(false);
+    });
+    let custom_checked =
+        move || ed.match_id.get().is_empty() && (custom.get() || ed.id.get().is_some());
+    let show_all = RwSignal::new(false);
+    let row_class = |checked: bool| {
+        if checked {
+            "flex min-h-11 cursor-pointer items-center gap-3 border-b border-rule bg-ink-2 px-2 font-semibold md:min-h-8"
+        } else {
+            "flex min-h-11 cursor-pointer items-center gap-3 border-b border-rule px-2 hover:bg-ink-1 md:min-h-8"
+        }
+    };
+    let radio_class = "size-4 shrink-0 cursor-pointer accent-accent";
+    let game_row = move |c: ReviewCandidate| {
+        let id = c.riot_match_id.clone();
+        let id_check = id.clone();
+        let checked = Signal::derive(move || ed.match_id.get() == id_check);
+        let names = c.champions.join(", ");
+        let result = GameResult::from_win(c.win);
+        view! {
+            <label class=move || row_class(checked.get()) data-testid="review-game">
+                <input
+                    type="radio"
+                    name="review-game"
+                    class=radio_class
+                    value=id.clone()
+                    prop:checked=checked
+                    on:change=move |_| {
+                        custom.set(false);
+                        ed.match_id.set(id.clone());
+                    }
+                />
+                <span class="figures w-16 shrink-0 text-caption text-secondary">
+                    {match c.game_end.clone() {
+                        Some(t) => view! { <LocalTime iso=t style=TimeStyle::DayMonth /> }.into_any(),
+                        None => view! { <span>"No date"</span> }.into_any(),
+                    }}
+                </span>
+                <span class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+                    {c.champions.iter().map(|ch| view! {
+                        <ChampionAvatar name=ch.clone() size=AvatarSize::Sm decorative=true />
+                    }).collect_view()}
+                    <span class="sr-only">{names}</span>
+                </span>
+                {c.reviewed.then(|| view! { <span class="hidden shrink-0 text-caption font-normal text-muted sm:inline">"Reviewed"</span> })}
+                <ResultGlyph result=result size=GlyphSize::Sm word=true />
+            </label>
+        }
+    };
+    view! {
+        <div class="flex flex-col gap-1.5" data-testid="review-game-picker">
+            <span id="review-game-label" class="text-label font-medium text-secondary">"Which game is this review of?"</span>
+            <Suspense fallback=|| view! {
+                <SkeletonGroup label="Loading your team's games"><Skeleton shape=SkeletonShape::Line lines=3 /></SkeletonGroup>
+            }>
+                {move || candidates.get().map(|r| {
+                    let failed = r.is_err();
+                    let list = r.unwrap_or_default();
+                    let ids: Vec<String> = list.iter().map(|c| c.riot_match_id.clone()).collect();
+                    let (near, other): (Vec<_>, Vec<_>) = list.into_iter().partition(|c| c.near);
+                    let has_near = !near.is_empty();
+                    let more = other.len() > PICKER_ROWS;
+                    let empty = near.is_empty() && other.is_empty();
+                    // A stored game that is no longer in the list keeps its
+                    // own row, named by its date when known; never its id.
+                    let stored = move || {
+                        let m = ed.match_id.get();
+                        (!m.is_empty() && !ids.contains(&m)).then(|| {
+                            let when = facts.get().and_then(|f| f.ok()).flatten()
+                                .filter(|f| f.match_id == m)
+                                .and_then(|f| f.played_at);
+                            view! {
+                                <label class=row_class(true) data-testid="review-game-stored">
+                                    <input type="radio" name="review-game" class=radio_class prop:checked=true />
+                                    <span class="min-w-0 flex-1 text-label">
+                                        {match when {
+                                            Some(t) => view! { "Game from " <LocalTime iso=t style=TimeStyle::DayMonth /> }.into_any(),
+                                            None => view! { "A synced game" }.into_any(),
+                                        }}
+                                    </span>
+                                </label>
+                            }
+                        })
+                    };
+                    view! {
+                        {failed.then(|| view! {
+                            <p class="text-caption text-muted">"Your team's games did not load. You can still choose Not in the list."</p>
+                        })}
+                        {(empty && !failed).then(|| view! {
+                            <EmptyState size=EmptySize::Compact message="No synced game where three or more of your members played together yet. Members link their Riot account on their profile and sync on Team games. For a scrim or custom game, choose Not in the list." />
+                        })}
+                        <div role="radiogroup" aria-labelledby="review-game-label" class="flex flex-col border-t border-rule">
+                            {stored}
+                            {has_near.then(|| view! {
+                                <p class="eyebrow px-2 pt-3 pb-1 text-muted">"Near the scheduled match"</p>
+                            })}
+                            {near.into_iter().map(game_row).collect_view()}
+                            {(has_near && !other.is_empty()).then(|| view! {
+                                <p class="eyebrow px-2 pt-3 pb-1 text-muted">"Other recent games"</p>
+                            })}
+                            {other.into_iter().enumerate().map(|(i, c)| {
+                                move || (i < PICKER_ROWS || show_all.get()).then(|| game_row(c.clone()))
+                            }).collect_view()}
+                            <label class=move || row_class(custom_checked()) data-testid="review-game-custom">
+                                <input
+                                    type="radio"
+                                    name="review-game"
+                                    class=radio_class
+                                    value=""
+                                    prop:checked=custom_checked
+                                    on:change=move |_| {
+                                        custom.set(true);
+                                        ed.match_id.set(String::new());
+                                    }
+                                />
+                                <span class="min-w-0 flex-1 text-label text-secondary">"Not in the list (scrim / custom)"</span>
+                            </label>
+                        </div>
+                        {move || (more && !show_all.get()).then(|| view! {
+                            <div class="pt-1">
+                                <Button size=ButtonSize::Touch variant=ButtonVariant::Quiet on_click=Callback::new(move |_| show_all.set(true))>"Show more"</Button>
+                            </div>
+                        })}
+                    }
+                })}
+            </Suspense>
+        </div>
+    }
+}
+
 /// Links to the match, the game plan and the draft, plus the plan summary.
 #[component]
 fn LinksSection(
     ed: ReviewEd,
     plans: Resource<Result<Vec<GamePlan>, ServerFnError>>,
     drafts: Resource<Result<Vec<Draft>, ServerFnError>>,
-    match_ids: Resource<Result<Vec<String>, ServerFnError>>,
+    candidates: Resource<Result<Vec<ReviewCandidate>, ServerFnError>>,
     facts: Resource<Result<Option<MatchFacts>, ServerFnError>>,
 ) -> impl IntoView {
     view! {
@@ -953,16 +1293,8 @@ fn LinksSection(
                     </p>
                 })}
             </div>
-            <div class="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-3">
-                <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
-                    {move || match_ids.get().map(|r| {
-                        let ids = r.unwrap_or_default();
-                        let hint = if ids.is_empty() { "Synced team matches appear here." } else { "From your team's synced matches." };
-                        let mut opts = vec![SelectOption::new("", "No match")];
-                        opts.extend(ids.into_iter().map(|id| { let l = match_label(&id); SelectOption::new(id, l) }));
-                        view! { <Field id="review-match" label="Match" hint=hint><Select value=ed.match_id options=opts /></Field> }
-                    })}
-                </Suspense>
+            <GamePicker ed=ed candidates=candidates facts=facts />
+            <div class="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
                 <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
                     {move || plans.get().map(|r| {
                         let mut opts = vec![SelectOption::new("", "No game plan")];
@@ -987,6 +1319,9 @@ fn LinksSection(
             </div>
             {move || (ed.draft_id.get().is_empty() && ed.draft_deleted.get()).then(|| view! {
                 <p class="text-caption text-muted" data-testid="review-draft-deleted">"Draft deleted: the draft this review was linked to no longer exists."</p>
+            })}
+            {move || ed.match_deleted.get().then(|| view! {
+                <p class="text-caption text-muted" data-testid="review-match-deleted">"The match this was made for was deleted."</p>
             })}
             <Suspense fallback=|| ()>
                 {move || facts.get().map(|r| match r {

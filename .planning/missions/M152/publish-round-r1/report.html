@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M152 Round 1</title>
+<style>
+:root { --bg:#fbfaf7; --fg:#1d2320; --muted:#5b6560; --rule:#d9dcd6; --ok:#1f7a4a; --warn:#9a5b00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#141917; --fg:#e7ebe8; --muted:#a3ada8; --rule:#2c3531; --ok:#5fcf93; --warn:#e3a54b; } }
+:root[data-theme="dark"] { --bg:#141917; --fg:#e7ebe8; --muted:#a3ada8; --rule:#2c3531; --ok:#5fcf93; --warn:#e3a54b; }
+body { background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, sans-serif; margin:0; padding:24px 16px; }
+main { max-width:1200px; margin:0 auto; }
+.prose { max-width:68ch; }
+h1 { font-size:1.6rem; margin:0 0 .25rem; } h2 { font-size:1.15rem; margin:2rem 0 .5rem; } h3 { font-size:1rem; margin:1.25rem 0 .4rem; }
+p.meta { color:var(--muted); margin:0 0 1.5rem; }
+table { width:100%; border-collapse:collapse; font-size:.95rem; } td, th { text-align:left; padding:.4rem .5rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+.ok { color:var(--ok); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+code { font-size:.9em; overflow-wrap:anywhere; }
+.pair { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap:16px; align-items:start; }
+figure { margin:0; } figure img { width:100%; height:auto; border:1px solid var(--rule); display:block; }
+figcaption { color:var(--muted); font-size:.85rem; margin-top:.3rem; }
+.narrow img { max-width:390px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Identity R1: Survey, sharpened</h1>
+<p class="meta">Mission M152 · branch <code>mission/M152-identity-survey-sharpened-r1</code> · 2026-10-18 · full report: REPORT-R1.md · atelier critiques: critique-r1-rift.md, critique-r1-surfaces.md</p>
+
+<div class="prose">
+<h2>What shipped</h2>
+<table>
+<tr><th>#</th><th>Item</th><th>State</th></tr>
+<tr><td>1</td><td>Real position and objective icons served from the app's own <code>/img/ui/</code>: pinned to CommunityDragon 16.20, on a hard allow-list, with committed sanitised fallbacks. RoleLabel shows the icon beside its letters.</td><td class="ok">shipped</td></tr>
+<tr><td>2</td><td>The drawn Rift: an original schematic from measured coordinates (127 features, each with its source), at two levels: sketch for the heroes, and survey with outlines, wall hatch and bushes in <code>/design</code></td><td class="ok">shipped</td></tr>
+<tr><td>3</td><td>Hero on the landing, closed-beta and share pages: one figure, one sentence, one action, at most 2 chalk elements; the five champions per team never wrap</td><td class="ok">shipped</td></tr>
+<tr><td>4</td><td>Match Day field card: the start time as the lead figure, one sentence, the next prep step as the one action</td><td class="ok">shipped (inset size is R1b)</td></tr>
+<tr><td>5</td><td>Open Graph: theme colour, favicon, tags per surface, three 1200×630 cards; the share card is static and identical for any token</td><td class="ok">shipped</td></tr>
+<tr><td>6</td><td>The Legal Jibber Jabber s.6 notice beside Riot's disclaimer (footer, Terms, Privacy), and <code>docs/ASSETS.md</code> provenance</td><td class="ok">shipped</td></tr>
+<tr><td>7, 8</td><td>Lock-in stroke, paper theme on the share page</td><td>not started (stop rule)</td></tr>
+</table>
+
+<h2>Gates</h2>
+<p>CI on 18695d1 (run 39073124625): check, style guardrails, ops scripts and e2e were green, with 181/181 e2e passing (5 flaky on retry). The image job failed with a GitHub cache error (<code>error writing layer blob: not_found</code>), not a code error. The final tip's run is in REPORT-R1.md.</p>
+
+<h2>Worth knowing</h2>
+<ul>
+<li>The <span class="warn">exact wall outlines</span> you asked for are <em>measured and redrawn</em> by eye, never traced. Towers and inhibitors use the positions Match-V5 reports, and the bushes are placed approximately (no reference shows brush). <code>docs/rift-schematic.md</code> labels each one.</li>
+<li>Match Day: the atelier rejected the two team names facing across the inset on the render. They invent sides and repeat the title, so they were removed again. The title "A vs B" carries the facing.</li>
+<li>At sketch level the wall hatch was dropped, because measured walls are too thin to read as terrain at hero size. Hatch now appears at survey level only.</li>
+</ul>
+</div>
+
+<h2>Landing (R0 target still → R1 on the real route)</h2>
+<div class="pair">
+<figure><img src="strips/r0/t1-landing-1280.png" alt="R0 T1 landing at 1280, gallery still"><figcaption>R0 target, 1280 (gallery still; main has no landing frame)</figcaption></figure>
+<figure><img src="strips/after/landing-1280.png" alt="R1 landing at 1280"><figcaption>R1, 1280 · atelier PASS</figcaption></figure>
+</div>
+<div class="pair narrow">
+<figure><img src="strips/r0/t1-landing-390.png" alt="R0 T1 landing at 390"><figcaption>R0 target, 390</figcaption></figure>
+<figure><img src="strips/after/landing-390.png" alt="R1 landing at 390"><figcaption>R1, 390 · PASS</figcaption></figure>
+<figure><img src="strips/after/landing-390-flow.png" alt="R1 landing reading flow at 390, full page"><figcaption>Reading-flow frame, nothing expanded · PASS</figcaption></figure>
+</div>
+
+<h2>Closed beta</h2>
+<div class="pair">
+<figure><img src="strips/after/closed-beta-1280.png" alt="Closed-beta page at 1280"><figcaption>R1, 1280</figcaption></figure>
+<figure class="narrow"><img src="strips/after/closed-beta-390.png" alt="Closed-beta page at 390"><figcaption>R1, 390 · PASS</figcaption></figure>
+</div>
+
+<h2>Share</h2>
+<div class="pair">
+<figure class="narrow"><img src="strips/r0/t1-share-390.png" alt="R0 T1 share at 390"><figcaption>R0 target, 390</figcaption></figure>
+<figure class="narrow"><img src="strips/after/share-390.png" alt="R1 share at 390 with the OURS label"><figcaption>R1, 390 · PASS (a base crop only when the draft has a side)</figcaption></figure>
+<figure><img src="strips/after/share-1280.png" alt="R1 share at 1280"><figcaption>R1, 1280 · PASS</figcaption></figure>
+</div>
+
+<h2>Match Day (main → R1)</h2>
+<div class="pair narrow">
+<figure><img src="strips/before/match-day-390.png" alt="Match Day at 390 on main"><figcaption>Before (main, M148 frame), 390</figcaption></figure>
+<figure><img src="strips/after/match-day-390.png" alt="Match Day field card at 390"><figcaption>R1, 390 · FIX R1b: the ~75 px inset reads as an X in a box</figcaption></figure>
+</div>
+<div class="pair">
+<figure><img src="strips/before/match-day-1280.png" alt="Match Day at 1280 on main"><figcaption>Before, 1280</figcaption></figure>
+<figure><img src="strips/after/match-day-1280.png" alt="Match Day field card at 1280"><figcaption>R1, 1280</figcaption></figure>
+</div>
+
+<h2>Role icons and the survey Rift</h2>
+<div class="pair">
+<figure class="narrow"><img src="strips/after/rolelabel-roster-390.png" alt="Roster with role icons at 390"><figcaption>RoleLabel with the position icon, roster 390 · PASS</figcaption></figure>
+<figure><img src="strips/after/rift-survey-1280.png" alt="Survey level of the drawn Rift"><figcaption>Survey level (gallery only this round) · PASS</figcaption></figure>
+<figure><img src="strips/after/design-rift-1280.png" alt="Drawn Rift section in /design at 1280"><figcaption>/design, Drawn Rift section</figcaption></figure>
+</div>
+
+<h2>Link previews (1200×630)</h2>
+<div class="pair">
+<figure><img src="strips/after/og-landing.png" alt="Landing link preview card"><figcaption>Landing and closed beta · PASS</figcaption></figure>
+<figure><img src="strips/after/og-share.png" alt="Share link preview card, static"><figcaption>Share: static, no name, no label · PASS</figcaption></figure>
+<figure><img src="strips/after/og-default.png" alt="Default link preview card"><figcaption>Default · PASS</figcaption></figure>
+</div>
+</main>
+</body>
+</html>

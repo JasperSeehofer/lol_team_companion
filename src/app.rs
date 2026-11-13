@@ -9,6 +9,7 @@ use crate::components::bug_report_widget::BugReportWidget;
 use crate::components::footer::SiteFooter;
 use crate::components::guidance::{GuidanceProvider, IntroNote};
 use crate::components::nav::Nav;
+use crate::components::og::{OgMeta, OgSurface};
 use crate::components::survey_prompt::SurveyPrompt;
 use crate::components::ui::ToastProvider;
 use crate::error_template::NotFound;
@@ -56,6 +57,13 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <meta name="color-scheme" content="dark" />
+                // Browser chrome in the `page` token. input.css `--color-page:
+                // oklch(0.180 0.018 200)` -> OKLab -> linear sRGB -> sRGB gamma
+                // (Ottosson's matrices; python3 one-off, M152) = #081415.
+                <meta name="theme-color" content="#081415" /> // lint:allow(hex) a meta tag cannot read CSS tokens
+                // M151 favicon (sheet frame, our base, the far base, the diagonal),
+                // its colours the page, primary and accent tokens as hex.
+                <link rel="icon" href="/favicon.svg" r#type="image/svg+xml" />
                 // The two faces every page needs first (UI text, titles).
                 <link rel="preload" href="/fonts/public-sans/public-sans-latin-wght-normal.woff2" r#as="font" r#type="font/woff2" crossorigin="anonymous" />
                 <link rel="preload" href="/fonts/familjen-grotesk/familjen-grotesk-latin-wght-normal.woff2" r#as="font" r#type="font/woff2" crossorigin="anonymous" />
@@ -72,6 +80,16 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
+/// The Open Graph tags for the current route (`components::og`).
+#[component]
+fn PageOgMeta() -> impl IntoView {
+    let pathname = leptos_router::hooks::use_location().pathname;
+    move || {
+        let (surface, canonical) = OgSurface::for_path(&pathname.get());
+        view! { <OgMeta surface canonical /> }
+    }
+}
+
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
@@ -81,6 +99,9 @@ pub fn App() -> impl IntoView {
         <Title text="Team Companion" />
 
         <Router>
+            // Link previews: one static card per surface class, chosen from the
+            // path alone (never from page data; share links all get the same).
+            <PageOgMeta />
             <ToastProvider>
             <GuidanceProvider>
                 <a

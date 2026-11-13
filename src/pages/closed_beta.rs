@@ -1,9 +1,11 @@
 //! Closed-beta landing: the first page invited visitors without a link
-//! see (also the signed-out home page). Signed-in users are sent to `/`. Plain type on the
-//! page ground, no imagery: what the product is, who it is for, how to get
-//! in.
+//! see (also the signed-out home page). Signed-in users are sent to `/`. The
+//! drawn Rift on the page ground beside what the product is, who it is for
+//! and how to get in.
 
-use crate::components::ui::{Button, ButtonSize, ButtonVariant, PageShell, PageWidth};
+use crate::components::ui::{
+    Button, ButtonSize, ButtonVariant, PageShell, PageWidth, RiftAnchor, RiftLabel, RiftSketch,
+};
 use crate::pages::profile::get_current_user;
 use leptos::prelude::*;
 
@@ -26,9 +28,15 @@ pub fn ClosedBetaPage() -> impl IntoView {
     }
 }
 
-/// What Team Companion is, the closed-beta note and the way in.
+/// What Team Companion is, the closed-beta note and the way in (M152
+/// hero, recipe card D): the drawn Rift with "YOUR TEAM" surveyed onto the
+/// circle base, and the lead-figure grammar (one figure: the headline; one
+/// sentence; one action: "Sign in"). Chalk twice in the first viewport:
+/// the surveyed label and the primary button (`data-chalk`). 1280: text
+/// 5/12, sketch 7/12; phones: title, sentence, button, then the sketch.
 ///
-/// A11y: one `<h1>`; the loop is an ordered list; "Sign in" is the page's
+/// A11y: one `<h1>`; the drawing is `aria-hidden` (the sentence says what
+/// the product does); the loop is an ordered list; "Sign in" is the page's
 /// one primary action.
 #[component]
 pub fn Landing() -> impl IntoView {
@@ -55,17 +63,26 @@ pub fn Landing() -> impl IntoView {
         ),
     ];
     view! {
-        <PageShell width=PageWidth::Standard class="pt-12 sm:pt-24">
-            <p class="eyebrow">"Closed beta \u{00b7} by invitation"</p>
-            <h1 class="mt-4 max-w-3xl font-display text-headline sm:text-display font-semibold tracking-[-0.025em] text-primary">
-                "The coaching workspace for one team."
-            </h1>
-            <p class="mt-5 max-w-2xl text-reading text-secondary">
-                "Team Companion keeps a team's scouting, drafts, game plans and reviews in one loop, so every scrim adds to what the team knows. It is in a closed beta: teams join with an invite link from their captain or coach."
-            </p>
-            <div class="mt-8 flex flex-wrap items-center gap-3">
-                <Button href="/auth/login" variant=ButtonVariant::Primary size=ButtonSize::Lg>"Sign in"</Button>
-                <span class="text-body text-muted">"Have an invite link? Open it to create your account."</span>
+        <PageShell width=PageWidth::Standard class="pt-10 sm:pt-16">
+            <div class="grid items-start gap-10 lg:grid-cols-12" data-hero>
+                <div class="min-w-0 lg:col-span-5 lg:pt-5">
+                    <p class="eyebrow">"Closed beta \u{00b7} join with an invite link"</p>
+                    <h1 class="mt-4 font-display text-headline font-semibold tracking-[-0.025em] text-primary lg:text-display">
+                        "The coaching workspace for one team."
+                    </h1>
+                    <p class="mt-5 max-w-[60ch] text-reading text-secondary">
+                        "Scouting, drafts, game plans and reviews in one loop."
+                    </p>
+                    <div class="mt-8 grid sm:block">
+                        <Button href="/auth/login" variant=ButtonVariant::Primary size=ButtonSize::Lg attr:data-chalk="action">"Sign in"</Button>
+                    </div>
+                </div>
+                <div class="min-w-0 lg:col-span-7 lg:pl-6 lg:pt-5">
+                    <RiftSketch
+                        label=RiftLabel::new("Your team", RiftAnchor::BlueBase)
+                        class="mx-auto w-full max-w-[560px] lg:mr-0"
+                    />
+                </div>
             </div>
 
             <ol class="mt-16 grid gap-x-8 gap-y-6 border-t border-rule pt-8 sm:grid-cols-2 lg:grid-cols-4">

@@ -48,3 +48,15 @@ tools/scout/**/*.webm
 # players' positions); the overseer serves them from the worktree, never from git.
 .planning/missions/M156/publish-round-r2/plots/
 .planning/missions/M156/publish-round-r2/strips/
+# navgrid tool (M166): local venv and build metadata
+tools/navgrid/.venv/
+tools/navgrid/*.egg-info/
+tools/navgrid/**/__pycache__/
+# navgrid (M166): nothing derived from a real Riot file is ever committed
+# (Riot ticket 2 pending). Grids, WADs, output and GeoJSON stay out of git;
+# only the tests' synthetic fixtures may hold GeoJSON.
+**/*.aimesh_ngrid
+**/*.wad.client
+tools/navgrid/out/
+*.geojson
+!tools/navgrid/tests/fixtures/synthetic/*.geojson

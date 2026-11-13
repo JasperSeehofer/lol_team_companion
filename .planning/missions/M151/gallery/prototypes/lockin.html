@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lock-in prototype</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; background: var(--color-page); color: var(--color-primary); font-family: var(--font-sans); }
+  main { max-width: 44rem; margin: 0 auto; padding: calc(var(--spacing) * 8) calc(var(--spacing) * 4); }
+  h1 { font-family: var(--font-display); font-weight: 600; margin: calc(var(--spacing) * 2) 0; }
+  .lede { color: var(--color-secondary); max-width: 60ch; margin: 0 0 calc(var(--spacing) * 6); }
+
+  /* Board fragment: blue picks left, red picks right (ui::DraftBoard). */
+  .board { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--spacing) * 3);
+           background: var(--color-ink-1); border-top: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule);
+           padding: calc(var(--spacing) * 3); }
+  .col { display: grid; gap: calc(var(--spacing) * 1.5); min-width: 0; }
+  .colhead { display: flex; align-items: center; gap: calc(var(--spacing) * 1.5); color: var(--color-secondary); }
+  .col.red .colhead { justify-content: flex-end; }
+  .sm { width: calc(var(--spacing) * 2.5); height: calc(var(--spacing) * 2.5); flex: none; }
+  .sm.blue { background: var(--color-side-blue); border-radius: 50%; } /* lint:allow(css-round) SideMarker: blue is a circle */
+  .sm.red { background: var(--color-side-red); border-radius: 1px; }
+
+  /* pick_cell wrapper: rotation bracket + number in the outer gutter. */
+  .wrap { position: relative; min-width: 0; }
+  .col.blue .wrap { padding-left: calc(var(--spacing) * 5); }
+  .col.red .wrap { padding-right: calc(var(--spacing) * 5); }
+  .bracket { position: absolute; top: calc(var(--spacing) * 1); bottom: calc(var(--spacing) * 1); width: calc(var(--spacing) * 1.5);
+             border: 0 solid var(--color-outline); pointer-events: none; }
+  .col.blue .bracket { left: calc(var(--spacing) * 3); border-width: 1px 0 1px 1px; }
+  .col.red .bracket { right: calc(var(--spacing) * 3); border-width: 1px 1px 1px 0; }
+  .num { position: absolute; top: calc(var(--spacing) * 1); line-height: 1; color: var(--color-muted); }
+  .col.blue .num { left: 0; }
+  .col.red .num { right: 0; }
+
+  /* The slot (cell): h-11 rounded-ctl border px-1.5 gap-2. */
+  .slot { position: relative; display: flex; align-items: center; gap: calc(var(--spacing) * 2);
+          height: calc(var(--spacing) * 11); min-width: 0; padding: 0 calc(var(--spacing) * 1.5);
+          border: 1px dashed var(--color-outline); border-radius: var(--radius-ctl); }
+  .slot[data-current="true"] { border-color: var(--color-accent); background: var(--color-accent-soft); }
+  .slot[data-filled="true"] { border-style: solid; border-color: var(--color-outline); background: var(--color-ink-1); }
+  .slot[data-filled="true"][data-current="true"] { border-color: var(--color-accent); background: var(--color-accent-soft); }
+  .avatar { width: calc(var(--spacing) * 8); height: calc(var(--spacing) * 8); flex: none; display: grid; place-items: center;
+            border: 1px solid var(--color-outline); border-radius: var(--radius-ctl); background: var(--color-ink-2);
+            color: var(--color-secondary); }
+  .gap8 { width: calc(var(--spacing) * 8); height: calc(var(--spacing) * 8); flex: none; }
+  /* Below sm (640 px) the name and the role stack; from sm up they share one line. */
+  .text { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; line-height: 1.25; }
+  .slot[data-filled="true"] .title { max-width: 100%; }
+  @media (min-width: 640px) {
+    .slot[data-filled="true"] .text { flex-direction: row; align-items: center; gap: calc(var(--spacing) * 2); }
+    .slot[data-filled="true"] .role { margin-left: auto; }
+  }
+  .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title.sel { color: var(--color-accent); }
+  .cap { color: var(--color-muted); }
+
+  /* RoleLabel (Plain): mono caps, muted, with its M151 mark. */
+  .role { display: inline-flex; align-items: center; gap: calc(var(--spacing) * 1); flex: none;
+          font-family: var(--font-mono); font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1;
+          color: var(--color-muted); }
+  .role svg { width: 16px; height: 16px; flex: none; }
+
+  /* ---- Lock-in (references.md recipe card "Lock-in") ---- */
+  .lockbar { position: absolute; left: -1px; right: -1px; bottom: -1px; height: 2px; pointer-events: none;
+             border-radius: 0 0 var(--radius-ctl) var(--radius-ctl);
+             background: var(--color-outline); transform-origin: left; }
+  .col.red .lockbar { transform-origin: right; }
+  .slot[data-locked="anim"] .lockbar {
+    animation: lock-draw var(--dur-3) var(--ease-out) both,
+               lock-cool var(--dur-2) var(--ease-out) 620ms both; /* 220 draw + 400 hold */
+  }
+  .slot[data-locked="anim"] .role { animation: mark-settle var(--dur-3) var(--ease-out) both; }
+  @keyframes lock-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes lock-cool { from { background-color: var(--color-accent); } to { background-color: var(--color-outline); } }
+  @keyframes mark-settle { from { transform: translateY(2px); opacity: 0; } to { transform: none; opacity: 1; } }
+  /* data-locked="instant": keyboard bulk entry (< 1 s since the last lock-in) and reduced motion. */
+  @media (prefers-reduced-motion: reduce) {
+    .slot[data-locked] .lockbar, .slot[data-locked] .role { animation: none; }
+  }
+
+  .controls { display: flex; gap: calc(var(--spacing) * 2); margin-top: calc(var(--spacing) * 4); }
+  button { font: inherit; height: calc(var(--spacing) * 8); padding: 0 calc(var(--spacing) * 3); border-radius: var(--radius-ctl);
+           border: 1px solid var(--color-outline); background: var(--color-ink-2); color: var(--color-primary); cursor: pointer; }
+  button.primary { background: var(--color-accent); color: var(--color-accent-ink); border-color: var(--color-accent); }
+  button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .status { color: var(--color-muted); margin-top: calc(var(--spacing) * 3); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">M151 prototype, not wired into the board</p>
+  <h1 class="text-headline">Lock-in</h1>
+  <p class="lede text-reading">A pick fills its slot: a chalk stroke draws along the bottom edge in 220 ms and the role mark settles. The stroke holds 400 ms, then hands to the outline colour. A second lock-in within one second is instant (<code>bulkDemo()</code>).</p>
+
+  <div id="board" class="board" role="grid" aria-label="Draft board, picks">
+    <div class="col blue" role="row">
+      <div class="colhead text-label"><span class="sm blue" aria-hidden="true"></span>Blue</div>
+      <div class="wrap"><span class="bracket" aria-hidden="true"></span><span class="num figures text-caption" aria-hidden="true">1</span>
+        <div class="slot" role="gridcell" data-slot="6" data-side="blue"></div></div>
+      <div class="wrap"><span class="bracket" aria-hidden="true"></span><span class="num figures text-caption" aria-hidden="true">2</span>
+        <div class="slot" role="gridcell" data-slot="9" data-side="blue"></div></div>
+    </div>
+    <div class="col red" role="row">
+      <div class="colhead text-label">Red<span class="sm red" aria-hidden="true"></span></div>
+      <div class="wrap"><span class="bracket" aria-hidden="true"></span><span class="num figures text-caption" aria-hidden="true">1</span>
+        <div class="slot" role="gridcell" data-slot="7" data-side="red"></div></div>
+      <div class="wrap"><span class="bracket" aria-hidden="true"></span><span class="num figures text-caption" aria-hidden="true">2</span>
+        <div class="slot" role="gridcell" data-slot="8" data-side="red"></div></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" type="button" onclick="lockIn()">Lock in</button>
+    <button type="button" onclick="resetBoard()">Reset</button>
+  </div>
+  <p id="status" class="status text-label" role="status" aria-live="polite">Blue pick 1 of 10</p>
+</main>
+<script>
+  // Marks from public/marks/*.svg (16 px master), inlined so they take currentColor.
+  const MARKS = {
+    MID: '<path d="M4 8a4 4 0 1 0 8 0a4 4 0 1 0-8 0"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2"/>',
+    JGL: '<path d="M2 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M4 7v1"/><path d="M10 4.5a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M12 6.5v1"/><path d="M6 11a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/><path d="M8 13v1"/>',
+    TOP: '<path d="M2 13.5L8 3L14 13.5Z"/><path d="M7.25 10a.75.75 0 1 0 1.5 0a.75.75 0 1 0-1.5 0"/>',
+  };
+  const WORD = { MID: "Mid", JGL: "Jungle", TOP: "Top" };
+  // Draft order of these four pick slots, with the champion each takes.
+  const ORDER = [
+    { slot: 6, name: "Orianna", mono: "Or", role: "MID", label: "Blue pick 1" },
+    { slot: 7, name: "Aurelion Sol", mono: "AS", role: "MID", label: "Red pick 1" },
+    { slot: 8, name: "Ornn", mono: "Or", role: "TOP", label: "Red pick 2" },
+    { slot: 9, name: "Jarvan IV", mono: "JI", role: "JGL", label: "Blue pick 2" },
+  ];
+  const slotEl = (n) => document.querySelector(`.slot[data-slot="${n}"]`);
+  let step = 0, lastLock = -Infinity;
+
+  function render() {
+    ORDER.forEach((o, i) => {
+      const el = slotEl(o.slot);
+      const filled = i < step, current = i === step;
+      el.dataset.filled = filled; el.dataset.current = current;
+      if (!filled) {
+        delete el.dataset.locked;
+        el.innerHTML = '<span class="gap8" aria-hidden="true"></span><span class="text">' +
+          (current ? '<span class="title sel text-label">Selecting…</span>' : '') +
+          (o.slot === 6 ? '<span class="cap text-caption">First pick</span>' : '') + '</span>';
+      }
+    });
+  }
+  function fill(el, o) {
+    el.innerHTML = `<span class="avatar text-caption" aria-hidden="true">${o.mono}</span>` +
+      `<span class="text"><span class="title text-label">${o.name}</span>` +
+      `<span class="role text-caption"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MARKS[o.role]}</svg>` +
+      `<span aria-hidden="true">${o.role}</span></span></span><span class="lockbar" aria-hidden="true"></span>`;
+    el.setAttribute("aria-label", `${o.label}, ${o.name}, ${WORD[o.role]}`);
+  }
+  // The one moment: a pick fills its slot. Bulk entry (< 1 s since the last) is instant.
+  window.lockIn = function () {
+    if (step >= ORDER.length) return;
+    const o = ORDER[step], el = slotEl(o.slot), now = performance.now();
+    fill(el, o);
+    el.dataset.locked = now - lastLock < 1000 ? "instant" : "anim";
+    lastLock = now; step += 1; render();
+    document.getElementById("status").textContent =
+      step < ORDER.length ? `${o.name} locked in. ${ORDER[step].label} of 10` : `${o.name} locked in.`;
+  };
+  // Verification hook: keyboard bulk entry, two lock-ins within 1 s. The first animates,
+  // the second lands instantly (full-width outline bar, mark in place).
+  window.bulkDemo = function () { resetBoard(); lockIn(); lockIn(); };
+  window.resetBoard = function () { step = 0; lastLock = -Infinity; render();
+    document.getElementById("status").textContent = "Blue pick 1 of 10"; };
+  render();
+</script>
+</body>
+</html>

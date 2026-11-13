@@ -57,6 +57,17 @@ impl Role {
         }
     }
 
+    /// The position icon's name on `/img/ui/position/{name}`.
+    pub fn icon_name(self) -> &'static str {
+        match self {
+            Role::Top => "top",
+            Role::Jungle => "jungle",
+            Role::Mid => "middle",
+            Role::Bot => "bottom",
+            Role::Support => "utility",
+        }
+    }
+
     /// The word: Top, Jungle, Mid, Bot, Support.
     pub fn label(self) -> &'static str {
         match self {
@@ -89,16 +100,41 @@ impl RoleLabelStyle {
             RoleLabelStyle::Active => "text-accent",
         }
     }
+
+    /// The position icon: the label's own ink, except on `Active`, where it
+    /// stays `secondary` (chalk is never for icons).
+    fn icon_class(self) -> &'static str {
+        match self {
+            RoleLabelStyle::Plain | RoleLabelStyle::Boxed => {
+                "inline-block size-3.5 shrink-0 bg-current"
+            }
+            RoleLabelStyle::Active => "inline-block size-3.5 shrink-0 bg-current text-secondary",
+        }
+    }
 }
 
-/// A role as a typographic mark (TOP, JGL, MID, BOT, SUP). Replaces role
-/// icons: no third-party images.
+/// The inline mask for a role's icon: the same-origin sanitised SVG.
+fn role_icon_mask(role: Role) -> String {
+    let url = format!("/img/ui/position/{}", role.icon_name());
+    format!(
+        "-webkit-mask:url({url}) center/contain no-repeat;mask:url({url}) center/contain no-repeat"
+    )
+}
+
+/// A role as its position icon beside a typographic mark (TOP, JGL, MID,
+/// BOT, SUP). The icon is the app's own `/img/ui/position/{name}` (a
+/// sanitised copy, served same-origin; never a third-party image), drawn as
+/// a CSS mask over `bg-current`: it takes the label's ink (`muted` plain,
+/// `secondary` boxed) and stays `secondary` on an `Active` label, never the
+/// accent. 14 px square left of the letters, 4 px gap (recipe card C, M152).
 ///
-/// A11y: the three letters are hidden from screen readers and the full
-/// word ("Jungle") is read instead. Text, so it scales and never breaks.
-/// A `guessed` role (inferred, not set by a person) is drawn as uncertain:
-/// a dashed underline and a "?" after the letters, and it is read as
-/// "Jungle, role guessed".
+/// A11y: the icon and the three letters are hidden from screen readers and
+/// the full word ("Jungle") is read instead. The letters stay text, so the
+/// label scales and still reads when the icon does not load. A `guessed`
+/// role (inferred, not set by a person) is drawn as uncertain: a dashed
+/// underline and a "?" after the letters, and it is read as
+/// "Jungle, role guessed". The dashes and "?" sit on the letters only. If
+/// the icon does not load, its box stays empty and the letters remain.
 #[component]
 pub fn RoleLabel(
     role: Role,
@@ -108,11 +144,17 @@ pub fn RoleLabel(
     guessed: bool,
 ) -> impl IntoView {
     let class = format!(
-        "inline-flex shrink-0 items-center font-mono text-caption font-medium uppercase leading-none tracking-[0.06em] {}",
+        "inline-flex shrink-0 items-center gap-1 font-mono text-caption font-medium uppercase leading-none tracking-[0.06em] {}",
         style.class()
     );
     view! {
         <span class=class data-role=role.label() data-role-guessed=guessed.then_some("true")>
+            <span
+                aria-hidden="true"
+                class=style.icon_class()
+                data-role-icon=role.icon_name()
+                style=role_icon_mask(role)
+            ></span>
             {if guessed {
                 view! {
                     <span aria-hidden="true" class="border-b border-dashed border-current pb-px">{role.short()}</span>
@@ -260,6 +302,21 @@ mod tests {
         assert_eq!(Role::parse("coach"), None);
         let shorts: Vec<&str> = Role::ALL.iter().map(|r| r.short()).collect();
         assert_eq!(shorts, ["TOP", "JGL", "MID", "BOT", "SUP"]);
+    }
+
+    /// Every role's icon is on the server's allow-list, and the mask only
+    /// ever points at the app's own route.
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn role_icons_are_same_origin_and_allowed() {
+        let names: Vec<&str> = Role::ALL.iter().map(|r| r.icon_name()).collect();
+        assert_eq!(names, ["top", "jungle", "middle", "bottom", "utility"]);
+        for r in Role::ALL {
+            assert!(crate::server::ui_icons::lookup("position", r.icon_name()).is_some());
+            let m = role_icon_mask(r);
+            assert!(m.contains(&format!("url(/img/ui/position/{})", r.icon_name())));
+            assert!(!m.contains("//"));
+        }
     }
 
     #[test]

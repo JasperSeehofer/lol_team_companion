@@ -4,7 +4,7 @@
 //! for the owner and are listed for the owner's adviser to confirm. Riot's
 //! production key review asks for terms next to the privacy page.
 
-use crate::components::footer::RIOT_DISCLAIMER;
+use crate::components::footer::{RIOT_DISCLAIMER, RIOT_LJJ_NOTICE};
 use crate::components::ui::{PageHeader, PageShell, PageWidth, SectionHeader};
 use leptos::prelude::*;
 
@@ -98,6 +98,7 @@ pub fn TermsPage() -> impl IntoView {
             <section class="mt-10" aria-labelledby="disclaimer-h">
                 <SectionHeader title="Disclaimer" id="disclaimer-h" />
                 <p class="max-w-prose text-body text-secondary">{RIOT_DISCLAIMER}</p>
+                <p class="mt-3 max-w-prose text-body text-secondary" data-testid="legal-riot-notice">{RIOT_LJJ_NOTICE}</p>
             </section>
         </PageShell>
     }
