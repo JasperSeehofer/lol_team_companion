@@ -825,3 +825,90 @@ DEFINE FIELD IF NOT EXISTS expires_at ON password_reset TYPE datetime;
 DEFINE FIELD IF NOT EXISTS used_at ON password_reset TYPE option<datetime>;
 DEFINE INDEX IF NOT EXISTS password_reset_user ON password_reset FIELDS user;
 DEFINE INDEX IF NOT EXISTS password_reset_code_unique ON password_reset FIELDS code_hash UNIQUE;
+
+-- ===========================================================================
+-- Review together (M165): a team reviews one game of a scheduled match in a
+-- session. Each member answers four prompts alone, sealed until the reveal;
+-- the reveal shows every card at once; the team +1s cards, turns some into
+-- proposals, votes, and the facilitator accepts at most three, which close
+-- the session into a generated review with owned action items.
+-- Ids are SurrealDB's random ids (never ulid(): a time-ordered id would leak
+-- write order). Phases past the deadline are computed at read time and the
+-- reveal is written lazily (order keys, entries locked), so restarts lose
+-- nothing; presence is in memory only and never stored.
+-- review_entry.author is stored for every card, the anonymous prompt
+-- (off_plan) included, only so the author can export and delete their own
+-- words; no team view returns it for off_plan cards.
+-- ===========================================================================
+DEFINE TABLE IF NOT EXISTS review_session SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS team ON review_session TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS scheduled_match ON review_session TYPE option<record<scheduled_match>>;
+DEFINE FIELD IF NOT EXISTS series ON review_session TYPE option<record<series>>;
+-- Always set (1 for a Bo1), so one session per game is unique.
+DEFINE FIELD IF NOT EXISTS game_number ON review_session TYPE int ASSERT $value >= 1 AND $value <= 5;
+DEFINE FIELD IF NOT EXISTS match_riot_id ON review_session TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS facilitator ON review_session TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS phase ON review_session TYPE string DEFAULT 'writing'
+  ASSERT $value IN ['writing', 'revealed', 'deciding', 'closed'];
+-- When writing ends: 24 h after the match start (or after opening, when that
+-- has passed); a timed round moves it earlier, never later than async_closes_at.
+DEFINE FIELD IF NOT EXISTS writing_closes_at ON review_session TYPE datetime;
+DEFINE FIELD IF NOT EXISTS async_closes_at ON review_session TYPE datetime;
+DEFINE FIELD IF NOT EXISTS round_started_at ON review_session TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS opened_at ON review_session TYPE datetime DEFAULT time::now();
+DEFINE FIELD IF NOT EXISTS revealed_at ON review_session TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS closed_at ON review_session TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS review ON review_session TYPE option<record<post_game_learning>>;
+-- Written at close, team-level only: members with a card, of current members.
+DEFINE FIELD IF NOT EXISTS voices ON review_session TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS members ON review_session TYPE option<int>;
+-- Bumped on every write that changes what a member sees (the poll compares it).
+DEFINE FIELD IF NOT EXISTS rev ON review_session TYPE int DEFAULT 0;
+DEFINE FIELD IF NOT EXISTS scheduled_match_deleted ON review_session TYPE option<bool>;
+DEFINE INDEX IF NOT EXISTS review_session_team ON review_session FIELDS team;
+DEFINE INDEX IF NOT EXISTS review_session_review ON review_session FIELDS review;
+DEFINE INDEX IF NOT EXISTS review_session_game_unique ON review_session FIELDS scheduled_match, game_number UNIQUE;
+
+DEFINE TABLE IF NOT EXISTS review_entry SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS session ON review_entry TYPE record<review_session>;
+DEFINE FIELD IF NOT EXISTS team ON review_entry TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS author ON review_entry TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS prompt ON review_entry TYPE string
+  ASSERT $value IN ['decided', 'to_plan', 'off_plan', 'next_time'];
+-- NONE for a pass; otherwise 1 to 280 characters, trimmed (untrusted text).
+DEFINE FIELD IF NOT EXISTS text ON review_entry TYPE option<string>
+  ASSERT $value = NONE OR (string::len($value) >= 1 AND string::len($value) <= 280);
+DEFINE FIELD IF NOT EXISTS passed ON review_entry TYPE bool DEFAULT false;
+DEFINE FIELD IF NOT EXISTS cluster ON review_entry TYPE option<record<review_entry>>;
+-- Random, written at the reveal: the only order cards are shown in.
+DEFINE FIELD IF NOT EXISTS order_key ON review_entry TYPE option<int>;
+DEFINE FIELD IF NOT EXISTS updated_at ON review_entry TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS review_entry_session ON review_entry FIELDS session;
+DEFINE INDEX IF NOT EXISTS review_entry_team ON review_entry FIELDS team;
+DEFINE INDEX IF NOT EXISTS review_entry_author ON review_entry FIELDS author;
+
+DEFINE TABLE IF NOT EXISTS review_proposal SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS session ON review_proposal TYPE record<review_session>;
+DEFINE FIELD IF NOT EXISTS team ON review_proposal TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS text ON review_proposal TYPE string
+  ASSERT string::len($value) >= 1 AND string::len($value) <= 280;
+-- The card it was made from; there is deliberately no proposer field.
+DEFINE FIELD IF NOT EXISTS source ON review_proposal TYPE option<record<review_entry>>;
+DEFINE FIELD IF NOT EXISTS accepted ON review_proposal TYPE bool DEFAULT false;
+-- A current member's username, as action_item.assigned_to.
+DEFINE FIELD IF NOT EXISTS owner ON review_proposal TYPE option<string>;
+DEFINE INDEX IF NOT EXISTS review_proposal_session ON review_proposal FIELDS session;
+DEFINE INDEX IF NOT EXISTS review_proposal_team ON review_proposal FIELDS team;
+
+-- +1 on a card and decide votes on proposals. Others see only counts.
+DEFINE TABLE IF NOT EXISTS review_vote SCHEMAFULL;
+DEFINE FIELD IF NOT EXISTS session ON review_vote TYPE record<review_session>;
+DEFINE FIELD IF NOT EXISTS team ON review_vote TYPE record<team>;
+DEFINE FIELD IF NOT EXISTS target ON review_vote TYPE record<review_entry | review_proposal>;
+DEFINE FIELD IF NOT EXISTS user ON review_vote TYPE record<user>;
+DEFINE FIELD IF NOT EXISTS kind ON review_vote TYPE string ASSERT $value IN ['plus_one', 'decide'];
+DEFINE FIELD IF NOT EXISTS created_at ON review_vote TYPE datetime DEFAULT time::now();
+DEFINE INDEX IF NOT EXISTS review_vote_session ON review_vote FIELDS session;
+DEFINE INDEX IF NOT EXISTS review_vote_team ON review_vote FIELDS team;
+DEFINE INDEX IF NOT EXISTS review_vote_user ON review_vote FIELDS user;
+DEFINE INDEX IF NOT EXISTS review_vote_unique ON review_vote FIELDS target, user, kind UNIQUE;
