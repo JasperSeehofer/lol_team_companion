@@ -1,38 +1,26 @@
 # CI e2e summary
 
-- run: 43499305253
-- sha: 67f214e693b2049e9e9357c35754cbe4568d8ccc
+- run: 43505578382
+- sha: cc8ff8a1d884c1753bbb6794464bff8227268ee7
 
 ## Playwright
 
 expected 191, unexpected 1, flaky 0, skipped 0
 
 ### [unexpected] review-together.spec.ts:318 review together: sealed, anonymous, decided and counted by five members
-attempt 1: failed (48788 ms)
+attempt 1: failed (48246 ms)
 ```
-Error: expect(locator).toBeVisible() failed
+Error: expect(received).toBeLessThan(expected)
 
-Locator: locator('#confirm-reveal')
-Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-  - Expect "toBeVisible" with timeout 5000ms
-  - waiting for locator('#confirm-reveal')
+Expected: < 0.95
+Received:   0.965983
 ```
-attempt 2: failed (51592 ms)
+attempt 2: failed (52982 ms)
 ```
-Error: expect(locator).toBeVisible() failed
+Error: expect(received).toBeLessThan(expected)
 
-Locator: locator('#confirm-reveal')
-Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-  - Expect "toBeVisible" with timeout 5000ms
-  - waiting for locator('#confirm-reveal')
+Expected: < 0.95
+Received:   0.965983
 ```
 
 ## Server log (slow request, inflight, panicked, ERROR)
