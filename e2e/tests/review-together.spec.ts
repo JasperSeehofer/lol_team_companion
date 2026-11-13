@@ -360,9 +360,10 @@ test("review together: sealed, anonymous, decided and counted by five members", 
   await expect(editor).not.toBeVisible({ timeout: 10000 });
 
   // The thread's review step: "Review together" is the action, writing alone the quiet link.
-  const together = lead.page.locator('[data-prep] a[href^="/review/together?"]');
-  await expect(together).toBeVisible({ timeout: 15000 });
-  await expect(together).toContainText("Review together");
+  // The step's title links there too; the chalk action is the one named so.
+  const together = lead.page.locator('[data-prep] a[href^="/review/together?"]').filter({ hasText: "Review together" });
+  await expect(together).toHaveCount(1, { timeout: 15000 });
+  await expect(together).toBeVisible();
   await expect(lead.page.locator("[data-prep] [data-prep-alt]")).toHaveText("Write it alone");
   const href = (await together.getAttribute("href")) ?? "";
   expect(href).toMatch(/^\/review\/together\?match_id=scheduled_match:[^&]+.*game=1/);
