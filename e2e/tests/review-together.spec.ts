@@ -572,6 +572,10 @@ test("review together: sealed, anonymous, decided and counted by five members", 
   await rawShot(quietOne.page, "review-together-reveal-reduced-1280");
   for (const m of all) await expect(m.page.locator("[data-reveal]")).toBeVisible({ timeout: 15000 });
   await expect(quietOne.page.locator("[data-reveal-status]")).toContainText("Revealed");
+  // The announcement carries the team-level voices line the server fills after the reveal.
+  await expect(quietOne.page.locator("[data-reveal-status]")).toHaveText(
+    /^Revealed: \d+ notes?, \d of 5 voices\.$/
+  );
 
   // After the reveal an edit is refused by the server.
   const replay = await author.page.evaluate(async (req) => {

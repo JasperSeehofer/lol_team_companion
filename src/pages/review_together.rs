@@ -503,7 +503,7 @@ use crate::components::review_together::{
 use crate::components::ui::{
     Button, ButtonSize, ButtonVariant, Callout, CalloutTone, Checkbox, ConfirmDialog, EmptyState,
     PageHeader, PageShell, SaveState, SaveStatus, SaveTracker, Skeleton, SkeletonGroup,
-    SkeletonShape, Text, TextField, Toast, ToastContext, Tone,
+    SkeletonShape, Text, TextField, TextTag, Toast, ToastContext, Tone,
 };
 use crate::models::review_together::{
     minutes_left, note_rows, row_root, Phase, Prompt, SessionState, ACCEPT_MAX, DECIDE_VOTES,
@@ -910,7 +910,7 @@ fn SessionView(page: crate::models::review_together::SessionPage) -> impl IntoVi
             }
         />
         {move || writing().then(|| view! {
-            <Text tone=Tone::Secondary class="mb-6">{SEALED}</Text>
+            <Text tag=TextTag::P tone=Tone::Secondary class="mb-6">{SEALED}</Text>
         })}
         <div class="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,42rem)_20rem] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-12 lg:gap-y-8">
             <aside class="flex flex-col gap-4 lg:col-start-2 lg:row-start-1 lg:border-l lg:border-rule lg:pl-8" aria-label="The session" data-session-side="">
