@@ -160,14 +160,20 @@ async function clearToasts(page: Page) {
 }
 
 /** A frame (and its HTML) when $MISSION_FRAMES_DIR is set; the page never scrolls sideways. */
-async function shot(page: Page, name: string, fullPage = false) {
+async function shot(page: Page, name: string, fullPage = false, focus?: string) {
   await clearToasts(page);
   const sw = await page.evaluate(() => document.documentElement.scrollWidth);
   const vw = page.viewportSize()?.width ?? 0;
   expect(sw, `${name}: ${sw}px wide in a ${vw}px viewport`).toBeLessThanOrEqual(vw);
   if (!DIR) return;
   fs.mkdirSync(DIR, { recursive: true });
-  await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+  if (focus) {
+    // The surface in view, as a reader scrolled to it (not the page top).
+    await page.locator(focus).first().evaluate((el) => el.scrollIntoView({ block: "start" }));
+    await page.evaluate(() => window.scrollBy(0, -16));
+  } else {
+    await page.evaluate(() => window.scrollTo(0, 0)).catch(() => {});
+  }
   await page.waitForTimeout(200);
   await page.screenshot({ path: path.join(DIR, `${name}.png`), fullPage });
   await saveHtml(page, name);
@@ -369,10 +375,11 @@ test("review together: sealed, anonymous, decided and counted by five members", 
   expect(href).toMatch(/^\/review\/together\?match_id=scheduled_match:[^&]+.*game=1/);
   const matchId = new URL(href, "http://local").searchParams.get("match_id") ?? "";
   await lead.page.waitForTimeout(800);
-  await shot(lead.page, "match-day-review-together-1280");
+  await shot(lead.page, "match-day-review-together-1280", false, "[data-prep]");
+  await shot(lead.page, "match-day-review-together-1280-flow", true);
   await lead.page.setViewportSize({ width: 390, height: 844 });
   await lead.page.waitForTimeout(800);
-  await shot(lead.page, "match-day-review-together-390");
+  await shot(lead.page, "match-day-review-together-390", false, "[data-prep] li:last-child");
   await lead.page.setViewportSize({ width: 1280, height: 900 });
 
   // --- Game 1: the leader opens it from the thread and facilitates.
@@ -701,7 +708,8 @@ test("review together: sealed, anonymous, decided and counted by five members", 
   await expect(proposal(phone.page, P(1))).toContainText(`owner ${phone.username}`, { timeout: 15000 });
   await shot(lead.page, "review-together-decide-1280");
   await shot(lead.page, "review-together-decide-1280-flow", true);
-  await shot(phone.page, "review-together-decide-390", true);
+  await shot(phone.page, "review-together-decide-390", false, "#decide");
+  await shot(phone.page, "review-together-decide-390-flow", true);
 
   // Action items before the close (e's view of the team's list).
   await go(quietOne.page, "/action-items");
