@@ -879,8 +879,14 @@ fn PrepSection() -> impl IntoView {
             .link("#prep", "Open action items"),
     ];
     let quiet = steps.clone();
+    // M165: a step with a second, quiet link after its action.
+    let alt = vec![PrepStep::new("After the game: review", PrepState::Next)
+        .detail("The match has started. Review it while it is fresh.")
+        .status("To write")
+        .link("#prep", "Review together")
+        .alt_link("#prep", "Write it alone")];
     view! {
-        <GallerySection id="prep" title="Prep sequence" lede="The Match Day pattern: what to do next, in order. Done steps recede, the next step is emphasised and links to where it is done, steps that need attention say why. Quiet emphasis outlines the next step for views that have their own primary action (the game plan's Save plan).">
+        <GallerySection id="prep" title="Prep sequence" lede="The Match Day pattern: what to do next, in order. Done steps recede, the next step is emphasised and links to where it is done, steps that need attention say why. Quiet emphasis outlines the next step for views that have their own primary action (the game plan's Save plan). A step may carry a second, quiet text link after its action (Match Day's review: Review together, or Write it alone).">
             <div class="grid max-w-5xl gap-10 lg:grid-cols-2">
                 <div>
                     <p class="eyebrow mb-2">"Primary (Match Day) \u{00b7} scrim vs Beta Dragons"</p>
@@ -889,6 +895,10 @@ fn PrepSection() -> impl IntoView {
                 <div>
                     <p class="eyebrow mb-2">"Quiet (inside an editor)"</p>
                     <PrepSequence label="Preparation steps, quiet" steps=quiet emphasis=PrepEmphasis::Quiet />
+                </div>
+                <div>
+                    <p class="eyebrow mb-2">"A second link (Match Day's review step)"</p>
+                    <PrepSequence label="Review step with a second link" steps=alt />
                 </div>
             </div>
         </GallerySection>

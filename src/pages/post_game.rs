@@ -98,7 +98,7 @@ pub async fn get_review_candidates(
         .map_err(authz::server_err)
 }
 
-/// M159 item 5: "Review as a team" on a game: `None` when the game is not
+/// M159 item 5: "Write a review" on a game: `None` when the game is not
 /// one the viewer's team can review (the action is hidden), else whether
 /// the team already has a review of it.
 #[server]
@@ -439,11 +439,34 @@ pub async fn auto_detect_outcome(draft_id: String) -> Result<Option<String>, Ser
     Ok(None) // No matching game found in recent history
 }
 
-/// Basic pattern analysis: find recurring themes across reviews
+/// Basic pattern analysis: find recurring themes across reviews. M165: the
+/// closed review sessions' "went to plan" cards count as strengths and
+/// their "didn't go to plan" cards as issues (texts only, each text once
+/// per session; a generated review's own lists are empty, so nothing is
+/// counted twice).
 #[allow(clippy::type_complexity)]
-fn analyze_patterns(reviews: &[PostGameLearning]) -> (Vec<(String, usize)>, Vec<(String, usize)>) {
+fn analyze_patterns(
+    reviews: &[PostGameLearning],
+    sessions: &[crate::models::review_together::SessionPatternTexts],
+) -> (Vec<(String, usize)>, Vec<(String, usize)>) {
     let mut good_counts: HashMap<String, usize> = HashMap::new();
     let mut improve_counts: HashMap<String, usize> = HashMap::new();
+
+    for s in sessions {
+        let mut seen = std::collections::HashSet::new();
+        for item in &s.to_plan {
+            let key = item.trim().to_lowercase();
+            if seen.insert(("good", key.clone())) {
+                *good_counts.entry(key).or_default() += 1;
+            }
+        }
+        for item in &s.off_plan {
+            let key = item.trim().to_lowercase();
+            if seen.insert(("bad", key.clone())) {
+                *improve_counts.entry(key).or_default() += 1;
+            }
+        }
+    }
 
     for r in reviews {
         for item in &r.what_went_well {
@@ -634,6 +657,26 @@ pub fn PostGamePage() -> impl IntoView {
     let toast = use_context::<ToastContext>().expect("ToastProvider");
     let query = leptos_router::hooks::use_query_map();
     let reviews = Resource::new(|| (), |_| list_reviews());
+    // M165: the closed review sessions' card texts, for Patterns.
+    let session_texts = Resource::new(
+        || (),
+        |_| crate::pages::review_together::get_session_pattern_texts(),
+    );
+    // M165 item 7: the session that generated the open review, read-only.
+    let together = Resource::new(
+        move || {
+            query
+                .read()
+                .get("review_id")
+                .filter(|r| !r.trim().is_empty())
+        },
+        |id| async move {
+            match id {
+                Some(id) => crate::pages::review_together::get_review_session_for_review(id).await,
+                None => Ok(None),
+            }
+        },
+    );
     let plans = Resource::new(|| (), |_| list_plans_for_postgame());
     let drafts = Resource::new(|| (), |_| list_drafts_for_postgame());
     // M159 item 5: the games a review can be of; a thread link's match
@@ -805,7 +848,7 @@ pub fn PostGamePage() -> impl IntoView {
     // The open review's id goes in the address so a reload or link reopens it.
     let nav = navigator();
 
-    // M159 item 5: `?riot_match_id=` (a game's "Review as a team") opens
+    // M159 item 5: `?riot_match_id=` (a game's "Write a review") opens
     // the team's review of that game, or preselects the game for a new one.
     // Only one of the team's candidate games counts; any other id is
     // ignored and nothing is preselected.
@@ -1078,9 +1121,16 @@ pub fn PostGamePage() -> impl IntoView {
                             })}
                         </Suspense>
                     </section>
-                    <PatternsSection reviews=reviews />
+                    <PatternsSection reviews=reviews session_texts=session_texts />
                 </div>
                 <div class="flex min-w-0 flex-col gap-12">
+                    // M165: a review the team wrote together shows its
+                    // notes above the editable outcome, rating and notes.
+                    <Suspense fallback=|| ()>
+                        {move || together.get().and_then(|r| r.ok()).flatten().map(|v| view! {
+                            <crate::pages::review_together::ReviewedTogether view=v />
+                        })}
+                    </Suspense>
                     <LinksSection ed=ed plans=plans drafts=drafts candidates=candidates facts=facts />
                     <OutcomeSection ed=ed />
                     <section aria-labelledby="review-points-heading" class="flex flex-col gap-4">
@@ -1472,6 +1522,9 @@ fn OutcomeSection(ed: ReviewEd) -> impl IntoView {
 #[component]
 fn PatternsSection(
     reviews: Resource<Result<Vec<PostGameLearning>, ServerFnError>>,
+    session_texts: Resource<
+        Result<Vec<crate::models::review_together::SessionPatternTexts>, ServerFnError>,
+    >,
 ) -> impl IntoView {
     view! {
         <section aria-labelledby="patterns-heading" class="flex flex-col gap-3">
@@ -1479,7 +1532,8 @@ fn PatternsSection(
             <Suspense fallback=|| ()>
                 {move || reviews.get().map(|r| {
                     let list = r.unwrap_or_default();
-                    let (good, bad) = analyze_patterns(&list);
+                    let texts = session_texts.get().and_then(|t| t.ok()).unwrap_or_default();
+                    let (good, bad) = analyze_patterns(&list, &texts);
                     if good.is_empty() && bad.is_empty() {
                         return view! {
                             <EmptyState size=EmptySize::Compact message="A point that shows up in two or more reviews appears here, as a strength or a recurring issue." />
@@ -1552,6 +1606,25 @@ fn LinkedPlan(plan_id: String) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn patterns_count_closed_session_cards_once_per_session() {
+        use crate::models::review_together::SessionPatternTexts;
+        let session = |good: &[&str], bad: &[&str]| SessionPatternTexts {
+            review_id: None,
+            to_plan: good.iter().map(|s| s.to_string()).collect(),
+            off_plan: bad.iter().map(|s| s.to_string()).collect(),
+        };
+        let sessions = vec![
+            session(&["Early dragon"], &["Late rotations", "late rotations"]),
+            session(&["early dragon"], &["Late rotations"]),
+            session(&[], &["Warding"]),
+        ];
+        let (good, bad) = analyze_patterns(&[], &sessions);
+        assert_eq!(good, vec![("early dragon".to_string(), 2)]);
+        // Twice in one session counts once.
+        assert_eq!(bad, vec![("late rotations".to_string(), 2)]);
+    }
 
     #[test]
     fn a_match_fills_only_empty_or_its_own_outcome() {

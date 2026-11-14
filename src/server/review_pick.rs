@@ -70,7 +70,7 @@ pub async fn review_candidates(
     ))
 }
 
-/// For "Review as a team" on one game: `None` when the game is not one of
+/// For "Write a review" on one game: `None` when the game is not one of
 /// the team's candidates (the action is not shown), else whether the team
 /// already reviewed it.
 pub async fn team_review_state(

@@ -89,7 +89,11 @@ async fn seed_rows(db: &Surreal<Db>, user: &str, leader: &str, team: &str, tag: 
         CREATE ledger_month SET month = IF $tag = 'a' { '2026-08' } ELSE { '2026-09' }, updated_by = $u; \
         CREATE site_text SET slug = 'account-test-' + $tag, body = 'b', approved_by = $u, updated_by = $u; \
         CREATE join_request SET team = $t, user = $u, status = 'accepted'; \
-        CREATE action_item SET team = $t, text = 'do it ' + $tag, assigned_to = $name;";
+        CREATE action_item SET team = $t, text = 'do it ' + $tag, assigned_to = $name; \
+        CREATE type::record('scheduled_match', 'rt' + $tag) SET team = $t, starts_at = time::now(), kind = 'scrim', format = 'bo1', created_by = $l; \
+        CREATE type::record('review_session', $tag) SET team = $t, scheduled_match = type::record('scheduled_match', 'rt' + $tag), game_number = 1, facilitator = $u, writing_closes_at = time::now() + 1d, async_closes_at = time::now() + 1d; \
+        CREATE type::record('review_entry', $tag) SET session = type::record('review_session', $tag), team = $t, author = $u, prompt = 'off_plan', text = 'card text ' + $tag; \
+        CREATE review_vote SET session = type::record('review_session', $tag), team = $t, target = type::record('review_entry', $tag), user = $u, kind = 'plus_one';";
     db.query(q)
         .bind(("u_key", db::record_key(user, "user")))
         .bind(("l_key", db::record_key(leader, "user")))
@@ -179,6 +183,7 @@ async fn export_holds_every_section_and_nothing_of_others() {
         "pair note a",
         "Idea a",
         "Draft a",
+        "card text a",
     ] {
         assert!(text.contains(own), "{own} missing from the export");
     }
@@ -191,6 +196,7 @@ async fn export_holds_every_section_and_nothing_of_others() {
         "answer o",
         "note text o",
         "Draft o",
+        "card text o",
     ] {
         assert!(
             !text.contains(foreign),

@@ -8,6 +8,21 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Milestone M165: Review together (2026-11-13)
+
+Introduce: /review/together | Review together | After a match, open the review step on Match Day and choose Review together: everyone writes alone, then every note appears at once.
+
+#### Added
+- Review together: after a match has started, Match Day's review step offers "Review together" for each game (for a best of 3 or 5, game by game). It opens one shared review session for that game; "Write it alone" still opens the single-author review. While the session is open the step reads "Open the session", after the reveal "Join the reveal". The step never shows who has written.
+- The silent round: four prompts ("The moment that decided the game", "What went to plan", "What didn't go to plan", "One thing for next time"), up to three notes each of at most 280 characters, saved as you type, with "Nothing to add here" to pass and "Remove" with Undo. Your notes are sealed: until the reveal only you see what you write, and nobody sees anyone else's notes or how many they wrote. The round stays open for a day after the match start, or the facilitator runs a timed round ("Closes 21:40 · 3 min left", counted in whole minutes) and can add a minute or reveal early.
+- The reveal: every note appears at once, grouped by prompt, in the serif the app keeps for people's words, with the writer's name under it. Notes under "What didn't go to plan" are anonymous: nobody on the team, the facilitator included, sees who wrote them, and the page says so while you write. Everyone can +1 any note; the facilitator sees notes that read alike and can merge them (and take them apart again); every note stays visible, the ones nobody agreed with too.
+- Decide: anyone can turn a note into a proposal for an action item and has three votes, at most one per proposal ("2 of 3 votes left"). The facilitator accepts up to three, picks an owner for each from the team, and closes the session: that writes the review with those action items and their owners. The review shows the notes read-only under "Reviewed together" with one line for the team, such as "5 of 5 voices" (never a count per player); the result, rating and notes stay editable.
+- "Here now" on the session page lists who has it open, by name, with no marks for who has written. The leader or a coach can take over facilitating.
+- For the facilitator, on wider screens: a quiet line when players have been quiet in the last three reviews ("One player has been quiet in the last 3 reviews."), a count only, never who; "Don't show this again" mutes it, and the Guidance switch on your profile turns it off.
+
+#### Changed
+- On a match's page and on Team games, "Review as a team" is now "Write a review" ("Open the review" once the team has one), so "Review together" only ever means the shared session. It still opens the review page with that game chosen.
+
 ### Milestone M159: Match thread (2026-10-18)
 
 Planned for the second round of this milestone, not built yet: creating the series from a best of 3 or 5 match, RSVP for a match, and a share link for the opponent brief.

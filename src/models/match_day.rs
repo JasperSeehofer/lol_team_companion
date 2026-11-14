@@ -554,6 +554,9 @@ pub struct MatchDay {
     /// the page shows the next match instead and says so.
     #[serde(default)]
     pub unknown_match: bool,
+    /// M165: the current match's review sessions, one per game.
+    #[serde(default)]
+    pub review_sessions: Vec<crate::models::review_together::MatchSessionLink>,
 }
 
 /// Shorten a line to `max` characters on a word boundary, with an ellipsis.

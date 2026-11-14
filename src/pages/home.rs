@@ -26,6 +26,7 @@ use crate::models::match_day::{
     format_label, game_count, kind_label, review_games, review_readout, reviews_complete,
     BriefPlayer, GameReview, LinkRef, MatchDay, OpponentBrief, ScheduledMatchInput, FORMATS, KINDS,
 };
+use crate::models::review_together::Phase;
 use crate::pages::closed_beta::Landing;
 
 /// What the home page shows for the visitor.
@@ -108,6 +109,7 @@ pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, Ser
 
     let mut brief = None;
     let mut facts = db::MatchPrepFacts::default();
+    let mut review_sessions = Vec::new();
     if let Some(m) = &next {
         if let Some(opp_id) = &m.opponent_id {
             if let Some((opp, players)) = db::get_opponent(&db, &team_id, opp_id)
@@ -144,6 +146,10 @@ pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, Ser
                 });
             }
         }
+        // M165: the match's review sessions (per game) for the review step.
+        review_sessions = crate::server::review_together::sessions_of_match(&db, &team_id, &m.id)
+            .await
+            .map_err(authz::server_err)?;
         // M159: only work stamped to this match counts; unstamped work
         // against its opponent is offered as earlier work.
         facts = db::match_prep_facts(
@@ -232,6 +238,7 @@ pub async fn get_home(guide: bool, match_id: Option<String>) -> Result<Home, Ser
             .collect(),
         chosen: choice.chosen,
         unknown_match: choice.unknown,
+        review_sessions,
     };
     // A nudge never repeats the prep sequence's next step.
     let skip = prep_steps(&md)
@@ -514,36 +521,76 @@ pub fn prep_steps(md: &MatchDay) -> Vec<PrepStep> {
             .status("After the game"),
         (written, _, _) => {
             let carried = thread_suffix(m, series_game(&m.format, to_write));
-            let href = match (md.plans.first(), md.drafts.first()) {
+            let alone = match (md.plans.first(), md.drafts.first()) {
                 (Some(p), _) => format!("/post-game?plan_id={}{carried}", p.id),
                 (None, Some(d)) => format!("/post-game?draft_id={}{carried}", d.id),
                 _ => format!("/post-game?{}", &carried[1..]),
+            };
+            // M165: the game's review session decides the chalk action;
+            // "Write it alone" stays as the quiet second link. The step
+            // shows no written count to anyone.
+            let session = md
+                .review_sessions
+                .iter()
+                .find(|s| s.game_number == to_write);
+            let (href, action, phase_status) = match session.map(|s| (s.phase, &s.session_id)) {
+                None => (
+                    format!("/review/together?{}", &carried[1..]),
+                    "Review together",
+                    None,
+                ),
+                Some((Phase::Writing, id)) => (
+                    format!("/review/together?session={id}"),
+                    "Open the session",
+                    Some("Writing"),
+                ),
+                Some((Phase::Revealed | Phase::Deciding, id)) => (
+                    format!("/review/together?session={id}"),
+                    "Join the reveal",
+                    Some("Revealed"),
+                ),
+                // Closed, but no review counted for the game (it was
+                // deleted): writing alone is the way left.
+                Some((Phase::Closed, _)) => (alone.clone(), "Write the review", None),
             };
             let reviewed_n = games.iter().filter(|(_, s)| *s == GameReview::Done).count();
             let played_n = games
                 .iter()
                 .filter(|(_, s)| *s != GameReview::NotPlayed)
                 .count();
-            PrepStep::new("After the game: review", PrepState::Todo)
+            let mut step = PrepStep::new("After the game: review", PrepState::Todo)
                 .detail(if series {
                     readout.clone()
                 } else {
                     "The match has started. Review it while it is fresh.".to_string()
                 })
-                .status(if written.is_some() {
-                    format!("{reviewed_n} of {played_n} reviewed")
-                } else {
-                    "To write".to_string()
+                .status(match (phase_status, written.is_some()) {
+                    (Some(p), _) => p.to_string(),
+                    (None, true) => format!("{reviewed_n} of {played_n} reviewed"),
+                    (None, false) => "To write".to_string(),
                 })
-                .link(href, "Write the review")
+                .link(href.clone(), action);
+            if href != alone {
+                step = step.alt_link(alone, "Write it alone");
+            }
+            step
         }
     };
 
     let mut steps = vec![brief, drafts, plan, items, review];
-    if let Some(next) = steps
-        .iter_mut()
-        .find(|s| matches!(s.state, PrepState::Todo | PrepState::Attention) && s.href.is_some())
-    {
+    let open = |s: &PrepStep| {
+        matches!(s.state, PrepState::Todo | PrepState::Attention) && s.href.is_some()
+    };
+    // M165: once the match has started, preparing for it is over; an open
+    // review is the step to do now ("Review together" as the one chalk
+    // action), even when earlier steps were skipped.
+    let review_now = started && steps.last().is_some_and(open);
+    let next = if review_now {
+        steps.last_mut()
+    } else {
+        steps.iter_mut().find(|s| open(s))
+    };
+    if let Some(next) = next {
         next.state = PrepState::Next;
     }
     steps
@@ -1490,6 +1537,7 @@ mod tests {
             upcoming: vec![],
             chosen: false,
             unknown_match: false,
+            review_sessions: vec![],
         }
     }
 
@@ -1577,9 +1625,18 @@ mod tests {
         });
         let s = prep_steps(&m);
         assert_eq!(states(&s), vec![Done, Done, Done, Done, Next]);
+        // M165: "Review together" is the action, writing alone the quiet link.
         assert_eq!(
             s[4].href.as_deref(),
-            Some("/post-game?plan_id=game_plan:p&match_id=scheduled_match:1&game=1")
+            Some("/review/together?match_id=scheduled_match:1&game=1")
+        );
+        assert_eq!(s[4].action.as_deref(), Some("Review together"));
+        assert_eq!(
+            s[4].alt,
+            Some((
+                "/post-game?plan_id=game_plan:p&match_id=scheduled_match:1&game=1".to_string(),
+                "Write it alone".to_string()
+            ))
         );
         m.review_after = Some(LinkRef {
             id: "post_game_learning:r".into(),
@@ -1606,6 +1663,10 @@ mod tests {
         assert_eq!(s[4].status.as_deref(), Some("1 of 2 reviewed"));
         assert_eq!(
             s[4].href.as_deref(),
+            Some("/review/together?match_id=scheduled_match:1&game=2")
+        );
+        assert_eq!(
+            s[4].alt.as_ref().map(|(h, _)| h.as_str()),
             Some("/post-game?match_id=scheduled_match:1&game=2")
         );
         m.reviewed_games = vec![1, 2];
@@ -1615,6 +1676,57 @@ mod tests {
             s[4].detail.as_deref(),
             Some("G1 done \u{b7} G2 done \u{b7} G3 not played")
         );
+    }
+
+    #[test]
+    fn the_review_step_follows_the_games_session() {
+        use crate::models::review_together::MatchSessionLink;
+        let mut m = md(-1);
+        m.played_games = vec![1, 2];
+        m.reviewed_games = vec![1];
+        m.review_after = Some(LinkRef {
+            id: "post_game_learning:r".into(),
+            name: "R".into(),
+        });
+        let link = |phase| MatchSessionLink {
+            game_number: 2,
+            session_id: "review_session:s".into(),
+            phase,
+        };
+        m.review_sessions = vec![link(Phase::Writing)];
+        let s = prep_steps(&m);
+        assert_eq!(
+            s[4].href.as_deref(),
+            Some("/review/together?session=review_session:s")
+        );
+        assert_eq!(s[4].action.as_deref(), Some("Open the session"));
+        assert_eq!(s[4].status.as_deref(), Some("Writing"));
+        assert!(s[4].alt.is_some());
+        // No count of who has written, ever.
+        assert!(!s[4].status.as_deref().unwrap_or("").contains(" of "));
+        m.review_sessions = vec![link(Phase::Deciding)];
+        assert_eq!(prep_steps(&m)[4].action.as_deref(), Some("Join the reveal"));
+        // A session of another game does not count for game 2.
+        m.review_sessions = vec![MatchSessionLink {
+            game_number: 1,
+            ..link(Phase::Writing)
+        }];
+        assert_eq!(prep_steps(&m)[4].action.as_deref(), Some("Review together"));
+    }
+
+    #[test]
+    fn a_started_match_offers_the_review_even_without_preparation() {
+        use PrepState::*;
+        // Nothing prepared: the unread brief no longer holds the chalk.
+        let s = prep_steps(&md(-1));
+        assert_eq!(s[4].state, Next);
+        assert_eq!(s[4].action.as_deref(), Some("Review together"));
+        assert_eq!(s.iter().filter(|x| x.state == Next).count(), 1);
+        assert_eq!(s[0].state, Todo);
+        // Before the start, the first open step is next as before.
+        let s = prep_steps(&md(5));
+        assert_eq!(s[0].state, Next);
+        assert_ne!(s[4].state, Next);
     }
 
     #[test]

@@ -128,7 +128,7 @@ pub fn hub_for_path(path: &str) -> &'static str {
     if path == "/" {
         return "today";
     }
-    if path.starts_with("/match/") {
+    if path.starts_with("/match/") || path.starts_with("/review/") {
         return "review";
     }
     if path.starts_with("/team/player") {
@@ -847,6 +847,7 @@ mod tests {
             assert!(HUBS.iter().any(|(k, _, _)| *k == p.hub));
         }
         assert_eq!(hub_for_path("/match/EUW1_1"), "review");
+        assert_eq!(hub_for_path("/review/together"), "review");
         assert_eq!(hub_for_path("/personal-learnings/new"), "you");
         assert_eq!(hub_for_path("/team/player/user:x"), "team");
         assert_eq!(hub_for_path("/auth/login"), "");

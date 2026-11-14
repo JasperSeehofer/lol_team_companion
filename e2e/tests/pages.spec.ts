@@ -15,6 +15,8 @@ const AUTHED_PAGES = [
   { path: "/champion-pool", content: /champion|pool|tier/i },
   { path: "/game-plan", content: /game|plan|strategy/i },
   { path: "/post-game", content: /post|game|review/i },
+  // Without ?session= the page says how a session is opened (from Match Day).
+  { path: "/review/together", content: /review together/i },
   { path: "/", content: /match day|team/i },
   { path: "/me", content: /my games|ranked|goals/i },
   { path: "/opponents", content: /opponents|dossier/i },

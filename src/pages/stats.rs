@@ -309,7 +309,7 @@ pub fn StatsPage() -> impl IntoView {
     let api_key = Resource::new(|| (), |_| check_api_key());
     let stats = Resource::new(|| (), |_| get_team_stats());
     // M159: the games the team can review (three or more members together),
-    // for each row's "Review as a team".
+    // for each row's "Write a review".
     let reviewable = Resource::new(
         || (),
         |_| crate::pages::post_game::get_review_candidates(None),
@@ -406,14 +406,14 @@ fn StatsBody(
                         let rid = g.riot_match_id.clone();
                         let when = g.game_end.clone();
                         let win = g.win;
-                        // M159: "Review as a team" for a game the team can
-                        // review; "Open team review" once it has one.
+                        // M159: "Write a review" (M165: was "Review as a team") for a game the team can
+                        // review; "Open the review" once it has one.
                         let review = move || {
                             let reviewed = reviewable.get().and_then(|r| r.ok())?
                                 .into_iter()
                                 .find(|c| c.riot_match_id == rid)?
                                 .reviewed;
-                            let label = if reviewed { "Open team review" } else { "Review as a team" };
+                            let label = if reviewed { "Open the review" } else { "Write a review" };
                             let date = when.as_deref()
                                 .and_then(crate::components::local_time::parse_utc)
                                 .map(|t| t.format("%-d %b").to_string());

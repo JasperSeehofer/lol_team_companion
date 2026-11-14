@@ -57,6 +57,10 @@ pub enum Bucket {
     /// Team invites minted, disabled or redeemed, per user (polish pass):
     /// slow enough that codes cannot be guessed through the redeem form.
     TeamInvite,
+    /// Review-together writes (cards, passes, +1s, votes, proposals,
+    /// facilitator steps), per user (M165). Generous: a timed silent round
+    /// autosaves while members type. The poll itself is not limited.
+    ReviewWrite,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -142,6 +146,11 @@ fn limit(bucket: Bucket) -> Limit {
             refill_per_sec: 2.0,
         },
         // 10 mints, disables or redeem attempts, then one every 30 s.
+        // 120 writes, then two a second.
+        Bucket::ReviewWrite => Limit {
+            capacity: 120.0,
+            refill_per_sec: 2.0,
+        },
         Bucket::TeamInvite => Limit {
             capacity: 10.0,
             refill_per_sec: 1.0 / 30.0,
@@ -327,6 +336,12 @@ pub fn spawn_purge_task(every: Duration) -> tokio::task::JoinHandle<()> {
             let removed = Limiter::global().purge();
             if removed > 0 {
                 tracing::debug!(removed, "rate limiter purge");
+            }
+            // M165: review-session presence lives in memory too (counts only
+            // in the log, never who).
+            let gone = crate::server::review_together::purge_presence();
+            if gone > 0 {
+                tracing::debug!(gone, "review presence purge");
             }
         }
     })

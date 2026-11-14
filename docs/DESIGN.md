@@ -29,7 +29,7 @@ Team Companion is the team's field survey of the Rift and of every opponent. The
 
 - **Canvases** (Sand Table map, Draft Graph, map insets) carry a coordinate frame, a legend and, at most, a faint contour or grid texture.
 - **Everything else** is plain type on hairlines: Match Day's prep list, action items, tables, settings, the community strip. No textures, no compass roses, no parchment.
-- **Surveyor's notes** (the coach's annotations, with a leader line on a canvas) are set in serif italic. The serif appears nowhere else, so italic serif always means "a person wrote this here". The one exception off a canvas (owner's decision, M4): team notes quoted in the Draft Graph's text twin (the Why panel and the team's notes on pairs), which are also a person's words.
+- **Surveyor's notes** (the coach's annotations, with a leader line on a canvas) are set in serif italic. The serif appears nowhere else, so italic serif always means "a person wrote this here". The one exception off a canvas (owner's decision, M4): team notes quoted in the Draft Graph's text twin (the Why panel and the team's notes on pairs), which are also a person's words. A second one (owner's ruling, 20 October 2026, M165): the members' notes of a review written together, at the reveal and in the review it generates, are set in `note` too, with the author (if any) on its own line in the sans caption.
 - **Dossiers** for opponents carry a "last surveyed" date and the evidence behind each finding.
 - A compass rose or scale bar appears at most once per page, and only where distance means something (the Sand Table).
 
@@ -141,7 +141,7 @@ The unit test `components::ui::tokens::tests::design_md_contrast_pairs_meet_thei
 | **Familjen Grotesk** | Display: page titles, section titles, tab labels, the next prep step | 600 (500 to 700 available) | `font-display`. Never below 16px. |
 | **Public Sans** | UI and text: everything else | 400, 500, 600 | `font-sans`, set on `body`. Italic exists for emphasis in prose only. |
 | **JetBrains Mono** | Figures, coordinates, overlines, keycaps, timers | 400, 500, 600 | `font-mono`, `figures` utility. |
-| **Source Serif 4 italic** | Surveyor's notes (annotations on canvases, the coach's note on a moment) and team notes quoted in the Draft Graph (its Why panel and the team's notes on pairs: the graph's text twin) | 400 | `note` utility. Nowhere else: italic serif always means "a person on the team wrote this". |
+| **Source Serif 4 italic** | Surveyor's notes (annotations on canvases, the coach's note on a moment) and team notes quoted in the Draft Graph (its Why panel and the team's notes on pairs: the graph's text twin) | 400 | `note` utility. Nowhere else: italic serif always means "a person on the team wrote this". Review together (M165, owner's ruling 2026-10-20) sets members' revealed notes in `note text-reading` too; prompts, proposals, decided items and counts stay sans. |
 
 Self-hosted woff2 in `public/fonts/` (latin and latin-ext files per style, split with `unicode-range`), `font-display: swap`, the two critical files (Public Sans and Familjen Grotesk latin) preloaded in the shell. Licences: `public/fonts/LICENSES.md` (all OFL 1.1). Fallback stacks: system UI sans, `ui-monospace`, Georgia.
 
@@ -490,6 +490,8 @@ Owner's intent (MISSION section 8, 12 October 2026): new users feel welcomed and
 | 3 | `nudge.old_action_items` | Open action items older than 7 days | "Go through them" |
 | 4 | `nudge.draft_without_plan` | A draft of the last 21 days has no game plan | "Write the game plan" |
 | 5 | `nudge.dossier_without_draft` | A dossier added or refreshed in the last 21 days has no draft against it in that time | "Start a draft" |
+
+`nudge.quiet_player` (M165) is not a Match Day nudge: it is the facilitator's quiet line on a review session while writing ("One player has been quiet in the last 3 reviews."), from `md` up, a count only (never who), shown only with three or more closed sessions, with "Don't show this again" and no action link. The Guidance switch turns it off.
 
 **New-feature introductions.** A changelog line `Introduce: /route | Feature | How to try it.` makes a one-time `Callout` "New: Feature" at the top of that page (with "What changed", a link to the entry, and "Got it") for accounts created before the entry's date, within 180 days of it. The visit records it as seen. Until then the page name carries a small "New" (caption, semibold, info ink, text only, read as ", new") in the phone menu, the sub-navigation and on its hub.
 

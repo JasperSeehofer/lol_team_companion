@@ -834,7 +834,7 @@ pub fn MatchDetailPage() -> impl IntoView {
     let params = use_params_map();
     let match_id = move || params.read().get("id").unwrap_or_default();
     let detail = Resource::new(match_id, fetch_match_detail);
-    // M159: "Review as a team" only for a game the viewer's team played
+    // M159: "Write a review" (M165 rename) only for a game the viewer's team played
     // (checked on the server); created before the Suspense (rule 58).
     let team_review = Resource::new(match_id, crate::pages::post_game::team_review_state);
 
@@ -945,7 +945,7 @@ fn MatchBody(
             actions=move || view! {
                 {team_review.get().and_then(|r| r.ok()).flatten().map(|reviewed| view! {
                     <Button variant=ButtonVariant::Secondary size=ButtonSize::Touch href=format!("/post-game?riot_match_id={}", review_mid.clone()) attr:data-testid="review-as-team">
-                        {if reviewed { "Open team review" } else { "Review as a team" }}
+                        {if reviewed { "Open the review" } else { "Write a review" }}
                     </Button>
                 })}
                 {has_user.then(|| view! {

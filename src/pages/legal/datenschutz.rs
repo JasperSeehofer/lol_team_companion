@@ -43,6 +43,7 @@ pub const STORED: &[(&str, &[&str])] = &[
             "What the team writes: drafts with picks and bans, series of drafts (best-of sets), draft trees, ban priority lists, game plans with checklists and checklist templates, reviews, action items (text, owner, due day), Sand Table boards with their saved versions, team notes (with the text before the last edit, and deleted notes for one day, so they can be restored), notes on champion pairs, and the next match (time, opponent, notes, who marked the brief read).",
             "Opponent dossiers: player names, Riot IDs and Riot account ids, champions seen, mastery and role data read from Riot, and your notes.",
             "Share links: a random token, what it opens, who made it, when it expires, and whether it was revoked.",
+            "Review sessions: the prompts each member answered, their cards and passes, +1 and decide votes (others see only counts), and the action items the team decided. For the anonymous prompt, the app stores who wrote each card so that you can export or delete it; teammates never see it.",
         ],
     ),
     (
@@ -291,6 +292,10 @@ mod tests {
         "password_reset",
         "proposal",
         "proposal_vote",
+        "review_session",
+        "review_entry",
+        "review_proposal",
+        "review_vote",
         "ledger_month",
         "site_text",
         "champion_trait",
