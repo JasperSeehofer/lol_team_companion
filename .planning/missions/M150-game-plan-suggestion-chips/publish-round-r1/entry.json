@@ -1,0 +1,71 @@
+{
+  "id": "m150-r1-game-plan-suggestion-chips",
+  "title": "M150 · Game-plan suggestion chips R1: the app's advice, written in your hand",
+  "date": "2026-11-17",
+  "mission": "M150",
+  "status": "open",
+  "summary": "A finished game plan now shows what the Draft Graph knows about the exact matchup. Under Matchup, a quiet collapsed line reads '3 suggestions'; it appears once both sides have five champions, and before that the line reads 'Suggestions appear when both drafts are in.' Opened, it shows at most three paper-tag chips with plain claims that name the champions ('Amumu engages, Malphite bursts'), each from a different rule. Tapping one opens a margin note with the reason, its source, the pair and three-dot strength. On phones the row scrolls sideways and the note is a bottom sheet. 'Add to plan' writes the claim as an ordinary line into Win conditions (advantages) or Notes (threats). The line is chalk for 300 ms and then ink, and nothing is stored to mark it. 'Not for us' hides it on that plan for good (dismissed_suggestions, a baseline field with no migration). Each tap logs one line with only the rule id and the action. The suggestions come from the existing trait rules over the plan's own picks: no fit::rank, no Riot, deterministic, team members only, and an unsaved plan works too. Items 0–6 all shipped; nothing is R2. CI is green on eeec922 (e2e 200/200, 0 flaky). Outside scope: CI needed a runner pin to ubuntu-24.04, because ubuntu-latest moved to Ubuntu 26 today and broke every branch's Playwright install. The atelier gave FIX once (phone row clipped, sheet close at 32 px); after the fix pass a fresh re-check gave PASS on all five surfaces. One Privacy-page sentence changes. Budget: about 3.4 M of 7.0 M. Report: REPORT-R1.md.",
+  "questions": [
+    {
+      "text": "Land mission/M150-game-plan-suggestion-chips once the fresh verifier's VERIFY-R1 says PASS? Landing is tap-only, and merged is not live: deploy stays a separate step (82-release.sh behind its own cards). No migration: the first start only applies one baseline DEFINE FIELD line (dismissed_suggestions). One Privacy-page sentence changes (datenschutz.rs:43): '…game plans with checklists, checklist templates and the suggestions dismissed on a plan, …'. The branch also pins CI runners to ubuntu-24.04 (ci.yml); landing it fixes main's CI too.",
+      "kind": "merge",
+      "yes": "Yes, merge",
+      "chips": [
+        {
+          "label": "Yes, merge",
+          "consequence": "The overseer lands it after VERIFY-R1 PASS. Deploy is a separate card."
+        },
+        {
+          "label": "Not yet",
+          "consequence": "The branch stays open for a taste pass on the answers below."
+        }
+      ],
+      "recommend": "Yes, merge. All items 0–6 shipped, nothing is R2, CI is green and the atelier passed every surface after one fix pass."
+    },
+    {
+      "text": "(react) Claim wording voice. Chips speak plainly and name the champions, e.g. 'Amumu engages, Malphite bursts', 'Amumu's engage sets up Orianna', 'Their comp has little front line'; the card adds the one-sentence reason in serif italic. My suggestion: keep this plain, factual voice (no 'you should', no hedging). OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep plain facts",
+          "consequence": "Nothing changes."
+        },
+        {
+          "label": "Make them advice",
+          "consequence": "A follow-up rewrites the 33 templates as instructions ('Engage with Amumu, follow with Malphite')."
+        }
+      ],
+      "recommend": "Keep plain facts. The coach turns the fact into their own instruction, which is the point of 'written in your hand'."
+    },
+    {
+      "text": "(react) Strength is shown as three dots (●●○) with 'strength 2 of 3' for screen readers, not a word like 'strong'. My suggestion: keep the dots. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep the dots",
+          "consequence": "Nothing changes."
+        },
+        {
+          "label": "Use a word",
+          "consequence": "A follow-up replaces the dots with 'slight / clear / strong', the Draft Graph's own words for rule weight."
+        }
+      ],
+      "recommend": "Keep the dots. They read at a glance next to the source and pair, and a word would compete with the claim."
+    },
+    {
+      "text": "(react) Where accepted lines land: our advantages (our synergies, our counters, their comp's gaps) go to Win conditions; threats (their counters on us, our comp's gaps) go to Notes. My suggestion: keep this split. OK?",
+      "kind": "ruling",
+      "chips": [
+        {
+          "label": "Keep the split",
+          "consequence": "Nothing changes."
+        },
+        {
+          "label": "All to Win conditions",
+          "consequence": "A follow-up writes every accepted claim into Win conditions."
+        }
+      ],
+      "recommend": "Keep the split. A threat is not a win condition, and Notes is where the plan already says what to watch for."
+    }
+  ]
+}
