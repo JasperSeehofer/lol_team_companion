@@ -8,7 +8,7 @@ env:
 jobs:
   check:
     name: Check, lint, unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned: ubuntu-latest moved to Ubuntu 26 (2026-11), where `playwright install --with-deps` fails
     # The failure step below commits the check log to mission branches.
     permissions:
       contents: write
@@ -100,7 +100,7 @@ jobs:
 
   e2e:
     name: e2e smoke (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: check
     timeout-minutes: 60
     # The mission summary step below commits its findings to the branch.
@@ -334,7 +334,7 @@ jobs:
 
   scripts:
     name: Ops scripts (shellcheck, backup and restore harness)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -353,7 +353,7 @@ jobs:
 
   image:
     name: Container image (build, run, sign in, stop)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       BASE_URL: http://127.0.0.1:3020
@@ -502,7 +502,7 @@ jobs:
 
   style_guardrails:
     name: Style guardrails (G-01, design lint)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # G-01 (no font CDN) is a hard gate. scripts/lint_design.sh enforces the
     # design-system rules (docs/DESIGN.md section 9) over all of src/: every
     # rule is hard zero, and a grep error fails the job too.
