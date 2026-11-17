@@ -8,6 +8,24 @@ A line `Introduce: /route | Feature | How to try it.` inside an entry introduces
 
 ## [Unreleased]
 
+### Milestone M160: Honesty and the first ten minutes (2026-11-17)
+
+#### Added
+- Without a team, the navigation shows your own pages and a "Find or create a team" link; the draft, game plan and review pages say a team is needed instead of failing.
+- A player who joins with an invite link for a position is placed in that starting slot when it is free; the leader and coaches see a notice with Undo.
+- Notes per opponent player on the dossier (collapsed until opened, saved as you leave the field).
+- Draft trees can be renamed, and their opponent is picked from the team's dossiers.
+
+#### Changed
+- The getting-started checklist asks a new team to invite a teammate before filling the starting five.
+- The roster page is part of the team page; old /team/roster links still work.
+- Coaches can place players (not the leader or other coaches) and answer join requests; join-request notices reach coaches too.
+- The reminders about drafts without a plan and dossiers without a draft go to the leader and coaches only.
+
+#### Fixed
+- Error messages no longer show technical text such as "error running server function" or server setup instructions; Riot-off messages say the feature is off on this server.
+- When a list or panel cannot load, the page says so with "Try again" instead of looking empty.
+
 ### Milestone M165: Review together (2026-11-13)
 
 Introduce: /review/together | Review together | After a match, open the review step on Match Day and choose Review together: everyone writes alone, then every note appears at once.
