@@ -270,17 +270,20 @@ fn tree_opponent_options(list: &[Opponent], current: &str) -> Vec<SelectOption> 
 }
 
 /// What the tree shows for an opponent value: the dossier's name for an
-/// `opponent:` id, the text itself for a legacy free-text value.
+/// `opponent:` id, the text itself for a legacy free-text value, and no
+/// label while an `opponent:` id's dossier is not loaded yet (never the
+/// raw id).
 fn tree_opponent_label(value: &str, list: &[Opponent]) -> Option<String> {
     if value.is_empty() {
         return None;
     }
-    Some(
-        list.iter()
-            .find(|o| o.id.as_deref() == Some(value))
-            .map(|o| o.name.clone())
-            .unwrap_or_else(|| value.to_string()),
-    )
+    if let Some(o) = list.iter().find(|o| o.id.as_deref() == Some(value)) {
+        return Some(o.name.clone());
+    }
+    if value.starts_with("opponent:") {
+        return None;
+    }
+    Some(value.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -392,11 +395,12 @@ pub fn TreeDrafterPage() -> impl IntoView {
     let champions_resource = Resource::new(|| (), |_| get_champions_for_tree());
     let trees = Resource::new(|| (), |_| list_trees());
     let has_team = Resource::new(|| (), |_| user_has_team());
-    // Team dossiers for the opponent selects (created before the first
-    // Suspense, leptos rule 58; loaded with the same server fn as the draft
-    // page's opponent select).
+    // Team dossiers for the opponent selects and labels (created before the
+    // first Suspense, leptos rule 58; loaded with the same server fn as the
+    // draft page's opponent select). Every closure that needs them reads the
+    // resource directly: a read through a Memo created outside a Suspense is
+    // not registered with that Suspense, so SSR and the browser disagree.
     let dossiers = Resource::new(|| (), |_| crate::pages::opponents::get_opponents());
-    let dossier_list = Memo::new(move |_| dossiers.get().and_then(|r| r.ok()).unwrap_or_default());
     let selected_tree = RwSignal::new(None::<String>);
     let nodes = Resource::new(
         move || selected_tree.get(),
@@ -560,15 +564,13 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                     }
                                 }
                                 Ok(list) => {
-                                    let dossiers = dossier_list.get();
                                     view! {
                                     <ul class="flex flex-col" data-testid="tree-list">
                                         {list.into_iter().map(|t| {
                                             let id = t.id.clone().unwrap_or_default();
                                             let id_sel = id.clone();
                                             let id_cur = id.clone();
-                                            let opp_label =
-                                                t.opponent.as_deref().and_then(|o| tree_opponent_label(o, &dossiers));
+                                            let opponent = t.opponent.clone();
                                             view! {
                                                 <li class="border-b border-rule last:border-b-0">
                                                     <Button
@@ -579,7 +581,25 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                                     >
                                                         <span class="flex w-full min-w-0 items-baseline justify-between gap-2 text-left">
                                                             <span class="truncate">{t.name.clone()}</span>
-                                                            {opp_label.map(|label| view! { <span class="truncate text-caption font-normal text-muted">"vs " {label}</span> })}
+                                                            {move || {
+                                                                // Read the dossiers resource
+                                                                // directly inside this closure
+                                                                // (not through a Memo created
+                                                                // outside the Suspense): the
+                                                                // list renders from `trees`
+                                                                // even while the dossiers load,
+                                                                // and an `opponent:` id without
+                                                                // a loaded dossier shows no
+                                                                // label rather than the raw id.
+                                                                let dossiers = dossiers
+                                                                    .get()
+                                                                    .and_then(|r| r.ok())
+                                                                    .unwrap_or_default();
+                                                                opponent
+                                                                    .as_deref()
+                                                                    .and_then(|o| tree_opponent_label(o, &dossiers))
+                                                                    .map(|label| view! { <span class="truncate text-caption font-normal text-muted">"vs " {label}</span> })
+                                                            }}
                                                         </span>
                                                     </Button>
                                                 </li>
@@ -598,9 +618,13 @@ pub fn TreeDrafterPage() -> impl IntoView {
                         </Field>
                         <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
                             {move || {
+                                // Read the dossiers resource directly here (not
+                                // through a Memo created outside this Suspense).
+                                let dossiers =
+                                    dossiers.get().and_then(|r| r.ok()).unwrap_or_default();
                                 // The current value is read untracked so the
                                 // select keeps focus while its options render.
-                                let opts = tree_opponent_options(&dossier_list.get(), &new_opp.get_untracked());
+                                let opts = tree_opponent_options(&dossiers, &new_opp.get_untracked());
                                 view! {
                                     <Field id="tree-opponent" label="Opponent">
                                         <Select value=new_opp options=opts />
@@ -625,13 +649,22 @@ pub fn TreeDrafterPage() -> impl IntoView {
                             <div class="flex flex-col gap-8">
                                 <div class="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule pb-3">
                                     <p class="flex flex-wrap items-baseline gap-x-3">
-                                        // The tree list is a resource: read it inside a Suspense.
+                                        // The tree list is a resource: read it inside a
+                                        // Suspense. The title waits on the trees only;
+                                        // the "vs {label}" span reads the dossiers
+                                        // resource directly in its own Suspense next to
+                                        // it, so the title never waits on the dossiers.
                                         <Suspense fallback=|| ()>
                                             <span class="font-display text-title font-semibold text-primary" attr:data-testid="tree-title">
                                                 {move || tree_title().map(|t| t.name).unwrap_or_default()}
                                             </span>
+                                        </Suspense>
+                                        <Suspense fallback=|| ()>
                                             {move || {
-                                                let dossiers = dossier_list.get();
+                                                let dossiers = dossiers
+                                                    .get()
+                                                    .and_then(|r| r.ok())
+                                                    .unwrap_or_default();
                                                 tree_title()
                                                     .and_then(|t| t.opponent)
                                                     .and_then(|o| tree_opponent_label(&o, &dossiers))
@@ -662,7 +695,14 @@ pub fn TreeDrafterPage() -> impl IntoView {
                                         </Field>
                                         <Suspense fallback=|| view! { <Skeleton shape=SkeletonShape::Block size="h-9 w-full" /> }>
                                             {move || {
-                                                let opts = tree_opponent_options(&dossier_list.get(), &edit_opp.get_untracked());
+                                                // Read the dossiers resource directly here
+                                                // (not through a Memo created outside this
+                                                // Suspense).
+                                                let dossiers = dossiers
+                                                    .get()
+                                                    .and_then(|r| r.ok())
+                                                    .unwrap_or_default();
+                                                let opts = tree_opponent_options(&dossiers, &edit_opp.get_untracked());
                                                 view! {
                                                     <Field id="tree-edit-opponent" label="Opponent">
                                                         <Select value=edit_opp options=opts />
@@ -1447,6 +1487,9 @@ mod tests {
             tree_opponent_label("Old Opponent", &list).as_deref(),
             Some("Old Opponent")
         );
+        // An `opponent:` id whose dossier is not loaded shows no label
+        // rather than the raw id.
+        assert_eq!(tree_opponent_label("opponent:zz", &list), None);
         assert_eq!(tree_opponent_label("", &list), None);
     }
 }
