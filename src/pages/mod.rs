@@ -21,6 +21,7 @@ pub mod opponents;
 pub mod personal_learnings;
 pub mod post_game;
 pub mod profile;
+pub mod review_together;
 pub mod share;
 pub mod stats;
 pub mod team;

@@ -516,15 +516,21 @@ pub enum NudgeKind {
     DraftWithoutPlan,
     /// A recent dossier has no draft against that opponent.
     DossierWithoutDraft,
+    /// M165: the facilitator's quiet line on a review session while
+    /// writing ("One player has been quiet in the last 3 reviews."). Never
+    /// chosen for Match Day: only the session page shows it, and only its
+    /// mute key lives here.
+    QuietPlayer,
 }
 
 impl NudgeKind {
-    pub const ALL: [NudgeKind; 5] = [
+    pub const ALL: [NudgeKind; 6] = [
         NudgeKind::Returning,
         NudgeKind::MatchWithoutReview,
         NudgeKind::OldActionItems,
         NudgeKind::DraftWithoutPlan,
         NudgeKind::DossierWithoutDraft,
+        NudgeKind::QuietPlayer,
     ];
 
     /// The mute key ("Don't show this again" stores it).
@@ -535,6 +541,7 @@ impl NudgeKind {
             NudgeKind::OldActionItems => "nudge.old_action_items",
             NudgeKind::DraftWithoutPlan => "nudge.draft_without_plan",
             NudgeKind::DossierWithoutDraft => "nudge.dossier_without_draft",
+            NudgeKind::QuietPlayer => "nudge.quiet_player",
         }
     }
 
@@ -647,6 +654,8 @@ fn candidate(kind: NudgeKind, f: &NudgeFacts) -> Option<Nudge> {
                 "/draft".into(),
             )
         }),
+        // The session page's own line (M165), never a Match Day nudge.
+        NudgeKind::QuietPlayer => None,
     }
 }
 
@@ -1014,6 +1023,18 @@ mod tests {
             assert_eq!(Hint::from_key(h.key()), Some(h));
             assert!(h.key().starts_with(HINT_PREFIX));
         }
+    }
+
+    #[test]
+    fn the_quiet_player_key_is_known_and_never_a_match_day_nudge() {
+        for k in NudgeKind::ALL {
+            assert_eq!(NudgeKind::from_key(k.key()), Some(k));
+        }
+        assert_eq!(
+            NudgeKind::from_key("nudge.quiet_player"),
+            Some(NudgeKind::QuietPlayer)
+        );
+        assert!(is_known_key("nudge.quiet_player", &[]));
     }
 
     fn intro(slug: &str, route: &str, date: &str) -> Intro {

@@ -15,6 +15,7 @@ pub mod opponent;
 pub mod password_reset;
 pub mod personal_learning;
 pub mod review_pick;
+pub mod review_together;
 pub mod sand_table;
 pub mod series;
 pub mod share;

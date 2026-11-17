@@ -12,6 +12,7 @@ pub mod local_time;
 pub mod nav;
 pub mod og;
 pub mod record_table;
+pub mod review_together;
 pub mod survey_prompt;
 pub mod tree_graph;
 pub mod ui;

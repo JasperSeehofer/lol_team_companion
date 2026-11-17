@@ -1,0 +1,82 @@
+{
+ "metadata": {
+  "dataVersion": "2",
+  "matchId": "EUW1_7100000099"
+ },
+ "info": {
+  "gameVersion": "16.20.700.0000",
+  "gameDuration": 360,
+  "participants": [
+   {
+    "participantId": 1,
+    "championName": "Aatrox",
+    "teamId": 100,
+    "teamPosition": "TOP",
+    "win": true
+   },
+   {
+    "participantId": 2,
+    "championName": "LeeSin",
+    "teamId": 100,
+    "teamPosition": "JUNGLE",
+    "win": true
+   },
+   {
+    "participantId": 3,
+    "championName": "Ahri",
+    "teamId": 100,
+    "teamPosition": "MIDDLE",
+    "win": true
+   },
+   {
+    "participantId": 4,
+    "championName": "Jinx",
+    "teamId": 100,
+    "teamPosition": "BOTTOM",
+    "win": true
+   },
+   {
+    "participantId": 5,
+    "championName": "Thresh",
+    "teamId": 100,
+    "teamPosition": "UTILITY",
+    "win": true
+   },
+   {
+    "participantId": 6,
+    "championName": "Garen",
+    "teamId": 200,
+    "teamPosition": "TOP",
+    "win": false
+   },
+   {
+    "participantId": 7,
+    "championName": "Vi",
+    "teamId": 200,
+    "teamPosition": "JUNGLE",
+    "win": false
+   },
+   {
+    "participantId": 8,
+    "championName": "Lux",
+    "teamId": 200,
+    "teamPosition": "MIDDLE",
+    "win": false
+   },
+   {
+    "participantId": 9,
+    "championName": "Caitlyn",
+    "teamId": 200,
+    "teamPosition": "BOTTOM",
+    "win": false
+   },
+   {
+    "participantId": 10,
+    "championName": "Leona",
+    "teamId": 200,
+    "teamPosition": "UTILITY",
+    "win": false
+   }
+  ]
+ }
+}
