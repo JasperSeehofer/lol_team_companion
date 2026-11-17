@@ -118,6 +118,13 @@ pub const USER_LINKS: &[(&str, &str, Treatment)] = &[
     ("site_text", "updated_by", Treatment::Tombstone),
     ("password_reset", "user", Treatment::Delete),
     ("password_reset", "created_by", Treatment::Tombstone),
+    // M165 Review together: cards stay with the team under the tombstone
+    // (attributed ones then read "Former member"; anonymous ones never
+    // showed an author), the facilitator link likewise; votes are the
+    // user's own and go (counts drop by one).
+    ("review_session", "facilitator", Treatment::Tombstone),
+    ("review_entry", "author", Treatment::Tombstone),
+    ("review_vote", "user", Treatment::Delete),
 ];
 
 /// What deletion clears on the user's bug reports: everything the reporter
@@ -172,6 +179,10 @@ const DELETE_TEAM: &str = "\
     DELETE board_version WHERE board IN $boards; \
     DELETE board WHERE id IN $boards; \
     DELETE game_plan WHERE team = $t; \
+    DELETE review_vote WHERE team = $t; \
+    DELETE review_proposal WHERE team = $t; \
+    DELETE review_entry WHERE team = $t; \
+    DELETE review_session WHERE team = $t; \
     DELETE post_game_learning WHERE team = $t; \
     DELETE action_item WHERE team = $t; \
     DELETE team_note WHERE team = $t; \
@@ -207,6 +218,7 @@ const DELETE_USER: &str = "\
     DELETE survey_prompt WHERE user = $u; \
     DELETE user_guidance WHERE user = $u; \
     DELETE proposal_vote WHERE user = $u; \
+    DELETE review_vote WHERE user = $u; \
     DELETE password_reset WHERE user = $u; \
     DELETE share_link WHERE target = $u; \
     UPDATE match SET synced_by = $tomb WHERE synced_by = $u; \
@@ -238,6 +250,9 @@ const DELETE_USER: &str = "\
     UPDATE site_text SET approved_by = $tomb WHERE approved_by = $u; \
     UPDATE site_text SET updated_by = $tomb WHERE updated_by = $u; \
     UPDATE password_reset SET created_by = $tomb WHERE created_by = $u; \
+    UPDATE review_session SET facilitator = $tomb WHERE facilitator = $u; \
+    UPDATE review_entry SET author = $tomb WHERE author = $u; \
+    UPDATE review_proposal SET owner = NONE WHERE team IN $my_teams AND owner = $name; \
     UPDATE action_item SET assigned_to = NONE WHERE team IN $my_teams AND assigned_to = $name; \
     DELETE $u;";
 
@@ -457,6 +472,15 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
         "SELECT proposal.title AS idea, created_at FROM proposal_vote WHERE user = $u",
     ),
     (
+        "review_cards_written",
+        "SELECT prompt, text, passed, (prompt = 'off_plan') AS anonymous, \
+         session.opened_at AS session_date FROM review_entry WHERE author = $u",
+    ),
+    (
+        "review_votes",
+        "SELECT kind, created_at FROM review_vote WHERE user = $u",
+    ),
+    (
         "survey_questions",
         "SELECT survey.question AS question, state, created_at, shown_at, closed_at, \
          answer_choice, answer_scale, answer_text FROM survey_prompt WHERE user = $u",
@@ -480,7 +504,8 @@ const EXPORT_SECTIONS: &[(&str, &str)] = &[
            (SELECT 'board' AS kind, id, name, created_at FROM board WHERE created_by = $u), \
            (SELECT 'board_version' AS kind, id, version, created_at FROM board_version WHERE author = $u), \
            (SELECT 'next_match' AS kind, id, starts_at, created_at FROM scheduled_match WHERE created_by = $u), \
-           (SELECT 'share_link' AS kind, id, kind AS link_kind, created_at, expires_at, revoked FROM share_link WHERE created_by = $u) \
+           (SELECT 'share_link' AS kind, id, kind AS link_kind, created_at, expires_at, revoked FROM share_link WHERE created_by = $u), \
+           (SELECT 'review_session_facilitated' AS kind, id, opened_at AS created_at FROM review_session WHERE facilitator = $u) \
          ])",
     ),
     (

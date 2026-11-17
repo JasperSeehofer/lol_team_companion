@@ -26,6 +26,7 @@ mod match_thread;
 mod migrations;
 mod password;
 mod retention;
+mod review_together;
 mod sand_table;
 mod security;
 mod team_invites;

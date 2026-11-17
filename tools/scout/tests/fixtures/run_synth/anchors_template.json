@@ -1,0 +1,125 @@
+{
+ "_how": "Open a frame in Paint, hover each structure's centre, copy the pixel shown bottom-left into 'pixel' as [x, y]. At least 4.",
+ "pairs": [
+  {
+   "name": "blue_top_outer",
+   "pixel": null
+  },
+  {
+   "name": "blue_top_inner",
+   "pixel": null
+  },
+  {
+   "name": "blue_top_inhib",
+   "pixel": null
+  },
+  {
+   "name": "blue_mid_outer",
+   "pixel": null
+  },
+  {
+   "name": "blue_mid_inner",
+   "pixel": null
+  },
+  {
+   "name": "blue_mid_inhib",
+   "pixel": null
+  },
+  {
+   "name": "blue_bot_outer",
+   "pixel": null
+  },
+  {
+   "name": "blue_bot_inner",
+   "pixel": null
+  },
+  {
+   "name": "blue_bot_inhib",
+   "pixel": null
+  },
+  {
+   "name": "blue_nexus_top",
+   "pixel": null
+  },
+  {
+   "name": "blue_nexus_bot",
+   "pixel": null
+  },
+  {
+   "name": "blue_nexus",
+   "pixel": null
+  },
+  {
+   "name": "red_top_outer",
+   "pixel": null
+  },
+  {
+   "name": "red_top_inner",
+   "pixel": null
+  },
+  {
+   "name": "red_top_inhib",
+   "pixel": null
+  },
+  {
+   "name": "red_mid_outer",
+   "pixel": null
+  },
+  {
+   "name": "red_mid_inner",
+   "pixel": null
+  },
+  {
+   "name": "red_mid_inhib",
+   "pixel": null
+  },
+  {
+   "name": "red_bot_outer",
+   "pixel": null
+  },
+  {
+   "name": "red_bot_inner",
+   "pixel": null
+  },
+  {
+   "name": "red_bot_inhib",
+   "pixel": null
+  },
+  {
+   "name": "red_nexus_top",
+   "pixel": null
+  },
+  {
+   "name": "red_nexus_bot",
+   "pixel": null
+  },
+  {
+   "name": "red_nexus",
+   "pixel": null
+  },
+  {
+   "name": "blue_top_inhibitor",
+   "pixel": null
+  },
+  {
+   "name": "blue_mid_inhibitor",
+   "pixel": null
+  },
+  {
+   "name": "blue_bot_inhibitor",
+   "pixel": null
+  },
+  {
+   "name": "red_top_inhibitor",
+   "pixel": null
+  },
+  {
+   "name": "red_mid_inhibitor",
+   "pixel": null
+  },
+  {
+   "name": "red_bot_inhibitor",
+   "pixel": null
+  }
+ ]
+}
