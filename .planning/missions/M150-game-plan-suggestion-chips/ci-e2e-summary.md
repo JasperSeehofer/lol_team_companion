@@ -1,7 +1,7 @@
 # CI e2e summary
 
-- run: 44130276511
-- sha: 945aa089c0756f7ac9a4933ca9c25438109a9884
+- run: 44132785744
+- sha: 8d989b88538a0bd23aa2b3dfeba14095cfa812c7
 
 ## Playwright
 
