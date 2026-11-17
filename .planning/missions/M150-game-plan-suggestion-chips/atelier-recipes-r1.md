@@ -164,6 +164,8 @@ Classes:
 
 **Bans that apply.** No box, fill or shadow around the card. No coloured left stripe. No "AI", no percentages, no explanation prompt on "Not for us". Exactly two actions: no "Learn more" and no close X (the chip toggles it).
 
+*Amended after critique r1:* the inline card has no close X (the chip toggles it); in the phone bottom sheet (card 5) the card keeps the Dialog's close X, 44 px below `md`, because Escape and the scrim are not discoverable on touch.
+
 **Pass/fail.**
 - [ ] At 1280 the open card pushes Strategy down and overlaps nothing.
 - [ ] The reason is serif italic and is the only serif on the card.
@@ -322,6 +324,8 @@ Extend `Dialog`'s `A11y:` line: "…`BottomSheet` is the same modal anchored to 
 - After Add or Dismiss the sheet closes and focus goes to the next chip or the collapsed-line button (card 2 rule; Dialog's own return target may be gone, rule 62).
 
 **Bans that apply.** No drag handle pretending to be draggable (there is no drag gesture, so draw no grabber). No blur on the scrim. No rounded top corners beyond 0 (structure). No shadow.
+
+*Amended after critique r1:* the bottom sheet keeps the Dialog's close X (44 px below `md`); do not remove it.
 
 **Pass/fail (390 by 844 and 1280 by 800).**
 - [ ] At 390 the chips are one row, 44 px or taller, with a peek of the next chip and no page-level horizontal scroll (`document.scrollingElement.scrollWidth <= 390`).

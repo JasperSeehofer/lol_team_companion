@@ -157,7 +157,7 @@ pub fn Dialog(
                     </div>
                     <button
                         type="button"
-                        class="-mr-2 -mt-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-ctl text-muted transition-colors hover:bg-ink-3 hover:text-primary"
+                        class="-mr-3 -mt-2 grid size-11 shrink-0 md:-mr-2 md:-mt-1 md:size-8 cursor-pointer place-items-center rounded-ctl text-muted transition-colors hover:bg-ink-3 hover:text-primary"
                         aria-label="Close"
                         on:click=move |_| open.set(false)
                     >

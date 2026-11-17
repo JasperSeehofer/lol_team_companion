@@ -1847,8 +1847,11 @@ fn SuggestionsSection(ed: PlanEd, echo: Echo) -> impl IntoView {
                         data-open=move || if row_open.get() { "true" } else { "false" }
                         inert=move || !row_open.get()
                     >
-                        <div class="min-h-0 overflow-hidden">
-                            <ul role="list" class="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain px-4 py-2 md:mx-0 md:flex-wrap md:snap-none md:overflow-visible md:px-0">
+                        // Phones: the clip box reaches the screen edges so the row
+                        // bleeds and peeks; scroll padding keeps the first chip
+                        // inside the 16 px gutter when it snaps.
+                        <div class="-mx-4 min-h-0 overflow-hidden px-4 md:mx-0 md:px-0">
+                            <ul role="list" class="-mx-4 flex scroll-px-4 snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain px-4 py-2 md:mx-0 md:flex-wrap md:snap-none md:overflow-visible md:px-0">
                                 <For
                                     each=rows
                                     key=|(_, s)| s.key.clone()
@@ -1955,7 +1958,7 @@ fn SuggestionCardBody(
         "mt-1 flex flex-wrap gap-2"
     };
     view! {
-        <p class="note text-reading text-secondary">{reason}</p>
+        <p class="note text-body text-secondary md:text-reading">{reason}</p>
         <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
             <span>{source}</span>
             <span aria-hidden="true">"\u{b7}"</span>

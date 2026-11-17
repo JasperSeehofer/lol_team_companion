@@ -20,16 +20,16 @@ pub fn evidence_glyph(source: ReasonSource) -> &'static str {
 }
 
 /// The tag's tilt, fixed by its place in the row (identical on server and
-/// browser, at most 0.6 degrees).
+/// browser, at most 0.3 degrees).
 fn tilt(index: usize) -> &'static str {
     match index % 3 {
-        0 => "rotate-[-0.6deg]",
-        1 => "rotate-[0.4deg]",
-        _ => "rotate-[-0.3deg]",
+        0 => "rotate-[-0.3deg]",
+        1 => "rotate-[0.2deg]",
+        _ => "rotate-[-0.15deg]",
     }
 }
 
-const CHIP: &str = "inline-flex min-h-11 max-w-[16rem] cursor-pointer items-center gap-2 rounded-ctl border border-outline bg-ink-3 py-1.5 pl-2.5 pr-2 transition-[background-color,border-color,opacity] duration-[160ms] ease-out hover:bg-ink-2 hover:border-secondary active:translate-y-px aria-expanded:border-primary aria-expanded:bg-ink-2 data-[force=hover]:bg-ink-2 data-[force=hover]:border-secondary data-[force=active]:translate-y-px data-[retiring=true]:opacity-0 motion-reduce:transition-none md:min-h-8 md:max-w-[24rem]";
+const CHIP: &str = "inline-flex min-h-11 max-w-[16rem] cursor-pointer items-center gap-2 rounded-ctl border border-outline bg-ink-3 py-1 pl-2 pr-2 transition-[background-color,border-color,opacity] duration-[160ms] ease-out hover:bg-ink-2 hover:border-secondary active:translate-y-px aria-expanded:border-primary aria-expanded:bg-ink-2 data-[force=hover]:bg-ink-2 data-[force=hover]:border-secondary data-[force=active]:translate-y-px data-[retiring=true]:opacity-0 motion-reduce:transition-none md:min-h-8 md:max-w-[24rem]";
 
 /// One suggestion as a tag: tapping it opens its card. The page wraps each
 /// chip in an `<li>` of a `role="list"` row.
