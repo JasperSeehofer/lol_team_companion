@@ -47,9 +47,11 @@ M165's new `QuietPlayer => None` arm). On brain after the merge: `cargo fmt --ch
   browser or OS-package download. I cannot re-run jobs from here (no `gh`).
 - On those runs the check / clippy / unit / integration job, the design lint and the ops scripts
   job **passed**.
-- The push of this report starts another run. If the install has recovered, it decides item 9
-  (one run, as ruled) and produces the after frames. The before branch needs one more push or
-  re-run as well.
+- The push of this report started run 44136047834 on `a0065ea`. **It failed at the same install
+  step**, so the outside failure was still going on when this round ended.
+- The next run whose install succeeds decides item 9 (one run, as ruled) and produces the after
+  frames. Re-run the latest run from the Actions page, or push. The before branch needs a re-run
+  too.
 
 ## Least-confident decisions
 
