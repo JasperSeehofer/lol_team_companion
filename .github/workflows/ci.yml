@@ -100,7 +100,7 @@ jobs:
 
   e2e:
     name: e2e smoke (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: check
     timeout-minutes: 60
     # The mission summary step below commits its findings to the branch.
@@ -353,7 +353,7 @@ jobs:
 
   image:
     name: Container image (build, run, sign in, stop)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       BASE_URL: http://127.0.0.1:3020
