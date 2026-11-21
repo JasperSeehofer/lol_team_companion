@@ -68,11 +68,33 @@ pub enum EventCategory {
     Kill,      // champion kills, first blood, multikills
     Ward,      // ward placements (user's own only)
     Teamfight, // 4+ participants within 10s window
-    // Riot's Match-V5 timeline has no recall event; nothing is classified
-    // as one since M141 (an ITEM_UNDO is the shop's undo). Kept so stored
-    // and serialized values stay readable.
+    // Riot's Match-V5 timeline has no recall event. Since M149 a recall is
+    // inferred from item purchases (`infer_recalls`, event type
+    // `RECALL_INFERRED`) and always labelled as inferred; it is never stored.
+    // (An ITEM_UNDO is the shop's undo, never a recall: M141.)
     Recall,
+    // An item purchase (`ITEM_PURCHASED`, M149): stored for recall
+    // inference, never drawn and never sent to the page (`viewer_timeline`).
+    Purchase,
 }
+
+/// A point on Summoner's Rift in Riot's map units (about 0 to 15,000 on
+/// both axes, blue fountain bottom left).
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MapPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
+/// The importer version a cached game's timeline was written with
+/// (`match_detail.timeline_version`; rows without one are version 1).
+/// Version 2 (M149) keeps event positions, item purchases and ward
+/// creators. Bump it when the importer keeps something new; the admin
+/// re-import (`/admin/reimport`) then picks up every older game.
+pub const TIMELINE_VERSION: i32 = 2;
+
+/// Event type of an inferred recall (computed on read, never stored).
+pub const RECALL_EVENT_TYPE: &str = "RECALL_INFERRED";
 
 /// A single processed timeline event
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -90,6 +112,166 @@ pub struct TimelineEvent {
     pub multi_kill_length: Option<i32>,
     pub is_teamfight: bool,
     pub involved_participants: Vec<i32>,
+    /// The acting participant where Riot names one that is not a killer:
+    /// the buyer of an `ITEM_PURCHASED`, the creator of a `WARD_PLACED`,
+    /// the player of an inferred recall (M149). `None` on older imports.
+    #[serde(default)]
+    pub participant_id: Option<i32>,
+    /// The item of an `ITEM_PURCHASED` (M149).
+    #[serde(default)]
+    pub item_id: Option<i32>,
+    /// Where it happened, for the events Riot gives a position (champion
+    /// kills, buildings, elite monsters; Match-V5 gives wards and purchases
+    /// none). `None` on older imports (M149).
+    #[serde(default)]
+    pub position: Option<MapPosition>,
+}
+
+/// Item purchases of one player closer together than this belong to one
+/// shop visit.
+pub const RECALL_BURST_GAP_MS: i64 = 25_000;
+
+/// Purchases in the first 90 seconds are the opening shop, not a recall.
+pub const RECALL_OPENING_SHOP_MS: i64 = 90_000;
+
+/// How long after a death a shop visit counts as the respawn's, not a
+/// recall: 20 s plus 2 s per game minute, at most 90 s. That covers the
+/// death timer (about 8 s at level 1 to about 79 s late in a long game)
+/// plus the time to shop after respawning.
+pub fn recall_death_window_ms(at_ms: i64) -> i64 {
+    let minutes = at_ms.max(0) / 60_000;
+    (20 + 2 * minutes).min(90) * 1000
+}
+
+/// Recalls inferred from item purchases (M149). Riot's Match-V5 timeline
+/// has no recall event, so this is a guess, and everything built on it says
+/// "inferred" (the event type [`RECALL_EVENT_TYPE`], the page's "Inferred
+/// recall" text, "Recall (inferred)", a dashed outline).
+///
+/// The heuristic, per participant:
+/// 1. Their `ITEM_PURCHASED` events, in time order, are grouped into shop
+///    visits: a purchase within [`RECALL_BURST_GAP_MS`] (25 s) of the
+///    previous one belongs to the same visit.
+/// 2. A visit is a recall when it starts after the opening shop
+///    ([`RECALL_OPENING_SHOP_MS`], 90 s) and the participant did not die
+///    (a `CHAMPION_KILL` naming them as victim) in the
+///    [`recall_death_window_ms`] before it starts: buying after a death is
+///    the respawn, not a recall.
+/// 3. The recall is placed at the visit's first purchase.
+///
+/// Not used: the participant frames' positions. They come once a minute,
+/// and a champion walks from the fountain back to a lane in less than that,
+/// so a "near the fountain at the nearest frame" test would drop real
+/// recalls. Known misses: a recall without a purchase, and a visit that
+/// follows a death closely. Purchases away from the fountain (rare
+/// champion abilities) can show as a recall.
+pub fn infer_recalls(events: &[TimelineEvent]) -> Vec<TimelineEvent> {
+    use std::collections::BTreeMap;
+    let mut buys: BTreeMap<i32, Vec<&TimelineEvent>> = BTreeMap::new();
+    let mut deaths: BTreeMap<i32, Vec<i64>> = BTreeMap::new();
+    for e in events {
+        match (
+            e.event_type.as_str(),
+            e.participant_id,
+            e.victim_participant_id,
+        ) {
+            ("ITEM_PURCHASED", Some(pid), _) => buys.entry(pid).or_default().push(e),
+            ("CHAMPION_KILL", _, Some(victim)) => {
+                deaths.entry(victim).or_default().push(e.timestamp_ms)
+            }
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for (pid, mut list) in buys {
+        list.sort_by_key(|e| e.timestamp_ms);
+        let died = deaths.get(&pid).map(Vec::as_slice).unwrap_or(&[]);
+        let mut last: Option<i64> = None;
+        for e in list {
+            let t = e.timestamp_ms;
+            let new_visit = last.is_none_or(|l| t - l > RECALL_BURST_GAP_MS);
+            last = Some(t);
+            if !new_visit || t <= RECALL_OPENING_SHOP_MS {
+                continue;
+            }
+            let window = recall_death_window_ms(t);
+            if died.iter().any(|&d| d <= t && t - d <= window) {
+                continue;
+            }
+            out.push(TimelineEvent {
+                timestamp_ms: t,
+                event_type: RECALL_EVENT_TYPE.to_string(),
+                category: EventCategory::Recall,
+                team_id: e.team_id,
+                killer_participant_id: None,
+                victim_participant_id: None,
+                monster_type: None,
+                monster_sub_type: None,
+                building_type: None,
+                is_first_blood: false,
+                multi_kill_length: None,
+                is_teamfight: false,
+                involved_participants: vec![pid],
+                participant_id: Some(pid),
+                item_id: None,
+                position: None,
+            });
+        }
+    }
+    out.sort_by_key(|e| (e.timestamp_ms, e.participant_id));
+    out
+}
+
+/// The timeline the match page shows to the player `user_pid`, and whether
+/// the stored timeline holds item purchases (imported since M149; without
+/// them no recall can be inferred and the page says to re-import):
+/// - inferred recalls of the viewer's team are added ([`infer_recalls`]);
+/// - purchases are removed (they only feed the inference);
+/// - wards are the viewer's own; a ward from an older import, which does
+///   not name its creator, is kept.
+pub fn viewer_timeline(
+    events: Vec<TimelineEvent>,
+    participants: &[MatchParticipant],
+    user_pid: i32,
+) -> (Vec<TimelineEvent>, bool) {
+    let has_purchases = events.iter().any(|e| e.category == EventCategory::Purchase);
+    let team = participants
+        .iter()
+        .find(|p| p.participant_id == user_pid)
+        .map(|p| p.team_id);
+    let recalls: Vec<TimelineEvent> = infer_recalls(&events)
+        .into_iter()
+        .filter(|r| match team {
+            Some(t) => r.team_id == Some(t),
+            None => r.participant_id == Some(user_pid),
+        })
+        .collect();
+    let mut out: Vec<TimelineEvent> = events
+        .into_iter()
+        .filter(|e| match e.category {
+            EventCategory::Purchase => false,
+            EventCategory::Ward => e.participant_id.is_none_or(|p| p == user_pid),
+            _ => true,
+        })
+        .collect();
+    out.extend(recalls);
+    out.sort_by_key(|e| e.timestamp_ms);
+    (out, has_purchases)
+}
+
+/// What one admin re-import batch did (`/admin/reimport`, M149).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct ReimportReport {
+    /// Games whose timeline was replaced in this batch.
+    pub done: u32,
+    /// Games Riot has no data for any more (left as they were, not tried again).
+    pub failed: u32,
+    /// Games still waiting for a re-import.
+    pub remaining: u32,
+    /// Games marked as not re-importable (all batches so far).
+    pub unavailable: u32,
+    /// Why the batch stopped early (Riot busy, Riot down), if it did.
+    pub stopped: Option<String>,
 }
 
 /// User's personal performance compared to game averages
@@ -120,6 +302,10 @@ pub struct MatchDetail {
     pub user_participant_id: i32, // which participant is the current user
     pub user_puuid: String,
     pub performance: PerformanceStats,
+    /// Whether the stored timeline holds item purchases, so recalls could
+    /// be inferred (M149). `false` for games imported before.
+    #[serde(default)]
+    pub has_purchase_data: bool,
 }
 
 /// Comparison mode for performance section
@@ -264,5 +450,183 @@ mod phase15_tests {
     fn rank_score_lowercase_input_normalises() {
         // Input normalised to uppercase internally — same result as uppercase form
         assert_eq!(rank_score("gold", "ii", 47), 1447);
+    }
+}
+
+#[cfg(test)]
+mod recall_tests {
+    use super::*;
+
+    fn ev(ts: i64, kind: &str, cat: EventCategory) -> TimelineEvent {
+        TimelineEvent {
+            timestamp_ms: ts,
+            event_type: kind.to_string(),
+            category: cat,
+            team_id: None,
+            killer_participant_id: None,
+            victim_participant_id: None,
+            monster_type: None,
+            monster_sub_type: None,
+            building_type: None,
+            is_first_blood: false,
+            multi_kill_length: None,
+            is_teamfight: false,
+            involved_participants: Vec::new(),
+            participant_id: None,
+            item_id: None,
+            position: None,
+        }
+    }
+
+    fn buy(ts: i64, pid: i32) -> TimelineEvent {
+        let mut e = ev(ts, "ITEM_PURCHASED", EventCategory::Purchase);
+        e.participant_id = Some(pid);
+        e.item_id = Some(1001);
+        e.team_id = Some(if pid <= 5 { 100 } else { 200 });
+        e
+    }
+
+    fn death(ts: i64, victim: i32) -> TimelineEvent {
+        let mut e = ev(ts, "CHAMPION_KILL", EventCategory::Kill);
+        e.victim_participant_id = Some(victim);
+        e.killer_participant_id = Some(if victim <= 5 { 6 } else { 1 });
+        e
+    }
+
+    fn participant(pid: i32) -> MatchParticipant {
+        MatchParticipant {
+            participant_id: pid,
+            puuid: format!("p{pid}"),
+            summoner_name: format!("P{pid}"),
+            champion_name: "Ahri".into(),
+            team_id: if pid <= 5 { 100 } else { 200 },
+            team_position: String::new(),
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+            cs: 0,
+            vision_score: 0,
+            damage: 0,
+            gold_earned: 0,
+            items: [0; 6],
+            win: true,
+        }
+    }
+
+    const MIN: i64 = 60_000;
+
+    #[test]
+    fn the_opening_shop_is_not_a_recall() {
+        let r = infer_recalls(&[buy(0, 1), buy(5_000, 1), buy(80_000, 1)]);
+        assert!(r.is_empty(), "{r:?}");
+    }
+
+    #[test]
+    fn one_shop_visit_is_one_recall_at_its_first_purchase() {
+        let events = [
+            buy(7 * MIN, 1),
+            buy(7 * MIN + 10_000, 1),
+            buy(7 * MIN + 30_000, 1), // 20 s after the previous: same visit
+            buy(12 * MIN, 1),         // a second visit
+        ];
+        let r = infer_recalls(&events);
+        assert_eq!(r.len(), 2, "{r:?}");
+        assert_eq!(r[0].timestamp_ms, 7 * MIN);
+        assert_eq!(r[1].timestamp_ms, 12 * MIN);
+        assert!(r.iter().all(|e| e.event_type == RECALL_EVENT_TYPE
+            && e.category == EventCategory::Recall
+            && e.participant_id == Some(1)
+            && e.involved_participants == vec![1]
+            && e.team_id == Some(100)));
+    }
+
+    #[test]
+    fn a_purchase_more_than_25_seconds_later_is_a_new_visit() {
+        let r = infer_recalls(&[buy(5 * MIN, 2), buy(5 * MIN + 26_000, 2)]);
+        assert_eq!(r.len(), 2);
+    }
+
+    #[test]
+    fn buying_after_a_death_is_the_respawn_not_a_recall() {
+        // Died at 10:00; the window at 10:30 is 20 + 2 * 10 = 40 s.
+        let events = [death(10 * MIN, 3), buy(10 * MIN + 30_000, 3)];
+        assert!(infer_recalls(&events).is_empty());
+        // 45 s after the death is outside the window: a recall.
+        let events = [death(10 * MIN, 3), buy(10 * MIN + 45_000, 3)];
+        assert_eq!(infer_recalls(&events).len(), 1);
+        // Someone else's death does not matter.
+        let events = [death(10 * MIN, 4), buy(10 * MIN + 30_000, 3)];
+        assert_eq!(infer_recalls(&events).len(), 1);
+    }
+
+    #[test]
+    fn the_death_window_grows_with_game_time_and_is_capped() {
+        assert_eq!(recall_death_window_ms(0), 20_000);
+        assert_eq!(recall_death_window_ms(10 * MIN), 40_000);
+        assert_eq!(recall_death_window_ms(30 * MIN), 80_000);
+        assert_eq!(recall_death_window_ms(60 * MIN), 90_000);
+    }
+
+    #[test]
+    fn the_viewer_sees_their_teams_recalls_and_their_own_wards() {
+        let mut my_ward = ev(4 * MIN, "WARD_PLACED", EventCategory::Ward);
+        my_ward.participant_id = Some(1);
+        let mut mate_ward = ev(4 * MIN, "WARD_PLACED", EventCategory::Ward);
+        mate_ward.participant_id = Some(2);
+        let old_ward = ev(5 * MIN, "WARD_PLACED", EventCategory::Ward);
+        let events = vec![
+            buy(0, 1),
+            buy(6 * MIN, 1),
+            buy(7 * MIN, 2),
+            buy(8 * MIN, 7),
+            my_ward,
+            mate_ward,
+            old_ward,
+            death(9 * MIN, 7),
+        ];
+        let parts: Vec<MatchParticipant> = (1..=10).map(participant).collect();
+        let (shown, has_purchases) = viewer_timeline(events, &parts, 1);
+        assert!(has_purchases);
+        assert!(shown.iter().all(|e| e.category != EventCategory::Purchase));
+        let recalls: Vec<i32> = shown
+            .iter()
+            .filter(|e| e.category == EventCategory::Recall)
+            .filter_map(|e| e.participant_id)
+            .collect();
+        assert_eq!(recalls, vec![1, 2], "own team only");
+        let wards: Vec<Option<i32>> = shown
+            .iter()
+            .filter(|e| e.category == EventCategory::Ward)
+            .map(|e| e.participant_id)
+            .collect();
+        assert_eq!(
+            wards,
+            vec![Some(1), None],
+            "own ward and the old import's ward"
+        );
+        assert!(shown
+            .windows(2)
+            .all(|w| w[0].timestamp_ms <= w[1].timestamp_ms));
+    }
+
+    #[test]
+    fn an_old_import_has_no_purchases_and_no_recalls() {
+        let events = vec![death(9 * MIN, 7)];
+        let parts: Vec<MatchParticipant> = (1..=10).map(participant).collect();
+        let (shown, has_purchases) = viewer_timeline(events, &parts, 1);
+        assert!(!has_purchases);
+        assert_eq!(shown.len(), 1);
+    }
+
+    #[test]
+    fn old_serialized_events_still_read() {
+        // A TimelineEvent serialized before M149 has none of the new fields.
+        let json = r#"{"timestamp_ms":1,"event_type":"CHAMPION_KILL","category":"Kill","team_id":100,
+            "killer_participant_id":1,"victim_participant_id":6,"monster_type":null,
+            "monster_sub_type":null,"building_type":null,"is_first_blood":true,
+            "multi_kill_length":null,"is_teamfight":false,"involved_participants":[1,6]}"#;
+        let e: TimelineEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(e.position, None);
+        assert_eq!(e.participant_id, None);
     }
 }

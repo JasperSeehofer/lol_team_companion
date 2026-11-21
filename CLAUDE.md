@@ -129,7 +129,7 @@ Cloud sessions run `.claude/hooks/session-start.sh`, which installs cargo-leptos
 | `RATE_LIMIT_MULTIPLIER` | Scales all rate-limit capacities, 1 to 1,000 (e2e uses `100`; warned about outside dev) | `1` |
 | `TRUST_FORWARDED_FOR` | Take the client IP for rate limiting from the last `X-Forwarded-For` hop (set behind a reverse proxy; `compose.yaml` forces it on) | `false` |
 | `SUPPORT_URL` | The one external support page, shown on `/transparency` once the money texts are approved; absolute `https://` URL without credentials | unset |
-| `MATCH_CACHE_RETENTION_DAYS` | Days a cached Riot game (`match_detail` with its `match_timeline_event` rows, by fetch time) is kept; a nightly task deletes older ones in batches, and `match` rows nobody's synced games use once the game is older (1 to 3,650). The privacy page states 12 months: change both together | `365` |
+| `MATCH_CACHE_RETENTION_DAYS` | Days a cached Riot game (`match_detail` with its `match_timeline_event` rows, by fetch time) is kept; a nightly task deletes older ones in batches, and `match` rows nobody's synced games use once the game is older (1 to 3,650). `ranked_snapshot` rows (the LP history, one per sync) join the same purge by `snapshotted_at` and are deleted with the account. The privacy page states 12 months: change both together | `365` |
 | `SHUTDOWN_DRAIN_SECS` | After SIGTERM/SIGINT, how long requests in flight may finish (0 to 300) | `10` |
 | `SHUTDOWN_DB_SECS` | Then how long to wait for SurrealKV to close before exiting anyway with code 1 (0 to 60) | `5` |
 | `GITHUB_TOKEN` | Not read by the app (only by a local MCP server); warned about outside dev, never in `.env.example` | unset |
@@ -194,7 +194,7 @@ src/
 │                        # guidance.rs (M9: checklist, welcome, hint, nudge and introduction rules, pure)
 ├── pages/               # Route components (+ their #[server] fns)
 │   ├── auth/{login,register,reset}.rs, team/{dashboard,roster}.rs
-│   ├── admin/{invites,resets,traits}.rs, design.rs + design_{interaction,domain}.rs (gallery), legal/*, closed_beta.rs
+│   ├── admin/{invites,resets,reimport,traits}.rs, design.rs + design_{interaction,domain}.rs (gallery), legal/*, closed_beta.rs
 │   └── home.rs (landing / Match Day / start page), draft.rs, draft_graph.rs (Draft Graph view + its server fns),
 │       tree_drafter.rs, champion_pool.rs, game_plan.rs, post_game.rs, opponents.rs, action_items.rs,
 │       stats.rs (Team games), match_detail.rs, me.rs (My games: the personal layer), personal_learnings.rs,
@@ -257,6 +257,7 @@ scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, 
 | `/admin/bugs`, `/admin/surveys`, `/admin/proposals`, `/admin/ledger`, `/admin/texts` | Bug triage, surveys (approve exact wording), proposals (publish), ledger, public money texts (approve) | Admin (404 for everyone else) |
 | `/admin/invites` | AdminInvitesPage: list, mint (optionally bound to a team), disable invite codes | Admin (404 for everyone else) |
 | `/admin/resets` | AdminResetsPage: mint a one-time password reset code for an account (shown once), recent codes | Admin (404 for everyone else) |
+| `/admin/reimport` | AdminReimportPage: re-import stored games so the timeline keeps positions and purchases (M149), admin-only, rate-limited batches | Admin (404 for everyone else) |
 | `/admin/traits` | AdminTraitsPage: the champion trait table behind the Draft Graph (search, edit, reset to default) | Admin (404 for everyone else) |
 | `/design` | DesignGalleryPage: every primitive, token and state | Admin, or anyone in a dev build (404 otherwise) |
 | `/img/champion/{key}`, `/img/champion/{key}/icon`, `/img/item/{id}` | Axum handlers (not Leptos): cached champion and item images | No |

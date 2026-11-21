@@ -1,0 +1,68 @@
+{
+  "metadata": {
+    "dataVersion": "2",
+    "matchId": "EUW1_7100000002",
+    "participants": ["fx-01", "fx-02", "fx-03", "fx-04", "fx-05", "fx-06", "fx-07", "fx-08", "fx-09", "fx-10"]
+  },
+  "info": {
+    "endOfGameResult": "GameComplete",
+    "frameInterval": 60000,
+    "gameId": 7100000002,
+    "participants": [
+      { "participantId": 1, "puuid": "fx-01" },
+      { "participantId": 6, "puuid": "fx-06" }
+    ],
+    "frames": [
+      {
+        "timestamp": 0,
+        "events": [
+          { "type": "PAUSE_END", "timestamp": 0, "realTimestamp": 1760000000000 },
+          { "type": "ITEM_PURCHASED", "timestamp": 1200, "participantId": 1, "itemId": 1055 },
+          { "type": "ITEM_PURCHASED", "timestamp": 1500, "participantId": 1, "itemId": 2003 },
+          { "type": "ITEM_PURCHASED", "timestamp": 1800, "participantId": 6, "itemId": 1056 }
+        ]
+      },
+      {
+        "timestamp": 60000,
+        "events": [
+          { "type": "SKILL_LEVEL_UP", "timestamp": 61000, "participantId": 1, "skillSlot": 1, "levelUpType": "NORMAL" },
+          { "type": "WARD_PLACED", "timestamp": 95000, "creatorId": 1, "wardType": "YELLOW_TRINKET" },
+          { "type": "WARD_PLACED", "timestamp": 96000, "creatorId": 7, "wardType": "YELLOW_TRINKET" }
+        ]
+      },
+      {
+        "timestamp": 300000,
+        "events": [
+          {
+            "type": "CHAMPION_KILL", "timestamp": 300000, "killerId": 1, "victimId": 6,
+            "assistingParticipantIds": [2], "bounty": 400, "killStreakLength": 0, "shutdownBounty": 0,
+            "position": { "x": 5000, "y": 9000 },
+            "victimDamageReceived": [
+              { "basic": false, "magicDamage": 120, "name": "Ahri", "participantId": 1, "physicalDamage": 30, "spellName": "ahriorbofdeception", "spellSlot": 0, "trueDamage": 0, "type": "OTHER" }
+            ]
+          },
+          { "type": "ITEM_PURCHASED", "timestamp": 320000, "participantId": 6, "itemId": 1001 },
+          {
+            "type": "ELITE_MONSTER_KILL", "timestamp": 350000, "killerId": 2, "killerTeamId": 100, "bounty": 0,
+            "monsterType": "DRAGON", "monsterSubType": "FIRE_DRAGON", "position": { "x": 9866, "y": 4414 }
+          }
+        ]
+      },
+      {
+        "timestamp": 420000,
+        "events": [
+          { "type": "ITEM_PURCHASED", "timestamp": 400000, "participantId": 1, "itemId": 3802 },
+          { "type": "ITEM_PURCHASED", "timestamp": 410000, "participantId": 1, "itemId": 2003 },
+          { "type": "ITEM_UNDO", "timestamp": 411000, "participantId": 1, "beforeId": 2003, "afterId": 0, "goldGain": 50 },
+          {
+            "type": "BUILDING_KILL", "timestamp": 415000, "killerId": 3, "teamId": 200, "bounty": 0,
+            "buildingType": "TOWER_BUILDING", "laneType": "MID_LANE", "towerType": "OUTER_TURRET",
+            "assistingParticipantIds": [], "position": { "x": 8955, "y": 8510 }
+          },
+          { "type": "MYSTERY_EVENT_FROM_A_FUTURE_PATCH", "timestamp": 416000 },
+          { "type": "GAME_END", "timestamp": 1800000, "gameId": 7100000002, "winningTeam": 100, "realTimestamp": 1760001800000 }
+        ]
+      }
+    ]
+  }
+}

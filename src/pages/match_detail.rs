@@ -63,6 +63,8 @@ pub async fn fetch_match_detail(
                 .unwrap_or(1),
         };
         let performance = riot::compute_performance(&participants, user_pid, game_duration);
+        let (timeline_events, has_purchase_data) =
+            crate::models::match_data::viewer_timeline(timeline_events, &participants, user_pid);
 
         return Ok(crate::models::match_data::MatchDetail {
             match_id: match_id.clone(),
@@ -73,6 +75,7 @@ pub async fn fetch_match_detail(
             user_participant_id: user_pid,
             user_puuid: user.riot_puuid.clone().unwrap_or_default(),
             performance,
+            has_purchase_data,
         });
     }
 
@@ -121,15 +124,21 @@ pub async fn fetch_match_detail(
         tracing::warn!("Failed to cache match detail for {match_id}: {e}");
     }
 
+    let (timeline_events, has_purchase_data) = crate::models::match_data::viewer_timeline(
+        full.raw_timeline_events,
+        &full.participants,
+        user_pid,
+    );
     Ok(crate::models::match_data::MatchDetail {
         match_id,
         game_duration: full.game_duration,
         game_mode: full.game_mode,
         participants: full.participants,
-        timeline_events: full.raw_timeline_events,
+        timeline_events,
         user_participant_id: user_pid,
         user_puuid: user.riot_puuid.unwrap_or_default(),
         performance,
+        has_purchase_data,
     })
 }
 
@@ -208,6 +217,14 @@ fn event_tooltip(event: &TimelineEvent, participants: &[MatchParticipant]) -> St
             text
         }
         "WARD_PLACED" => format!("{time_str} - Ward placed"),
+        crate::models::match_data::RECALL_EVENT_TYPE => {
+            let who = event
+                .participant_id
+                .and_then(|id| participants.iter().find(|p| p.participant_id == id))
+                .map(|p| p.summoner_name.as_str())
+                .unwrap_or("Unknown");
+            format!("Inferred recall, {time_str} - {who} back to base")
+        }
         "TEAMFIGHT" => format!(
             "{time_str} - Teamfight ({} players)",
             event.involved_participants.len()
@@ -404,7 +421,10 @@ fn marker_shape(category: &EventCategory, big: bool) -> AnyView {
         EventCategory::Tower => view! { <rect x="3" y="3" width="10" height="10" fill=fill /> }.into_any(),
         EventCategory::Kill => view! { <polygon points="8,2 14,13 2,13" fill=fill /> }.into_any(),
         EventCategory::Ward => view! { <path d="M8 3v10M3 8h10" stroke=stroke stroke-width="2.5" /> }.into_any(),
-        EventCategory::Recall => view! { <circle cx="8" cy="8" r="4.5" fill="none" stroke=stroke stroke-width="2" /> }.into_any(),
+        // Inferred, so a dashed outline (DESIGN 6.3: inferred = dashed).
+        EventCategory::Recall => view! { <circle cx="8" cy="8" r="5" fill="none" stroke=stroke stroke-width="2" stroke-dasharray="2.6 2" /> }.into_any(),
+        // Never drawn: `viewer_timeline` removes purchases.
+        EventCategory::Purchase => view! { <circle cx="8" cy="8" r="1.5" fill=fill /> }.into_any(),
         EventCategory::Teamfight => view! { <polygon points="4,1 12,1 16,8 12,15 4,15 0,8" fill="none" stroke=stroke stroke-width="2" /> }.into_any(),
     }
 }
@@ -415,8 +435,17 @@ fn category_word(c: &EventCategory) -> &'static str {
         EventCategory::Tower => "Tower",
         EventCategory::Kill => "Kill",
         EventCategory::Ward => "Ward",
-        EventCategory::Recall => "Recall",
+        EventCategory::Recall => "Recall (inferred)",
+        EventCategory::Purchase => "Purchase",
         EventCategory::Teamfight => "Teamfight",
+    }
+}
+
+/// The stable `data-event-category` value of a category (tests select by it).
+fn category_key(c: &EventCategory) -> &'static str {
+    match c {
+        EventCategory::Recall => "Recall",
+        other => category_word(other),
     }
 }
 
@@ -438,9 +467,11 @@ struct Rail {
 }
 
 /// The three rails, top to bottom (M141, the owner's grouping). Riot's
-/// Match-V5 timeline has no recall event (an `ITEM_UNDO` is the shop's undo
-/// button), so the vision rail draws wards only and says why.
-const RAILS: [Rail; 3] = [
+/// Match-V5 timeline has no recall event; since M149 the vision rail adds
+/// recalls inferred from item purchases (`models::match_data::infer_recalls`),
+/// drawn with a dashed outline, when the stored game has purchases
+/// ([`rails_for`] for a game imported before).
+static RAILS: [Rail; 3] = [
     Rail {
         key: "objectives",
         name: "Objectives",
@@ -456,10 +487,38 @@ const RAILS: [Rail; 3] = [
     Rail {
         key: "vision",
         name: "Vision",
-        kinds: &[EventCategory::Ward],
-        caption: Some("Wards: yours only. Riot's game data reports no recalls, so none are drawn."),
+        kinds: &[EventCategory::Ward, EventCategory::Recall],
+        caption: Some(RECALL_CAPTION),
     },
 ];
+
+/// The vision rail's caption when recalls are drawn (atelier card A).
+const RECALL_CAPTION: &str = "Wards: yours only. Recalls: your team. Recalls are inferred from item purchases at the fountain; Riot reports no recall event.";
+
+/// The vision rail's caption for a game imported before purchases were kept.
+/// Members cannot re-import (admins only), so it says why, not what to do.
+const NO_PURCHASES_CAPTION: &str = "Wards: yours only. This game was stored without item purchases, so recalls and positions are not drawn.";
+
+/// The vision rail of a game imported before item purchases were kept
+/// (M149): wards only, no recall toggle (no empty markers), and the line
+/// that says why they are missing.
+static VISION_WITHOUT_PURCHASES: Rail = Rail {
+    key: "vision",
+    name: "Vision",
+    kinds: &[EventCategory::Ward],
+    caption: Some(NO_PURCHASES_CAPTION),
+};
+
+/// The rails for a game: the vision rail depends on whether its stored
+/// timeline holds item purchases.
+fn rails_for(has_purchase_data: bool) -> [&'static Rail; 3] {
+    let vision = if has_purchase_data {
+        &RAILS[2]
+    } else {
+        &VISION_WITHOUT_PURCHASES
+    };
+    [&RAILS[0], &RAILS[1], vision]
+}
 
 /// Within a rail, a marker closer than this (in percent of the game) to the
 /// previous one on its lane moves to the second lane instead of overlapping.
@@ -484,6 +543,59 @@ fn assign_lanes(sorted_pcts: &[f64]) -> Vec<u8> {
             lane
         })
         .collect()
+}
+
+/// How many events the phone row "Events near the playhead" shows.
+const NEAR_ROW_LEN: usize = 5;
+
+/// The phone row's events (M149): up to `n` consecutive entries of `order`
+/// (visible events sorted by `(timestamp_ms, idx)`) nearest to `at_ms`, in
+/// time order. The `selected` event, when visible, is always in the window,
+/// so a press on a row button or Previous / Next keeps it on screen.
+fn near_window(
+    order: &[(usize, i64)],
+    at_ms: i64,
+    selected: Option<usize>,
+    n: usize,
+) -> Vec<(usize, i64)> {
+    if order.is_empty() || n == 0 {
+        return Vec::new();
+    }
+    let (mut lo, mut hi) = match selected.and_then(|s| order.iter().position(|(i, _)| *i == s)) {
+        Some(p) => (p, p + 1),
+        None => {
+            let p = order.partition_point(|(_, t)| *t < at_ms);
+            (p, p)
+        }
+    };
+    while hi - lo < n && (lo > 0 || hi < order.len()) {
+        let left = (lo > 0).then(|| at_ms - order[lo - 1].1);
+        let right = (hi < order.len()).then(|| order[hi].1 - at_ms);
+        match (left, right) {
+            (Some(l), Some(r)) if r < l => hi += 1,
+            (Some(_), _) => lo -= 1,
+            (None, _) => hi += 1,
+        }
+    }
+    order[lo..hi].to_vec()
+}
+
+/// How a marker is drawn: (big shape, side colour class, the user was
+/// involved, inferred). Inferred events (M149: recalls) are drawn with a
+/// dashed outline, by `marker_shape` on the track and also on the edge of
+/// the phone row's button (DESIGN 6.3: inferred = dashed).
+fn marker_look(e: &TimelineEvent, user_pid: i32) -> (bool, &'static str, bool, bool) {
+    let big = matches!(e.monster_type.as_deref(), Some(m) if m.contains("BARON") || m.contains("HORDE"))
+        || e.category == EventCategory::Teamfight;
+    let side = match e.team_id {
+        Some(100) => "text-side-blue",
+        Some(200) => "text-side-red",
+        _ => "text-muted",
+    };
+    let mine =
+        e.killer_participant_id == Some(user_pid) || e.involved_participants.contains(&user_pid);
+    let inferred = e.category == EventCategory::Recall;
+    (big, side, mine, inferred)
 }
 
 /// The short name of an objective, for the scrubber's moments.
@@ -511,6 +623,7 @@ fn Timeline(
     let duration_secs = duration.max(0) as u32;
     let playhead = RwSignal::new(0u32);
     let user_pid = d.user_participant_id;
+    let has_purchase_data = d.has_purchase_data;
     let events = StoredValue::new(d.timeline_events.clone());
     let participants = StoredValue::new(d.participants.clone());
     let match_id = d.match_id.clone();
@@ -561,11 +674,43 @@ fn Timeline(
         playhead.set((ts.max(0) / 1000) as u32);
     };
     let playhead_pct = move || timeline_pct(playhead.get() as i64 * 1000, duration);
+    // Below `md` the track markers sit about 12 px apart late in a game, too
+    // close for a 44 px target; the "Events near the playhead" row carries
+    // them instead, and the track markers leave the tab order (taps on them
+    // still work). `tabindex` cannot follow a CSS breakpoint, so the width is
+    // read after hydration (and on resize). Before that, and without
+    // JavaScript, the track markers stay focusable.
+    let phone = RwSignal::new(false);
+    #[cfg(feature = "hydrate")]
+    {
+        let below_md = || {
+            web_sys::window()
+                .and_then(|w| w.match_media("(min-width: 48rem)").ok().flatten())
+                .is_some_and(|m| !m.matches())
+        };
+        Effect::new(move |_| phone.set(below_md()));
+        let handle = window_event_listener(leptos::ev::resize, move |_| {
+            let now = below_md();
+            if phone.get_untracked() != now {
+                phone.set(now);
+            }
+        });
+        on_cleanup(move || handle.remove());
+    }
+    // The phone row's events: shown events nearest the playhead (see `near_window`).
+    let near = Memo::new(move |_| {
+        near_window(
+            &visible_order(),
+            playhead.get() as i64 * 1000,
+            selected.get(),
+            NEAR_ROW_LEN,
+        )
+    });
     view! {
         <section aria-labelledby="timeline-h" data-timeline>
             <SectionHeader title="Timeline" id="timeline-h" meta=format!("0:00 to {}", format_duration(duration)) />
             <div class="flex flex-col gap-4">
-                {RAILS.iter().map(|rail| {
+                {rails_for(has_purchase_data).into_iter().map(|rail| {
                     let kinds: Vec<usize> = rail.kinds.iter().map(cat_index).collect();
                     let kinds_any = kinds.clone();
                     let kinds_all = kinds.clone();
@@ -628,14 +773,7 @@ fn Timeline(
                                         {visible.is_empty().then(|| view! { <p class="absolute inset-0 flex items-center justify-center text-label text-muted">{empty}</p> })}
                                         {visible.into_iter().zip(pcts).zip(lanes).map(|(((idx, e), left), lane)| {
                                             let label = event_tooltip(&e, &parts);
-                                            let big = matches!(e.monster_type.as_deref(), Some(m) if m.contains("BARON") || m.contains("HORDE"))
-                                                || e.category == EventCategory::Teamfight;
-                                            let side = match e.team_id {
-                                                Some(100) => "text-side-blue",
-                                                Some(200) => "text-side-red",
-                                                _ => "text-muted",
-                                            };
-                                            let mine = e.killer_participant_id == Some(user_pid) || e.involved_participants.contains(&user_pid);
+                                            let (big, side, mine, inferred) = marker_look(&e, user_pid);
                                             let size = if big { "size-4" } else { "size-3" };
                                             let top = match (two, lane) {
                                                 (false, _) => 50,
@@ -653,7 +791,10 @@ fn Timeline(
                                                     style=format!("left: {left:.2}%; top: {top}%")
                                                     aria-label=format!("{label}{}", if mine { ", you were involved" } else { "" })
                                                     aria-pressed=move || (selected.get() == Some(idx)).to_string()
-                                                    data-event-category=category_word(&e.category)
+                                                    tabindex=move || phone.get().then_some("-1")
+                                                    data-event-category=category_key(&e.category)
+                                                    data-event-idx=idx.to_string()
+                                                    data-inferred=inferred.then_some("true")
                                                     on:click=move |_| {
                                                         selected.update(|s| *s = if *s == Some(idx) { None } else { Some(idx) });
                                                         playhead.set(at);
@@ -669,6 +810,50 @@ fn Timeline(
                         </div>
                     }
                 }).collect_view()}
+                // Phones only: the shown events nearest the playhead as 44 px
+                // targets (same filter as Previous / Next, same handler as
+                // the track markers). From `md` up nothing is added.
+                // Keyed, so the pressed button survives the re-centring and
+                // keeps keyboard focus.
+                <div
+                    role="group"
+                    aria-label="Events near the playhead"
+                    data-near-row
+                    class=move || if near.with(|n| n.is_empty()) { "hidden" } else { "flex h-14 items-center gap-2 md:hidden" }
+                >
+                    <For each=move || near.get() key=|(idx, _)| *idx let:item>
+                        {
+                            let (idx, ts) = item;
+                            let e = events.with_value(|evs| evs[idx].clone());
+                            let label = participants.with_value(|parts| event_tooltip(&e, parts));
+                            let (big, side, mine, inferred) = marker_look(&e, user_pid);
+                            let button_class = if inferred {
+                                "flex size-11 shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-ctl border border-dashed border-outline bg-transparent hover:bg-ink-3 aria-pressed:border-secondary aria-pressed:bg-ink-3"
+                            } else {
+                                "flex size-11 shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-ctl border border-outline bg-transparent hover:bg-ink-3 aria-pressed:border-secondary aria-pressed:bg-ink-3"
+                            };
+                            let svg_class = if mine { "size-4 overflow-visible stroke-accent [stroke-width:1.5]" } else { "size-4 overflow-visible" };
+                            let at = (ts.max(0) / 1000) as u32;
+                            view! {
+                                <button
+                                    type="button"
+                                    class=button_class
+                                    aria-label=format!("{label}{}", if mine { ", you were involved" } else { "" })
+                                    aria-pressed=move || (selected.get() == Some(idx)).to_string()
+                                    data-event-idx=idx.to_string()
+                                    data-inferred=inferred.then_some("true")
+                                    on:click=move |_| {
+                                        selected.update(|s| *s = if *s == Some(idx) { None } else { Some(idx) });
+                                        playhead.set(at);
+                                    }
+                                >
+                                    <svg viewBox="0 0 16 16" class=format!("{svg_class} {side}") aria-hidden="true">{marker_shape(&e.category, big)}</svg>
+                                    <span class="figures text-caption leading-none text-secondary" aria-hidden="true">{format_duration(at as i32)}</span>
+                                </button>
+                            }
+                        }
+                    </For>
+                </div>
                 <TimelineScrub label="Playhead over the timeline" duration=duration_secs value=playhead moments=moments />
                 <p class="text-label text-secondary" aria-live="polite" data-near-playhead>
                     {move || {
@@ -696,8 +881,10 @@ fn Timeline(
                     <li class="inline-flex items-center gap-1.5"><SideMarker side=DraftSide::Red text=SideText::Short /></li>
                     <li>"Chalk outline: you were involved"</li>
                     <li>"Chalk line: the playhead"</li>
+                    {has_purchase_data.then(|| view! { <li>"Dashed outline: inferred"</li> })}
                 </ul>
             </div>
+            <p class="mt-2 text-caption text-muted">"Map view comes with the Rift Board."</p>
             {move || selected.get().and_then(|idx| events.get_value().get(idx).cloned()).map(|e| {
                 let parts = participants.get_value();
                 let text = event_tooltip(&e, &parts);
@@ -971,6 +1158,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn near_window_takes_the_events_nearest_the_playhead() {
+        let order: Vec<(usize, i64)> = (0..10).map(|i| (i, i as i64 * 10_000)).collect();
+        let idx = |v: Vec<(usize, i64)>| v.into_iter().map(|(i, _)| i).collect::<Vec<_>>();
+        // At the start: the first five.
+        assert_eq!(idx(near_window(&order, 0, None, 5)), vec![0, 1, 2, 3, 4]);
+        // At the end: the last five, in time order.
+        assert_eq!(
+            idx(near_window(&order, 200_000, None, 5)),
+            vec![5, 6, 7, 8, 9]
+        );
+        // In the middle: centred on the playhead.
+        assert_eq!(
+            idx(near_window(&order, 50_000, None, 5)),
+            vec![3, 4, 5, 6, 7]
+        );
+        // Fewer events than the row: all of them.
+        assert_eq!(idx(near_window(&order[..3], 0, None, 5)), vec![0, 1, 2]);
+        assert!(near_window(&[], 0, None, 5).is_empty());
+        // Many events in one second: the selected one stays in the row.
+        let same: Vec<(usize, i64)> = (0..8).map(|i| (i, 60_000)).collect();
+        assert!(idx(near_window(&same, 60_000, Some(7), 5)).contains(&7));
+        assert_eq!(near_window(&same, 60_000, Some(7), 5).len(), 5);
+    }
+
+    #[test]
     fn verdicts_and_bars() {
         assert_eq!(performance_verdict(12.0, 10.0), "Above average");
         assert_eq!(performance_verdict(8.0, 10.0), "Below average");
@@ -1029,10 +1241,60 @@ mod tests {
     }
 
     #[test]
-    fn no_rail_draws_recalls() {
-        assert!(RAILS
+    fn recalls_are_drawn_only_from_purchases_and_say_inferred() {
+        // A game imported before M149 has no purchases: no recall toggle,
+        // and the rail says how to get them.
+        let old = rails_for(false);
+        assert!(old
             .iter()
             .all(|r| !r.kinds.contains(&EventCategory::Recall)));
+        assert_eq!(old[2].caption, Some(NO_PURCHASES_CAPTION));
+        assert!(NO_PURCHASES_CAPTION
+            .contains("stored without item purchases, so recalls and positions are not drawn."));
+        assert!(!NO_PURCHASES_CAPTION.contains("Re-import"));
+        let new = rails_for(true);
+        assert!(new[2].kinds.contains(&EventCategory::Recall));
+        assert!(RECALL_CAPTION.contains(
+            "Recalls are inferred from item purchases at the fountain; Riot reports no recall event."
+        ));
+        assert_eq!(category_word(&EventCategory::Recall), "Recall (inferred)");
+        assert_eq!(category_key(&EventCategory::Recall), "Recall");
+        // No rail ever draws purchases.
+        assert!(old
+            .iter()
+            .chain(new.iter())
+            .all(|r| !r.kinds.contains(&EventCategory::Purchase)));
         assert_eq!(objective_word(Some("BARON_NASHOR")), "Baron");
+    }
+
+    #[test]
+    fn an_inferred_recall_says_so() {
+        let mut e = TimelineEvent {
+            timestamp_ms: 402_000,
+            event_type: crate::models::match_data::RECALL_EVENT_TYPE.into(),
+            category: EventCategory::Recall,
+            team_id: Some(100),
+            killer_participant_id: None,
+            victim_participant_id: None,
+            monster_type: None,
+            monster_sub_type: None,
+            building_type: None,
+            is_first_blood: false,
+            multi_kill_length: None,
+            is_teamfight: false,
+            involved_participants: vec![1],
+            participant_id: Some(1),
+            item_id: None,
+            position: None,
+        };
+        let parts = vec![part(1, 100, "TOP")];
+        assert_eq!(
+            event_tooltip(&e, &parts),
+            "Inferred recall, 6:42 - P1 back to base"
+        );
+        // Drawn dashed, on the track and in the phone row.
+        assert!(marker_look(&e, 1).3);
+        e.participant_id = None;
+        assert!(event_tooltip(&e, &parts).starts_with("Inferred recall"));
     }
 }

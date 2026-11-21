@@ -8,7 +8,7 @@ test("hub lists the admin areas with their status", async ({ adminPage }) => {
   const resp = await adminPage.goto("/admin");
   expect(resp?.status()).toBe(200);
   const table = adminPage.getByRole("table", { name: "Admin areas" });
-  for (const area of ["Bug reports", "Surveys", "What next", "Transparency ledger", "Public texts", "Invites", "Champion traits", "Design system"]) {
+  for (const area of ["Bug reports", "Surveys", "What next", "Transparency ledger", "Public texts", "Invites", "Re-import games", "Champion traits", "Design system"]) {
     await expect(table.getByRole("link", { name: area, exact: true })).toBeVisible();
   }
   await expect(table).toContainText(/waiting for approval/);

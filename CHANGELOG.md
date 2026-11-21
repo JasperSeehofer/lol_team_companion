@@ -23,6 +23,19 @@ Introduce: /review/together | Review together | After a match, open the review s
 #### Changed
 - On a match's page and on Team games, "Review as a team" is now "Write a review" ("Open the review" once the team has one), so "Review together" only ever means the shared session. It still opens the review page with that game chosen.
 
+### Feedback batch 1, round 2 (2026-10-18)
+
+#### Added
+- Feedback on a computer: the screenshot part of "Give Feedback" has "Select an area of the page" in browsers that can capture the screen. The feedback window steps aside, your browser asks which tab to share, Team Companion takes one picture of it and stops sharing at once (nothing is recorded), and you drag a rectangle over the part you mean, or move it with the arrow keys (Alt and the arrows change its size), then choose "Use area" or press Enter. The area is attached like an image you chose yourself and stays in your browser until you send. Cancelling, or a browser that does not allow it, brings the feedback window back with a short note; attaching or pasting an image works as before. Phones do not show the button.
+- "Download my data" now includes the screenshots you attached to your feedback, as WebP images written out in the file (base64) next to the report each belongs to.
+- Match detail: the Vision rail of the timeline now shows your team's recalls. Riot's game data has no recall event, so they are inferred from item purchases (a shop visit after the opening shop that does not follow a death) and always marked as inferred: a dashed outline, "Recall (inferred)" on the toggle and "Inferred recall" when you point at one. Your wards stay yours only. A game opened before this change shows "This game was stored without item purchases, so recalls and positions are not drawn." instead of empty markers (an admin can re-import it). One line under the legend says the map view comes with the Rift Board.
+- Games opened from now on also keep where kills, towers and objectives happened on the map, and every item purchase, for the recalls. This is game information from Riot like the rest of the timeline and is deleted with it after 12 months, as before.
+- For admins: Re-import games (/admin/reimport) fetches games stored before this change from Riot again, five at a time, so their timelines get recalls and positions. It can be run as often as needed (a game is never imported twice), stops with a message when Riot is busy, skips games Riot no longer has, and says when the server has no Riot key. A re-import does not extend how long a game is kept.
+
+#### Fixed
+- Match detail on a phone: late in a game the timeline's markers sit too close together to tap one reliably, so phones now show "Events near the playhead" under the rails: the up to five shown events closest to the playhead as large buttons, each with its marker and clock. Pressing one selects that event and moves the playhead to it, exactly like tapping its marker; Previous event and Next event still step through every shown event. On a phone the keyboard reaches the events through this row instead of every marker on the track; on wider screens the timeline is unchanged.
+- A main button that cannot be used yet (such as "Sync my games" before a Riot account is linked) is now drawn as a plain grey button with readable text instead of a faded highlight, so its label stays easy to read.
+
 ### Milestone M159: Match thread (2026-10-18)
 
 Planned for the second round of this milestone, not built yet: creating the series from a best of 3 or 5 match, RSVP for a match, and a share link for the opponent brief.

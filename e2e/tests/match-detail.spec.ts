@@ -139,4 +139,81 @@ test.describe('match detail (seeded demo game)', () => {
         await expect(page.locator('[data-near-playhead]')).toContainText('Near');
         await expect(page.locator('[data-playhead]')).toHaveCount(3);
     });
+
+    // M149 (card C): late-game markers sit about 12 px apart at 390, so the
+    // phone carries them as 44 px buttons in "Events near the playhead".
+    test('at 390 the events near the playhead are 44 px targets; Next and Previous reach every event', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await navigateTo(page, DEMO);
+        const row = page.getByRole('group', { name: 'Events near the playhead' });
+        await expect(row).toBeVisible();
+        const rowButtons = row.getByRole('button');
+        const shown = await rowButtons.count();
+        expect(shown).toBeGreaterThan(0);
+        expect(shown).toBeLessThanOrEqual(5);
+        for (let i = 0; i < shown; i++) {
+            const box = await rowButtons.nth(i).boundingBox();
+            expect(box).toBeTruthy();
+            expect(box!.width).toBeGreaterThanOrEqual(44);
+            expect(box!.height).toBeGreaterThanOrEqual(44);
+        }
+        // The track markers leave the tab order on phones (the row is the path).
+        const trackMarkers = page.locator('[data-timeline-track] button[data-event-idx]');
+        await expect(trackMarkers.first()).toHaveAttribute('tabindex', '-1');
+
+        // A row button moves the playhead onto its event and is pressed.
+        const playhead = page.locator('[data-rail=objectives] [data-playhead]');
+        const before = await playhead.getAttribute('style');
+        const last = rowButtons.nth(shown - 1);
+        const lastIdx = await last.getAttribute('data-event-idx');
+        await last.click();
+        await expect(row.locator(`[data-event-idx="${lastIdx}"]`)).toHaveAttribute('aria-pressed', 'true');
+        await expect(playhead).not.toHaveAttribute('style', before ?? '');
+        await expect(page.locator('[data-timeline-detail]')).toBeVisible();
+        // Deselect again so Next starts from the first event.
+        await row.locator(`[data-event-idx="${lastIdx}"]`).click();
+        await expect(page.locator('[data-timeline-detail]')).toHaveCount(0);
+
+        // Next visits every visible event once, in order; the pressed event is
+        // always in the row.
+        const total = await trackMarkers.count();
+        expect(total).toBeGreaterThan(shown);
+        const pressedIdx = () =>
+            page.locator('[data-timeline-track] button[data-event-idx][aria-pressed=true]').getAttribute('data-event-idx');
+        const next = page.getByRole('button', { name: 'Next event', exact: true });
+        const previous = page.getByRole('button', { name: 'Previous event', exact: true });
+        // Click, then wait for the pressed marker to change from `prev`.
+        const stepTo = async (button: typeof next, prev: string | null): Promise<string> => {
+            await button.click();
+            await expect.poll(pressedIdx).not.toBe(prev);
+            const idx = await pressedIdx();
+            expect(idx).not.toBeNull();
+            return idx!;
+        };
+        const forward: string[] = [];
+        for (let i = 0; i < total; i++) {
+            const idx = await stepTo(next, forward.length ? forward[forward.length - 1] : null);
+            await expect(row.locator(`[data-event-idx="${idx}"]`)).toHaveAttribute('aria-pressed', 'true');
+            forward.push(idx);
+        }
+        expect(new Set(forward).size).toBe(total);
+        // At the last event Next stays there.
+        await next.click();
+        expect(await pressedIdx()).toBe(forward[total - 1]);
+        // Previous walks the same events back.
+        const backward: string[] = [forward[total - 1]];
+        for (let i = 1; i < total; i++) {
+            backward.push(await stepTo(previous, backward[backward.length - 1]));
+        }
+        expect(backward).toEqual([...forward].reverse());
+    });
+
+    test('at 1280 the timeline adds no phone row and keeps the markers as tab stops', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await navigateTo(page, DEMO);
+        await expect(page.locator('[data-near-row]')).toBeHidden();
+        const marker = page.locator('[data-timeline-track] button[data-event-idx]').first();
+        await expect(marker).toBeVisible();
+        await expect(marker).not.toHaveAttribute('tabindex', '-1');
+    });
 });

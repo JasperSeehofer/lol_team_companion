@@ -227,6 +227,7 @@ pub const ADMIN_LINKS: &[(&str, &str)] = &[
     ("Transparency ledger", "/admin/ledger"),
     ("Public texts", "/admin/texts"),
     ("Password resets", "/admin/resets"),
+    ("Re-import games", "/admin/reimport"),
 ];
 
 /// "Your reports" with the number of reports that changed since last seen.
