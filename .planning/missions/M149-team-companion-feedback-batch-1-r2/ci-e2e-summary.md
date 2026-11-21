@@ -1,14 +1,15 @@
 # CI e2e summary
 
-- run: 43316143064
-- sha: eccc3d0c10d736321f6114b97adf1dc65c95aac5
+- run: 44910817988
+- sha: 6f109aecbdc7f9c7ebb27347dca95a646c8c3c3b
 
 ## Playwright
 
-expected 203, unexpected 0, flaky 0, skipped 0
+No JSON report (FileNotFoundError): the Playwright step did not run or crashed.
 
 ## Server log (slow request, inflight, panicked, ERROR)
 
-0 matching lines
+1 matching lines
 ```
+(no server log: FileNotFoundError)
 ```
