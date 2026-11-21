@@ -227,7 +227,7 @@ async fn main() {
              and a lost rematch {DEMO_REMATCH_ID} three hours before the seed ran (scoreboard only), \
              in the Northgate members' games"
         );
-        println!("  guidance demo: seed-beta-sup is a returning user (account 40 days old, writes 30 days old)");
+        println!("  guidance demo: seed-beta-sup is a returning user (account created 2026-10-05, writes 30 days old)");
         println!("  1 invite code (25 uses, 30 days)");
         return;
     }
@@ -304,7 +304,7 @@ async fn main() {
         for (i, p) in spec.players.iter().enumerate() {
             let lead = match (i, spec.name == TEAMS[1].name) {
                 (0, _) => ", team leader",
-                (4, true) => ", returning user: 40 days old, last write 30 days ago",
+                (4, true) => ", returning user: account from 2026-10-05, last write 30 days ago",
                 _ => "",
             };
             println!(
@@ -329,16 +329,22 @@ async fn main() {
 /// and votes on three seeded proposals. Proposals and surveys come from the
 /// migration and are never touched; no ledger figure is ever seeded.
 /// Guidance demo (M9): the second team's support player is a "returning"
-/// user. The account is 40 days old and everything it wrote is 30 days
-/// old, so Match Day shows "Picking up again?" and the account sees the
-/// new-feature introductions dated after it was created. The other seeded
-/// accounts are new and get the welcome.
+/// user. The account was created on 2026-10-05 and everything it wrote is
+/// 30 days old, so Match Day shows "Picking up again?" and the account sees
+/// the new-feature introductions dated after it was created. The other
+/// seeded accounts are new and get the welcome.
+///
+/// The account date is fixed, not relative to now: an intro shows only to
+/// accounts created before its entry's date, and the guidance spec checks
+/// the M9 intro (2026-10-12). A moving "now - 40d" stopped predating it on
+/// 2026-11-21. The M9 intro itself leaves the 180-day window on 2027-04-10;
+/// by then the spec must check a newer intro.
 async fn returning_user(db: &Surreal<Db>, teams: &[SeededTeam]) -> Result<(), String> {
     let Some(user) = teams.get(1).and_then(|t| t.members.get(4)) else {
         return Ok(());
     };
     let q = "LET $u = type::record('user', $uk); \
-        UPDATE $u SET created_at = time::now() - 40d; \
+        UPDATE $u SET created_at = d'2026-10-05T00:00:00Z'; \
         UPDATE draft SET created_at = time::now() - 30d WHERE created_by = $u; \
         UPDATE game_plan SET created_at = time::now() - 30d WHERE created_by = $u; \
         UPDATE post_game_learning SET created_at = time::now() - 30d WHERE created_by = $u; \
