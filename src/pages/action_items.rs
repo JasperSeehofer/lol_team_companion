@@ -67,7 +67,10 @@ pub async fn create_action_item_fn(
 
     let ctx = authz::authed().await?;
     let team_id = ctx.require_team().await?;
-    let assigned = assigned_to.filter(|s| !s.is_empty());
+    // M165: an owner is a current member's username (blank = nobody).
+    let assigned = db::check_owner(&ctx.db, &team_id, assigned_to)
+        .await
+        .map_err(authz::server_err)?;
     db::create_action_item(&ctx.db, &team_id, text, None, assigned, due)
         .await
         .map_err(authz::server_err)
@@ -95,7 +98,21 @@ pub async fn update_item(
 
     let ctx = authz::authed().await?;
     let team_id = ctx.require_team().await?;
-    let assigned = assigned_to.filter(|s| !s.is_empty());
+    // M165: an owner is a current member's username (blank = nobody); an
+    // edit may keep the stored owner even after they left the team.
+    let assigned = assigned_to
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let stored = db::action_item_owner(&ctx.db, &team_id, &id)
+        .await
+        .map_err(authz::server_err)?;
+    let assigned = if assigned.is_some() && assigned == stored {
+        assigned
+    } else {
+        db::check_owner(&ctx.db, &team_id, assigned)
+            .await
+            .map_err(authz::server_err)?
+    };
     // The status is left as it is (it changes through update_item_status).
     db::update_action_item(&ctx.db, &team_id, &id, text, assigned, due, None)
         .await
@@ -135,6 +152,13 @@ pub async fn restore_item(
             .ok()
             .map(|_| r),
         None => None,
+    };
+    // M165: an owner who is no longer on the team is dropped, like a
+    // deleted review, rather than failing the Undo.
+    let assigned_to = match db::check_owner(&ctx.db, &team_id, assigned_to).await {
+        Ok(owner) => owner,
+        Err(db::DbError::Invalid(_)) => None,
+        Err(e) => return Err(authz::server_err(e)),
     };
     let id = db::create_action_item(&ctx.db, &team_id, text, source_review, assigned_to, due)
         .await

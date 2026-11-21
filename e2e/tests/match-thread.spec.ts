@@ -363,7 +363,7 @@ async function signInSeedTop(page: Page): Promise<boolean> {
 /**
  * M159 item 5 with the seed tool's demo game (all five Northgate members
  * synced it): the picker row reads date, champions and the result in words,
- * never the Riot id; "Review as a team" on the match page and on Team games
+ * never the Riot id; "Write a review" on the match page and on Team games
  * opens the review with the game chosen. CI seeds the database; locally the
  * test is skipped without the seed.
  *
@@ -391,7 +391,7 @@ test("review picker: a team game is chosen from the match page", async ({ page }
   await navigateTo(page, `/match/${DEMO_GAME}`);
   const action = page.getByTestId("review-as-team");
   await expect(action).toBeVisible({ timeout: 10000 });
-  await expect(action).toHaveText(/^(Review as a team|Open team review)$/);
+  await expect(action).toHaveText(/^(Write a review|Open the review)$/);
   await expect(action).toHaveAttribute("href", `/post-game?riot_match_id=${DEMO_GAME}`);
   await settle(page);
   await shot(page, "match-detail-review-1280", false);

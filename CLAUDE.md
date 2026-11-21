@@ -243,6 +243,7 @@ scripts/                 # lint_design.sh, wait_for_server.sh, smoke_signin.sh, 
 | `/champion-pool` | ChampionPoolPage | Yes |
 | `/game-plan` | GamePlanPage | Yes |
 | `/post-game` | PostGamePage | Yes |
+| `/review/together?session=<id>` | ReviewTogetherPage (M165): one game's review written together (silent round, reveal, decide, close into a review). `?match_id=&game=` from Match Day's review step opens the game's session first; without either it says how a session is opened | Yes |
 | `/opponents` | OpponentsPage | Yes |
 | `/action-items` | ActionItemsPage | Yes |
 | `/stats` | StatsPage (Team games) | Yes |

@@ -43,6 +43,7 @@ use crate::pages::{
     personal_learnings::{NewLearningPage, PersonalLearningsPage},
     post_game::PostGamePage,
     profile::ProfilePage,
+    review_together::ReviewTogetherPage,
     share::{PlayerCardPage, SharePage},
     stats::StatsPage,
     team::{dashboard::TeamDashboard, roster::RosterPage},
@@ -134,6 +135,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/champion-pool") view=ChampionPoolPage />
                         <Route path=path!("/game-plan") view=GamePlanPage />
                         <Route path=path!("/post-game") view=PostGamePage />
+                        <Route path=path!("/review/together") view=ReviewTogetherPage />
                         <Route path=path!("/opponents") view=OpponentsPage />
                         <Route path=path!("/action-items") view=ActionItemsPage />
                         <Route path=path!("/me") view=MyGamesPage />
